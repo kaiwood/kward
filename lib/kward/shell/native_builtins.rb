@@ -5,7 +5,64 @@ module Kward
     module Builtins
       private
 
-      SHELL_OPTIONS = { "a" => "allexport", "m" => "monitor", "e" => "errexit", "f" => "noglob", "n" => "noexec", "u" => "nounset", "x" => "xtrace", "C" => "noclobber" }.freeze
+      SHELL_OPTIONS = { "a" => "allexport", "b" => "notify", "h" => "hashall", "v" => "verbose", "m" => "monitor", "e" => "errexit", "f" => "noglob", "n" => "noexec", "u" => "nounset", "x" => "xtrace", "C" => "noclobber" }.freeze
+
+      def builtin_flags(args, allowed, command)
+        flags = []
+        while args.first&.start_with?("-") && args.first != "-"
+          option = args.shift
+          break if option == "--"
+          option[1..].each_char do |flag|
+            raise ExecutionError, "#{command}: unsupported option -#{flag}" unless allowed.include?(flag)
+            flags << flag
+          end
+        end
+        flags
+      end
+
+      def times_builtin(args, streams)
+        builtin_flags(args, "", "times")
+        raise ExecutionError, "times: unexpected operand" unless args.empty?
+        usage = Process.times
+        [[usage.utime, usage.stime], [usage.cutime, usage.cstime]].each do |pair|
+          write_line(streams, pair.map { |seconds| format("%dm%.6fs", seconds.to_i / 60, seconds % 60) }.join(" "))
+        end
+        0
+      end
+
+      def hash_builtin(args, streams)
+        flags = builtin_flags(args, "r", "hash")
+        @command_hash.clear if flags.include?("r")
+        if args.empty?
+          @command_hash.sort.each { |_, path| write_line(streams, path) } if flags.empty?
+          return 0
+        end
+        result = 0
+        args.each do |name|
+          next if self.class::BUILTINS.include?(name) || @functions.key?(name)
+          path = executable_path(name)
+          if path && File.file?(path) && File.executable?(path)
+            @command_hash[name] = path unless name.include?("/")
+          else
+            streams[2]&.puts("kwsh: hash: #{name}: not found")
+            result = 1
+          end
+        end
+        result
+      end
+
+      def remember_function_commands(tree)
+        return unless tree.is_a?(Node)
+        if tree.kind == :simple
+          word = tree.values.first.find { |item| !item.assignment }
+          name = word&.literal
+          if name && !self.class::BUILTINS.include?(name) && !@functions.key?(name)
+            path = executable_path(name)
+            @command_hash[name] = path if path && File.file?(path) && File.executable?(path)
+          end
+        end
+        tree.values.flatten.each { |child| remember_function_commands(child) if child.is_a?(Node) }
+      end
 
       def persist_descriptors(redirected, streams)
         redirected.each do |descriptor, io|
@@ -63,7 +120,7 @@ module Kward
           result = NativeProcess.replace(executable, arguments, env, cwd: @cwd, streams: streams, mask: @umask)
           raise Flow.new(:exit, result)
         else
-          pid = NativeProcess.spawn(executable, arguments, env, cwd: @cwd, streams: streams, mask: @umask, hosted: @interactive)
+          pid = NativeProcess.spawn(executable, arguments, env, cwd: @cwd, streams: streams, mask: @umask, hosted: @hosted)
           result = wait(pid)
           pid = nil
           # The protocol worker must return its final state before exiting.
@@ -84,6 +141,11 @@ module Kward
         end
         until args.empty?
           option = args.shift
+          if option == "-"
+            @options.subtract(%w[verbose xtrace])
+            @arguments = args unless args.empty?
+            return 0
+          end
           if option == "--"
             @arguments = args
             return 0
@@ -175,8 +237,12 @@ module Kward
       end
 
       def readonly(args, streams)
-        if args.empty? || args == ["-p"]
-          @readonly.sort.each { |name| write_line(streams, "readonly #{name}=#{Shellwords.escape(parameter(name))}") }
+        flags = builtin_flags(args, "p", "readonly")
+        if args.empty? || flags.include?("p")
+          @readonly.sort.each do |name|
+            value = @variables.key?(name) ? "=#{Shellwords.escape(parameter(name))}" : ""
+            write_line(streams, "readonly #{name}#{value}")
+          end
         else
           args.each do |argument|
             name, value = argument.split("=", 2)
@@ -202,13 +268,18 @@ module Kward
       end
 
       def command_builtin(args, streams)
-        mode = args.first&.start_with?("-") ? args.shift : nil
-        raise ExecutionError, "command: supported options are -v, -V, and -p" unless [nil, "--", "-v", "-V", "-p"].include?(mode)
+        flags = builtin_flags(args, "vVp", "command")
+        mode = flags.reverse.find { |flag| %w[v V].include?(flag) }
+        old_path = @variables["PATH"]
+        saved_hash, saved_hash_path = @command_hash.dup, @hash_path
+        @variables["PATH"] = Etc.confstr(Etc::CS_PATH) || "/usr/bin:/bin" if flags.include?("p")
         return 0 if args.empty?
-        if ["-v", "-V"].include?(mode)
+        if mode
           result = 0
           args.each do |name|
-            kind = if self.class::SPECIAL.include?(name)
+            kind = if Parser::RESERVED.include?(name)
+              "keyword"
+            elsif self.class::SPECIAL.include?(name)
               "shell builtin"
             elsif @functions.key?(name)
               "function"
@@ -222,19 +293,18 @@ module Kward
             path = kind ? name : executable_path(name)
             path = nil if !kind && path && (!File.file?(path) || !File.executable?(path))
             if path
-              write_line(streams, mode == "-V" ? "#{name} is #{kind || path}" : path)
+              write_line(streams, mode == "V" ? "#{name} is #{kind || path}" : path)
             else
               result = 1
             end
           end
           return result
         end
-        old_path = @variables["PATH"]
-        @variables["PATH"] = "/usr/bin:/bin" if mode == "-p"
-        begin
-          dispatch(args, streams, functions: false)
-        ensure
-          old_path ? @variables["PATH"] = old_path : @variables.delete("PATH") if mode == "-p"
+        dispatch(args, streams, functions: false)
+      ensure
+        if flags&.include?("p")
+          old_path ? @variables["PATH"] = old_path : @variables.delete("PATH")
+          @command_hash, @hash_path = saved_hash, saved_hash_path
         end
       end
 

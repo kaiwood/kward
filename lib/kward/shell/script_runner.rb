@@ -10,46 +10,132 @@ module Kward
         args = arguments.dup
         options = []
         mode = nil
+        interactive = false
         while args.first&.start_with?("-", "+") && args.first != "-"
           option = args.shift
           break if option == "--"
           if option == "--help"
-            output.puts("Usage: kwsh [shell-options] [-c command [name [args...]] | -s [args...] | file [args...]]")
+            output.puts("Usage: kwsh [-i] [shell-options] [-c command [name [args...]] | -s [args...] | file [args...]]")
             return 0
-          elsif %w[-c -s].include?(option)
-            mode = option
-            break
-          elsif %w[-o +o].include?(option)
-            raise ArgumentError, "#{option} requires an option name" if args.empty?
-            options.concat([option, args.shift])
-          else
-            options << option
+          end
+          option[1..].each_char do |flag|
+            case flag
+            when "c", "s"
+              raise ArgumentError, "-c and -s are mutually exclusive" if mode && mode != flag
+              raise ArgumentError, "+#{flag} is not supported" if option.start_with?("+")
+              mode = flag
+            when "i" then interactive = option.start_with?("-")
+            when "o"
+              raise ArgumentError, "#{option} requires an option name" if args.empty?
+              options.concat(["#{option[0]}o", args.shift])
+            else options << "#{option[0]}#{flag}"
+            end
           end
         end
-        command = args.shift if mode == "-c"
-        raise ArgumentError, "-c requires a command" if mode == "-c" && !command
+        command = args.shift if mode == "c"
+        raise ArgumentError, "-c requires a command" if mode == "c" && !command
         file = args.shift unless mode || args.empty? || args.first == "-"
         args.shift if !mode && !file && args.first == "-"
-        command_name = args.shift if mode == "-c"
+        command_name = args.shift if mode == "c"
         name ||= command_name || file || "kwsh"
-        runtime = Runtime.new(arguments: args, name: name, replace_process: !hosted, interactive: hosted, descriptors: descriptors)
+        interactive ||= !hosted && !command && !file && input.tty? && error.tty?
+        runtime = Runtime.new(arguments: args, name: name, replace_process: !hosted,
+                              interactive: interactive || hosted, hosted: hosted, descriptors: descriptors)
         runtime.send(:reset_child_state, job_group: Process.getpgrp) if hosted
         unless options.empty?
           status = runtime.run("set #{Shellwords.join(options)}", input: input, output: output, error: error)
           return status unless status.zero?
         end
-        if command
-          runtime.run(command, input: input, output: output, error: error)
-        elsif file
-          File.open(file) { |source| runtime.run_input(source, input: input, output: output, error: error) }
-        else
-          runtime.run_input(input, input: input, output: output, error: error)
+        load_startup(runtime, input: input, output: output, error: error) if interactive
+        unless runtime.exited
+          if command
+            runtime.run(command, input: input, output: output, error: error)
+          elsif file
+            File.open(file) do |source|
+              if interactive
+                run_interactive(runtime, source, input: input, output: output, error: error)
+              else
+                runtime.run_input(source, input: input, output: output, error: error)
+              end
+            end
+          elsif interactive
+            run_interactive(runtime, input, input: input, output: output, error: error)
+          else
+            runtime.run_input(input, input: input, output: output, error: error)
+          end
         end
         runtime.send(:wait_builtin, [], { 0 => input, 1 => output, 2 => error }.merge(descriptors)) if hosted
         runtime.finish(input: input, output: output, error: error)
       rescue ArgumentError, SystemCallError => e
         error.puts("kwsh: #{e.message}")
         2
+      end
+
+      def load_startup(runtime, input:, output:, error:)
+        return unless Process.uid == Process.euid && Process.gid == Process.egid
+        path = runtime.expand_parameters(runtime.variables.fetch("ENV", ""))
+        return if path.empty? || !File.file?(File.expand_path(path, runtime.cwd))
+        runtime.run(". #{Shellwords.escape(path)}", input: input, output: output, error: error)
+      rescue ExpansionError, ExecutionError => e
+        error.puts("kwsh: ENV: #{e.message}")
+      end
+
+      def run_interactive(runtime, source_input, input:, output:, error:)
+        source = +"".b
+        runtime.with_signals do
+          until runtime.exited
+            begin
+              runtime.notify_jobs(error: error, force: source.empty?)
+              prompt = source.empty? ? "PS1" : "PS2"
+              default = source.empty? ? "$ " : "> "
+              begin
+                error.write(runtime.expand_parameters(runtime.variables.fetch(prompt, default)))
+              rescue ExpansionError, ExecutionError => e
+                error.puts("kwsh: #{prompt}: #{e.message}")
+                error.write(default)
+              end
+              error.flush
+              line = read_line(source_input, runtime, input: input, output: output, error: error)
+              unless line
+                runtime.run(source, input: input, output: output, error: error) unless source.empty?
+                break
+              end
+              source << line
+              text = source.dup.force_encoding(Encoding::UTF_8)
+              text.force_encoding(Encoding::BINARY) unless text.valid_encoding?
+              begin
+                Parser.parse(text, aliases: runtime.aliases)
+              rescue IncompleteInput
+                next
+              rescue SyntaxError
+                # Runtime owns the diagnostic, status, and interactive recovery.
+              end
+              runtime.run(text, input: input, output: output, error: error)
+              source.clear
+            rescue Interrupt
+              runtime.interrupt_input
+              source.clear
+              error.puts
+            end
+          end
+        end
+      end
+
+      def read_line(source, runtime, input:, output:, error:)
+        line = +"".b
+        loop do
+          if source.is_a?(IO) && !IO.select([source], nil, nil, 0.1)
+            runtime.poll_signals(input: input, output: output, error: error)
+            runtime.notify_jobs(error: error)
+            return nil if runtime.exited
+            next
+          end
+          byte = source.readpartial(1)
+          line << byte
+          return line if byte == "\n"
+        end
+      rescue EOFError
+        line unless line.empty?
       end
     end
   end

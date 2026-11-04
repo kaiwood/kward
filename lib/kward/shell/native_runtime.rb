@@ -39,12 +39,12 @@ module Kward
       include Traps
 
       UNSUPPORTED = %w[local typeset ulimit builtin source].freeze
-      SPECIAL = %w[export readonly eval . unset exit return break continue shift set exec trap :].freeze
-      BUILTINS = (SPECIAL + %w[true false cd pwd alias unalias read getopts command shopt declare umask kwsh jobs fg bg wait kill]).freeze
+      SPECIAL = %w[export readonly eval . unset exit return break continue shift set exec trap times :].freeze
+      BUILTINS = (SPECIAL + %w[true false cd pwd alias unalias read getopts command shopt declare umask kwsh jobs fg bg wait kill hash type]).freeze
 
       attr_reader :cwd, :variables, :aliases, :status, :exited
 
-      def initialize(cwd: Dir.pwd, env: ENV.to_h, aliases: {}, arguments: [], name: "kwsh", interactive: false, replace_process: false, descriptors: {})
+      def initialize(cwd: Dir.pwd, env: ENV.to_h, aliases: {}, arguments: [], name: "kwsh", interactive: false, replace_process: false, descriptors: {}, hosted: interactive)
         @cwd = File.expand_path(cwd)
         @variables = env.dup
         @variables["PWD"] = @cwd
@@ -57,6 +57,7 @@ module Kward
         @name = name
         @shell_pid = Process.pid
         @functions = {}
+        @command_hash = {}
         @arrays = {}
         @readonly = Set.new
         @source_depth = 0
@@ -71,6 +72,7 @@ module Kward
         @active_streams = []
         @replace_process = replace_process
         @interactive = interactive
+        @hosted = hosted
         @umask = File.umask
         @status = 0
         @exited = false
@@ -105,6 +107,18 @@ module Kward
         @status = 130
       end
 
+      # ENV and interactive prompts require parameter expansion, not evaluation
+      # of arbitrary command text or command substitutions from the environment.
+      def interrupt_input
+        @status = 130
+      end
+
+      def expand_parameters(value)
+        word = Lexer.new(value).heredoc_word
+        validate_parameter_text(word)
+        scalar(word)
+      end
+
       def with_pager_suppressed
         previous = @variables["GIT_PAGER"]
         exported = @exported.include?("GIT_PAGER")
@@ -118,6 +132,20 @@ module Kward
 
       private
 
+      def validate_parameter_text(word)
+        word.parts.each do |part|
+          next if part.kind == :literal
+          raise ExpansionError, "only parameter expansion is supported in ENV and prompts" unless part.kind == :parameter
+          parameter = part.text
+          if parameter.is_a?(Parameter)
+            raise ExpansionError, "array references are not supported in ENV and prompts" unless parameter.name.is_a?(String)
+            validate_parameter_text(parameter.word) if parameter.word
+          elsif !parameter.is_a?(String)
+            raise ExpansionError, "array references are not supported in ENV and prompts"
+          end
+        end
+      end
+
       def interactive_scope?
         @interactive && !@job_child
       end
@@ -130,7 +158,7 @@ module Kward
 
       def evaluate_program(input, streams)
         result = @status
-        Program.each(input, aliases: @aliases) do |tree|
+        Program.each(input, aliases: @aliases, on_read: ->(byte) { streams[2]&.write(byte) if @options.include?("verbose") }) do |tree|
           result = evaluate(tree, streams) unless tree.values.first.empty?
         end
         @status = result
@@ -237,6 +265,7 @@ module Kward
         when :function
           name, body = node.values
           @functions[name] = body
+          remember_function_commands(body) if @options.include?("hashall")
           0
         end
         failed_command = %i[simple subshell test arithmetic redirect].include?(node.kind) ||
@@ -307,7 +336,7 @@ module Kward
               selected[2]&.puts("kwsh: #{e.message}")
               exit_status = 2
             end
-            wait_builtin([], selected) if @interactive && !@jobs.empty?
+            wait_builtin([], selected) if @hosted && !@jobs.empty?
             @status = exit_status
             finish(input: selected[0], output: selected[1], error: selected[2])
             selected.values.compact.each { |io| io.flush rescue nil }
@@ -334,8 +363,14 @@ module Kward
         assigning = false
         words = words.dup
         assignments << words.shift.assignment while words.first&.assignment
+        declaration_index = 0
+        while words[declaration_index]&.literal == "command"
+          declaration_index += 1
+          declaration_index += 1 while words[declaration_index]&.literal&.match?(/\A(?:-p+|--)\z/)
+        end
+        declaration_utility = %w[export readonly].include?(words[declaration_index]&.literal)
         arguments = words.each_with_index.flat_map do |word, index|
-          declaration = %w[export readonly].include?(words.first&.literal) && index.positive? && word.assignment
+          declaration = declaration_utility && index > declaration_index && word.assignment
           expand(word, assignment: !!declaration)
         end
         persistent = SPECIAL.include?(arguments.first)
@@ -388,8 +423,9 @@ module Kward
         when "false" then 1
         when "cd" then change_directory(args, streams)
         when "pwd"
-          raise ExecutionError, "pwd: expected -L or -P" unless args.empty? || args.all? { |option| %w[-L -P].include?(option) }
-          write_line(streams, args.last == "-P" ? File.realpath(@cwd) : @cwd)
+          flags = builtin_flags(args, "LP", "pwd")
+          raise ExecutionError, "pwd: unexpected operand" unless args.empty?
+          write_line(streams, flags.last == "P" ? File.realpath(@cwd) : @cwd)
           0
         when "export" then export(args, streams)
         when "read" then read_variables(args, streams)
@@ -398,6 +434,9 @@ module Kward
         when "umask" then umask_builtin(args, streams)
         when "shopt" then shopt(args, streams)
         when "command" then command_builtin(args, streams)
+        when "type" then command_builtin(["-V", "--", *args], streams)
+        when "hash" then hash_builtin(args, streams)
+        when "times" then times_builtin(args, streams)
         when "getopts" then getopts(args, streams)
         when "jobs" then jobs_builtin(args, streams)
         when "wait" then wait_builtin(args, streams)
@@ -416,8 +455,9 @@ module Kward
             @eval_depth -= 1
           end
         when "unset"
-          functions_only = args.first == "-f"
-          args.shift if %w[-f -v].include?(args.first)
+          flags = builtin_flags(args, "fv", "unset")
+          raise ExecutionError, "unset: -f and -v are mutually exclusive" if flags.uniq.length > 1
+          functions_only = flags.include?("f")
           args.each do |key|
             if !functions_only && (match = key.match(/\A([A-Za-z_][A-Za-z0-9_]*)\[(.*)\]\z/m))
               name, subscript = match.captures
@@ -439,6 +479,7 @@ module Kward
               raise ExecutionError, "#{key}: readonly variable" if @readonly.include?(key)
               @variables.delete(key)
               @line_tracking = false if key == "LINENO"
+              @command_hash.clear if key == "PATH"
               @arrays.delete(key)
               @exported.delete(key)
             end
@@ -446,7 +487,14 @@ module Kward
           0
         when "alias" then alias_command(args, streams)
         when "unalias"
-          args == ["-a"] ? @aliases.clear : args.each { |name_to_remove| @aliases.delete(name_to_remove) }
+          flags = builtin_flags(args, "a", "unalias")
+          if flags.include?("a")
+            @aliases.clear
+          else
+            raise ExecutionError, "unalias: expected an alias name" if args.empty?
+            missing = args.reject { |name_to_remove| @aliases.delete(name_to_remove) }
+            raise ExecutionError, "unalias: not found: #{missing.join(' ')}" unless missing.empty?
+          end
           0
         when "set" then set_options(args, streams)
         when "shift"
@@ -496,10 +544,10 @@ module Kward
         pid = Process.fork do
           Signal.trap("INT", "DEFAULT")
           File.umask(@umask)
-          runtime = self.class.new(cwd: @cwd, env: environment, arguments: args.drop(1), name: args.first, interactive: @interactive)
+          runtime = self.class.new(cwd: @cwd, env: environment, arguments: args.drop(1), name: args.first, interactive: @hosted, hosted: @hosted)
           runtime.send(:reset_child_state, job_group: @owned_job_group)
           runtime.run(source, input: streams[0], output: streams[1], error: streams[2])
-          runtime.send(:wait_builtin, [], streams) if @interactive
+          runtime.send(:wait_builtin, [], streams) if @hosted
           status = runtime.finish(input: streams[0], output: streams[1], error: streams[2])
           streams.values.compact.uniq.each(&:flush)
           exit!(status)
@@ -516,6 +564,7 @@ module Kward
         validate_name(key)
         raise ExecutionError, "#{key}: readonly variable" if @readonly.include?(key)
         @line_tracking = false if key == "LINENO"
+        @command_hash.clear if key == "PATH"
         @getopts_index = nil if key == "OPTIND" && value == "1" && !@getopts_running
         @exported.add(key) if @options.include?("allexport")
         if @arrays.key?(key)
@@ -531,8 +580,12 @@ module Kward
       end
 
       def export(args, streams)
-        if args.empty? || args == ["-p"]
-          environment.sort.each { |key, value| write_line(streams, "export #{key}=#{Shellwords.escape(value)}") }
+        flags = builtin_flags(args, "p", "export")
+        if args.empty? || flags.include?("p")
+          @exported.sort.each do |key|
+            value = @variables.key?(key) ? "=#{Shellwords.escape(@variables[key])}" : ""
+            write_line(streams, "export #{key}#{value}")
+          end
         else
           args.each do |argument|
             key, value = argument.split("=", 2)
@@ -545,6 +598,7 @@ module Kward
       end
 
       def alias_command(args, streams)
+        builtin_flags(args, "", "alias")
         if args.empty?
           @aliases.sort.each { |key, value| write_line(streams, "alias #{key}=#{Shellwords.escape(value)}") }
         else
@@ -566,16 +620,20 @@ module Kward
       end
 
       def change_directory(args, streams)
-        physical = false
-        while %w[-L -P --].include?(args.first)
-          option = args.shift
-          break if option == "--"
-          physical = option == "-P"
-        end
+        flags = builtin_flags(args, "LP", "cd")
+        physical = flags.last == "P"
         raise ExecutionError, "cd: too many arguments" if args.length > 1
         target = args.first || @variables["HOME"]
         target = @variables["OLDPWD"] if target == "-"
         raise ExecutionError, "cd: directory is not set" if target.to_s.empty?
+        prefix = nil
+        unless target.start_with?("/", "./", "../") || %w[. ..].include?(target) || args.first == "-"
+          prefix = @variables.fetch("CDPATH", "").split(":", -1).find do |directory|
+            candidate = File.expand_path(File.join(directory.empty? ? "." : directory, target), @cwd)
+            File.directory?(candidate) && File.executable?(candidate)
+          end
+        end
+        target = File.join(prefix, target) if prefix && !prefix.empty?
         path = physical ? File.realpath(target, @cwd) : File.expand_path(target, @cwd)
         raise ExecutionError, "cd: no such directory: #{target}" unless File.directory?(path)
         raise ExecutionError, "cd: permission denied: #{target}" unless File.executable?(path)
@@ -583,7 +641,7 @@ module Kward
         @cwd = path
         @variables["PWD"] = @cwd
         @exported.merge(%w[PWD OLDPWD])
-        write_line(streams, @cwd) if args.first == "-"
+        write_line(streams, @cwd) if args.first == "-" || prefix && !prefix.empty?
         0
       end
 
@@ -716,6 +774,13 @@ module Kward
         if name.include?("/")
           File.expand_path(name, @cwd)
         else
+          if @hash_path != @variables["PATH"]
+            @command_hash.clear
+            @hash_path = @variables["PATH"]
+          end
+          cached = @command_hash[name]
+          return cached if cached && File.file?(cached) && File.executable?(cached)
+          @command_hash.delete(name)
           candidates = @variables.fetch("PATH", "/usr/bin:/bin").split(":", -1).map do |directory|
             File.expand_path(File.join(directory.empty? ? "." : directory, name), @cwd)
           end
@@ -733,7 +798,7 @@ module Kward
           streams[2]&.puts("kwsh: #{name}: command not found")
           return 127
         end
-        pid = NativeProcess.spawn(executable, arguments, environment, cwd: @cwd, streams: streams, mask: @umask, hosted: @interactive)
+        pid = NativeProcess.spawn(executable, arguments, environment, cwd: @cwd, streams: streams, mask: @umask, hosted: @hosted)
         result = wait(pid)
         pid = nil
         result

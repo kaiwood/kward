@@ -127,7 +127,17 @@ kwsh -n scripts/check.kwsh             # syntax check without execution
 printf 'printf hello\n' | kwsh -s
 ```
 
-From a checkout, use `ruby exe/kwsh`. Standalone stdin processing leaves each command's input available to `read` and external programs; it does not read the entire input stream ahead of execution. Interactive terminal composition remains a Kward `/shell` feature.
+From a checkout, use `ruby exe/kwsh`. Standalone stdin processing leaves each command's input available to `read` and external programs; it does not read the entire input stream ahead of execution. The rich interactive composer remains a Kward `/shell` feature. Standalone `kwsh -i` provides a plain line-oriented prompt, also selected automatically when reading commands from stdin with stdin and stderr attached to a terminal.
+
+For a standalone interactive session:
+
+```sh
+kwsh -i
+ENV="$HOME/.kwsh-env" kwsh -i
+kwsh -ec 'printf "%s\n" "$1"' example argument
+```
+
+Interactive startup parameter-expands `ENV` and executes the named native file when it exists. Non-interactive invocations ignore `ENV`; startup loading is also disabled when real and effective user or group IDs differ. This executable startup file is separate from declarative `kwshrc`. `PS1` and `PS2` support parameter expansion; command substitutions in startup path or prompt text are rejected. Errors leave the prompt usable, and input is read without consuming a following command's stdin. Shell options may be grouped and may follow `-c` or `-s`. History editing, `fc`, and vi/emacs line-editing modes are not provided by this plain prompt.
 
 Executable text files without a shebang also run natively when invoked from kwsh:
 
@@ -258,11 +268,11 @@ Brace expansion runs before substitutions and only on unquoted source text. It s
 
 - `. ./library.kwsh [args...]` executes a native library in the current shell; supplied positional arguments are restored afterward. This is separate from declarative `source` in the prompt.
 - `LINENO` reports the current source line, including commands in functions and sourced files. Explicitly assigning or unsetting it disables automatic tracking for that interpreter.
-- `readonly name=value`, `unset -f function`, `command [-v|-V|-p]`, and `getopts` operate on interpreter state.
+- `readonly name=value`, `unset -f function`, `command [-p] [-v|-V]`, and `getopts` operate on interpreter state.
 - Explicit `eval` uses the native parser, not Ruby evaluation or a system shell. Treat its argument as executable source, not data.
 - `umask` accepts octal and `u/g/o` symbolic permissions. It affects redirected files and external children without changing the host process's lasting mask.
-- `cd` and `pwd` support `-L` / `-P`.
-- `set` supports `-a`, `-e`, `-f`, `-m`, `-n`, `-u`, `-x`, `-C`, their `+` inverses, named `-o` options, and `pipefail`. `set -n` checks standalone scripts without execution and is ignored by interactive `/shell`. `set -x` deliberately writes expanded commands to stderr; do not enable it around secrets. Command substitution inherits `errexit`, following POSIX rather than Bash's default mode.
+- `cd` and `pwd` support grouped `-L` / `-P` flags and `--`; `cd` searches `CDPATH` for eligible relative directory operands. `command -pv` and `command -pV` use the system default utility path without changing the caller's `PATH`. `hash [utility...]` remembers locations, `hash -r` clears them, `type` describes command resolution, and `times` reports shell/child CPU usage.
+- `set` supports `-a`, `-b`, `-e`, `-f`, `-h`, `-m`, `-n`, `-u`, `-v`, `-x`, `-C`, their `+` inverses, named `-o` options, and `pipefail`. `set -n` checks standalone scripts without execution and is ignored by interactive `/shell`. `set -x` deliberately writes expanded commands to stderr; do not enable it around secrets. Command substitution inherits `errexit`, following POSIX rather than Bash's default mode. `-v` echoes source as it is read; `-b` enables interactive job-completion notifications while waiting for input; `-h` remembers literal external commands when functions are defined. `set -` disables verbose and execution tracing.
 
 Assignment and expansion errors, and errors from directly invoked special builtins, stop non-interactive scripts even without `set -e`. Their EXIT trap still runs. In interactive `/shell`, these errors stop the current submission but leave the session usable. Ordinary utility and compound-command redirection failures return a nonzero status without terminating the shell; `command` also suppresses a special builtin's special error-exit behavior. `set -e` adds exit-on-failure behavior while respecting conditional tests, negated pipelines, and non-final AND-OR commands.
 
@@ -314,7 +324,7 @@ alias greeting=hello
 dispatch greeting
 ```
 
-Native aliases expand unquoted command tokens while parsing, before parameter expansion. They may contain operators, refer to other aliases, or shadow builtins; cycles stop at the already-expanded name. Quoted names and names obtained from variables are not expanded. Define aliases in a separate complete input unit before using them: an alias change does not alter commands already parsed on the same line or in a function body. Expansion is bounded to 100 nested aliases and 65,536 replacement tokens.
+Native aliases expand unquoted command tokens while parsing, before parameter expansion. They may contain operators, refer to other aliases, or shadow builtins; cycles stop at the already-expanded name. Quoted names and names obtained from variables are not expanded. Define aliases in a separate complete input unit before using them: an alias change does not alter commands already parsed on the same line or in a function body. Replacement text shares the input lexer, so quotes and here-document bodies can cross alias boundaries. Expansion is bounded to 100 nested aliases, 65,536 replacement tokens, and 1 MiB of replacement source per parsed input unit.
 
 Files, stdin, and explicit native source execute one complete input unit at a time. An error on a later line does not undo earlier commands. Stdin execution does not read ahead of a command that consumes its own input. `source` and `kwshrc` remain declarative and non-executing; `. ./file` now consistently means executable native sourcing in `/shell` as well as scripts.
 
@@ -334,7 +344,7 @@ Unavailable locales and unsupported encodings produce explicit errors. Locale ch
 
 ### Remaining compatibility limits
 
-This is **not yet a fully POSIX- or Bash-conforming shell**. Additional builtin options, arithmetic array references, advanced array forms, multi-character collating elements, and exact Bash/POSIX regular-expression semantics remain outside the implemented subset. Alias replacement text is tokenized independently; aliases containing here-document bodies or incomplete quoted fragments are not supported. `wait -n`, Bash pseudo-traps (`DEBUG`, `ERR`, `RETURN`), and standalone interactive prompt/startup-file modes are not implemented.
+This is **not yet a fully POSIX- or Bash-conforming shell**. Additional builtin options, arithmetic array references, advanced array forms, multi-character collating elements, and exact Bash/POSIX regular-expression semantics remain outside the implemented subset. `wait -n`, Bash pseudo-traps (`DEBUG`, `ERR`, `RETURN`), XSI `ulimit`, and standalone history/vi/emacs editing are not implemented.
 
 `capture`, `pty`, `clear`, declarative `source`, and `kward edit` remain prompt conveniences rather than scripting builtins. Native aliases use read-time token expansion; the separate one-off `!` path retains its existing single command-prefix replacement. `kwshrc` stays non-executing.
 
@@ -356,7 +366,8 @@ Native scripting is being extended in tested stages, targeting POSIX.1-2024 plus
 - [x] Installed-locale character counts, single-character bracket classes/collation, native pathname matching, and locale sorting.
 - [x] Native interpretation of executable text after `ENOEXEC`, including standalone `exec` and hosted job ownership.
 - [x] Arithmetic-expansion substitutions, POSIX case fall-through, initial IFS, LINENO, and command-reporting precedence.
-- [ ] Remaining array/conditional forms, additional builtin flags and invocation modes.
+- [x] Shared-stream aliases, core builtin option combinations, command hashing, CDPATH, times, standalone interactive invocation, and guarded ENV startup.
+- [ ] Remaining Bash array/conditional forms and optional utility/editing profiles.
 - [ ] Exhaustive alias, command lookup/error, and special-builtin conformance coverage.
 - [ ] Full conformance coverage, including multi-character collating elements. Regular expressions and bounded arithmetic are not exact Bash equivalents.
 

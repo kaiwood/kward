@@ -12,7 +12,7 @@ module Kward
       end
       private_class_method :source_encoding
 
-      def self.each(input, aliases: {})
+      def self.each(input, aliases: {}, on_read: nil)
         source = +"".b
         line = 1
         loop do
@@ -22,6 +22,7 @@ module Kward
             yield Parser.parse(source_encoding(source), aliases: aliases, line: line) unless source.empty?
             break
           end
+          on_read&.call(byte)
           source << byte
           next unless byte == "\n"
           begin

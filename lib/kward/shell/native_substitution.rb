@@ -33,7 +33,7 @@ module Kward
             streams[2]&.puts("kwsh: #{e.message}")
             result = 2
           end
-          wait_builtin([], streams) if @interactive && !@jobs.empty?
+          wait_builtin([], streams) if @hosted && !@jobs.empty?
           @status = result
           finish(input: streams[0], output: streams[1], error: streams[2])
           streams.values.compact.uniq.each { |io| io.flush rescue nil }

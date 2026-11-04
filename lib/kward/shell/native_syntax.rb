@@ -54,14 +54,16 @@ module Kward
     end
     Parameter = Struct.new(:name, :operator, :word, keyword_init: true)
     HereDocument = Struct.new(:delimiter, :strip_tabs, :expand, :word, keyword_init: true)
-    Token = Struct.new(:value, :line, :source, :alias_names, :alias_next, keyword_init: true)
+    Token = Struct.new(:value, :line, :source, :start, :finish, :alias_names, :alias_next, keyword_init: true)
     Node = Struct.new(:kind, :values, :source, :line, keyword_init: true)
 
     class Lexer
       OPERATORS = %w[&& || <<- << >> <> >| >& <& ;; ;& ; & | > < ( ) { }].freeze
 
       def initialize(source, depth: 0, aliases: {}, line: 1)
-        @source = source
+        @source = source.dup
+        @alias_regions = []
+        @token_end = 0
         @aliases = aliases
         @substitution_depth = depth
         @index = 0
@@ -91,7 +93,7 @@ module Kward
           when "\n"
             advance
             consume_heredocs
-            return Token.new(value: ";", line: line)
+            return token(";", line: line, start: start)
           else
             if @source[@index, 2] == "\\\n"
               advance(2)
@@ -112,7 +114,7 @@ module Kward
             else
               word
             end
-            return Token.new(value: value, line: line, source: @source[start...@index])
+            return token(value, line: line, start: start, source: @source[start...@index])
           end
         end
         raise IncompleteInput, "unclosed here-document" unless @heredocs.empty?
@@ -124,8 +126,33 @@ module Kward
         return unless current
         line, start = @line, @index
         value = word(regex: true)
-        Token.new(value: value, line: line, source: @source[start...@index])
+        token(value, line: line, start: start, source: @source[start...@index])
       end
+
+      # Reinsert alias text into the same lexical stream. Quotes and here-docs
+      # can cross the replacement boundary, unlike independently lexed tokens.
+      def replace_alias(token, source, names)
+        first, last = token.start, token.finish
+        delta = source.length - (last - first)
+        @alias_regions.each do |region|
+          region[:start] += delta if region[:start] >= last
+          region[:finish] += delta if region[:finish] >= last
+        end
+        @source[first...last] = source
+        @alias_regions << { start: first, finish: first + source.length, names: names,
+                            trailing: source.end_with?(" ", "\t") }
+        @index = @token_end = first
+        @line = token.line
+      end
+
+      def token(value, line:, start:, source: nil)
+        names = @alias_regions.select { |region| region[:start] <= start && start < region[:finish] }.flat_map { |region| region[:names] }.uniq
+        following = @alias_regions.any? { |region| region[:trailing] && @token_end < region[:finish] && region[:finish] <= start }
+        @token_end = @index
+        Token.new(value: value, line: line, source: source, start: start, finish: @index,
+                  alias_names: names, alias_next: following)
+      end
+      private :token
 
       def queue_heredoc(document)
         @heredocs << document
@@ -507,6 +534,7 @@ module Kward
         @lexer = lexer || Lexer.new(source, aliases: aliases, line: line)
         @aliases = aliases
         @alias_tokens = 0
+        @alias_bytes = 0
         @tokens = []
         @index = 0
         @depth = 0
@@ -534,6 +562,8 @@ module Kward
         while @tokens.length <= @index + offset
           token = @lexer.next_token
           break unless token
+          @alias_tokens += 1 unless token.alias_names.to_a.empty?
+          raise SyntaxError, "alias expansion exceeds 65536 tokens" if @alias_tokens > 65_536
           @tokens << token
         end
         @tokens[@index + offset]&.value
@@ -608,16 +638,11 @@ module Kward
           names = token.alias_names || []
           break if names.include?(name)
           raise SyntaxError, "alias expansion exceeds 100 levels" if names.length >= 100
-          source = @aliases.fetch(name)
-          replacements = Lexer.new(source, aliases: @aliases).tokens
-          @alias_tokens += replacements.length
-          raise SyntaxError, "alias expansion exceeds 65536 tokens" if @alias_tokens > 65_536
-          replacements.each { |replacement| replacement.alias_names = names + [name] }
-          if source.end_with?(" ", "\t")
-            peek(1)
-            @tokens[@index + 1].alias_next = true if @tokens[@index + 1]
-          end
-          @tokens[@index, 1] = replacements
+          replacement = @aliases.fetch(name)
+          @alias_bytes += replacement.bytesize
+          raise SyntaxError, "alias replacement exceeds 1048576 bytes" if @alias_bytes > 1_048_576
+          @lexer.replace_alias(token, replacement, names + [name])
+          @tokens.slice!(@index..)
         end
       end
 

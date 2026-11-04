@@ -5,9 +5,19 @@ module Kward
     # Each job has an owned process group. Only its interpreter leader is reaped
     # here; that interpreter owns the pipeline and substitution children.
     module Jobs
-      Job = Struct.new(:id, :pid, :group, :state, :status, :command, :terminal_mode, keyword_init: true)
+      Job = Struct.new(:id, :pid, :group, :state, :status, :command, :terminal_mode, :notified, keyword_init: true)
       MAX_JOBS = 1_024
       TCSETPGRP = Fiddle::Function.new(Fiddle::Handle::DEFAULT["tcsetpgrp"], [Fiddle::TYPE_INT, Fiddle::TYPE_INT], Fiddle::TYPE_INT)
+
+      def notify_jobs(error:, force: false)
+        return unless interactive_scope? && (force || @options.include?("notify"))
+        reap_jobs
+        @jobs.each_value do |job|
+          next if job.state == :running || job.notified == job.state
+          error&.puts("[#{job.id}] #{job.state.to_s.capitalize} #{job.command}")
+          job.notified = job.state
+        end
+      end
 
       def close
         active = @jobs.values.reject { |job| job.state == :done }
@@ -160,13 +170,14 @@ module Kward
       end
 
       def jobs_builtin(args, streams)
-        mode = args.first&.start_with?("-") ? args.shift : nil
-        raise ExecutionError, "jobs: expected -l, -p, -r, or -s" if mode && !%w[-l -p -r -s].include?(mode)
+        flags = builtin_flags(args, "lprs", "jobs")
+        mode = flags.reverse.find { |flag| %w[l p].include?(flag) }
+        states = flags & %w[r s]
         reap_jobs
         jobs = args.empty? ? @jobs.values : args.map { |arg| find_job(arg) || raise(ExecutionError, "jobs: no such job: #{arg}") }
         jobs.each do |job|
-          next if mode == "-r" && job.state != :running || mode == "-s" && job.state != :stopped
-          text = mode == "-p" ? job.pid.to_s : "[#{job.id}] #{mode == '-l' ? "#{job.pid} " : ''}#{job.state.to_s.capitalize} #{job.command}"
+          next if states == ["r"] && job.state != :running || states == ["s"] && job.state != :stopped
+          text = mode == "p" ? job.pid.to_s : "[#{job.id}] #{mode == 'l' ? "#{job.pid} " : ''}#{job.state.to_s.capitalize} #{job.command}"
           write_line(streams, text)
         end
         0
@@ -186,6 +197,7 @@ module Kward
       end
 
       def resume_job(args, streams, foreground:)
+        args.shift if args.first == "--"
         raise ExecutionError, "job control is disabled; use set -m" unless @options.include?("monitor")
         raise ExecutionError, "expected at most one job ID" if args.length > 1
         job = find_job(args.first || "%+")

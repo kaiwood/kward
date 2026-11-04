@@ -20,6 +20,7 @@ module Kward
       end
 
       def poll_signals(input: $stdin, output: $stdout, error: $stderr)
+        notify_jobs(error: error)
         run_pending_traps({ 0 => input, 1 => output, 2 => error }.merge(@persistent_descriptors))
       rescue Flow => flow
         @exited = true if flow.kind == :exit
@@ -51,7 +52,7 @@ module Kward
         action = args.first.match?(/\A[0-9]+\z/) ? "-" : args.shift
         raise ExecutionError, "trap: expected an action and signals" if args.empty?
         names = args.map { |name| signal_name(name) }
-        if @interactive && !@job_child && names.include?("USR2")
+        if @hosted && !@job_child && names.include?("USR2")
           raise ExecutionError, "USR2 is reserved for hosted shell shutdown"
         end
         raise ExecutionError, "trap: KILL and STOP cannot be trapped" if (names & %w[KILL STOP]).any?
@@ -132,7 +133,7 @@ module Kward
         @job_child = true
         @owned_job_group = job_group
         @options.delete("monitor")
-        @replace_process = !@interactive
+        @replace_process = !@hosted
         @loop_depth = 0
         @function_depth = 0
         @process_substitutions = nil

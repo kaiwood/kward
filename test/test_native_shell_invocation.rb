@@ -1,0 +1,212 @@
+require_relative "test_helper"
+require "open3"
+require "pty"
+require "timeout"
+require_relative "../lib/kward/shell/script_runner"
+
+class TestNativeShellInvocation < KwardTestCase
+  EXECUTABLE = File.expand_path("../exe/kwsh", __dir__)
+
+  def invoke(*args, env: {}, **options)
+    Open3.capture3({ "LC_ALL" => "C", "ENV" => nil, "PS1" => "primary> ", "PS2" => "more> " }.merge(env),
+                  RbConfig.ruby, EXECUTABLE, *args, **options)
+  end
+
+  def test_alias_text_shares_quotes_and_here_documents_with_the_input_stream
+    cases = {
+      "alias say=\"printf '%s' '\"\nsay hello'\n" => " hello",
+      "alias doc='cat <<EOF\nhello\nEOF\n'\ndoc\n" => "hello\n",
+      "alias doc='cat <<EOF'\ndoc\nhello\nEOF\n" => "hello\n",
+      "alias a='b '\nalias b='printf %s '\nalias word=value\na word\n" => "value"
+    }
+    cases.each do |source, expected|
+      output, error, status = invoke("-c", source)
+      assert status.success?, error
+      assert_equal expected, output
+      assert_empty error
+    end
+  end
+
+  def test_grouped_invocation_flags_and_options_after_c_or_s
+    [["-ec", "printf '%s' \"$1\"", "name", "value"],
+     ["-c", "-e", "printf '%s' \"$1\"", "name", "value"],
+     ["-s", "-e", "value"]].each do |args|
+      output, error, status = invoke(*args, stdin_data: "printf '%s' \"$1\"\n")
+      assert status.success?, error
+      assert_equal "value", output
+      assert_empty error
+    end
+  end
+
+  def test_interactive_input_recovers_from_errors_without_read_ahead
+    output, error, status = invoke("-i", stdin_data: <<~'SHELL')
+      readonly x=1
+      x=2; printf bad
+      read value
+      payload
+      if true; then
+        printf '%s' "$value"
+      fi
+      exit 7
+    SHELL
+    assert_equal 7, status.exitstatus
+    assert_equal "payload", output
+    assert_includes error, "readonly variable"
+    assert_includes error, "primary> "
+    assert_includes error, "more> "
+  end
+
+  def test_interactive_noexec_is_ignored_and_usr2_is_not_reserved
+    output, error, status = invoke("-inc", "case $- in *i*) :;; *) exit 9;; esac; trap 'printf signal' USR2; kill -USR2 $$; printf done")
+    assert status.success?, error
+    assert_equal "signaldone", output
+    assert_empty error
+  end
+
+  def test_env_startup_is_parameter_expanded_and_interactive_only
+    Dir.mktmpdir("native-startup") do |dir|
+      File.write(File.join(dir, "startup"), "VALUE=ready\nalias say='printf %s'\n")
+      env = { "HOME" => dir, "ENV" => "${HOME}/startup" }
+      output, error, status = invoke("-ic", 'say "$VALUE:$1"', "name", "argument", env: env)
+      assert status.success?, error
+      assert_equal "ready:argument", output
+      assert_empty error
+      output, error, status = invoke("-c", 'printf "%s" "${VALUE-unset}"', env: env)
+      assert status.success?, error
+      assert_equal "unset", output
+      assert_empty error
+    end
+  end
+
+  def test_env_does_not_execute_command_substitutions_or_run_with_mismatched_identity
+    Dir.mktmpdir("native-startup") do |dir|
+      output, error, status = invoke("-ic", "printf safe", env: { "ENV" => "$(touch sentinel)" }, chdir: dir)
+      assert status.success?, error
+      assert_equal "safe", output
+      assert_includes error, "only parameter expansion"
+      refute File.exist?(File.join(dir, "sentinel"))
+      File.write(File.join(dir, "startup"), "VALUE=unsafe")
+      runtime = Kward::NativeShell::Runtime.new(env: { "ENV" => File.join(dir, "startup") })
+      original = Process.method(:euid)
+      begin
+        Process.define_singleton_method(:euid) { Process.uid + 1 }
+        Kward::NativeShell::ScriptRunner.load_startup(runtime, input: StringIO.new, output: StringIO.new, error: StringIO.new)
+      ensure
+        Process.define_singleton_method(:euid, original)
+      end
+      refute runtime.variables.key?("VALUE")
+    end
+  end
+
+  def test_command_option_combinations_and_declaration_context
+    output, error, status = invoke("-c", <<~'SHELL')
+      value='two words *'
+      command -p export RESULT=$value
+      printf '<%s>:' "$RESULT"
+      PATH=/missing
+      command -pv printf
+      command -p printf '%s' "$PATH"
+    SHELL
+    assert status.success?, error
+    assert_match(/\A<two words \*>:.*\/printf\n\/missing\z/, output)
+    assert_empty error
+  end
+
+  def test_declaration_listings_preserve_unset_values_and_accept_double_dash
+    output, error, status = invoke("-c", <<~'SHELL')
+      unset EXPORTED READONLY
+      export -- EXPORTED
+      readonly -- READONLY
+      export -p | grep '^export EXPORTED'
+      readonly -p
+      unset -- EXPORTED
+      printf '%s' "${EXPORTED-unset}"
+    SHELL
+    assert status.success?, error
+    assert_equal "export EXPORTED\nreadonly READONLY\nunset", output
+    assert_empty error
+  end
+
+  def test_cdpath_and_grouped_pwd_options
+    Dir.mktmpdir("native-cdpath") do |dir|
+      Dir.mkdir(File.join(dir, "target"))
+      output, error, status = invoke("-c", 'CDPATH=$1; cd target; pwd -LP --', "name", dir)
+      assert status.success?, error
+      assert_equal "#{dir}/target\n#{File.realpath(dir)}/target\n", output
+      assert_empty error
+    end
+  end
+
+  def test_hash_locations_are_cleared_even_when_path_is_assigned_the_same_value
+    Dir.mktmpdir("native-hash") do |dir|
+      file = File.join(dir, "utility")
+      File.write(file, "exit 0")
+      File.chmod(0o700, file)
+      output, error, status = invoke("-c", 'PATH=$1; hash utility; hash; PATH=$PATH; hash; hash -r', "name", dir)
+      assert status.success?, error
+      assert_equal "#{file}\n", output
+      assert_empty error
+      output, error, status = invoke("-c", 'PATH=$1; set -h; f() { utility; }; hash', "name", dir)
+      assert status.success?, error
+      assert_equal "#{file}\n", output
+    end
+  end
+
+  def test_terminal_input_selects_interactive_mode_automatically
+    transcript = +""
+    pid = nil
+    PTY.spawn({ "ENV" => nil, "PS1" => "automatic> " }, RbConfig.ruby, EXECUTABLE) do |reader, writer, child|
+      pid = child
+      Timeout.timeout(5) do
+        transcript << reader.readpartial(1024) until transcript.include?("automatic> ")
+        writer.write("printf '%s%s' AU TO; exit 0\n")
+        begin
+          loop { transcript << reader.readpartial(1024) }
+        rescue EOFError, Errno::EIO
+          # Closing a PTY can report EIO rather than EOF.
+        end
+      end
+      _, status = Process.wait2(pid)
+      pid = nil
+      assert status.success?, transcript
+    end
+    assert_includes transcript, "AUTO"
+  ensure
+    if pid
+      Process.kill("KILL", pid) rescue nil
+      Process.wait(pid) rescue nil
+    end
+  end
+
+  def test_notify_reports_completion_while_waiting_for_interactive_input
+    Open3.popen3({ "ENV" => nil, "PS1" => "ready> " }, RbConfig.ruby, EXECUTABLE, "-i") do |input, output, error, worker|
+      begin
+        Timeout.timeout(5) do
+          transcript = +""
+          transcript << error.readpartial(1024) until transcript.include?("ready> ")
+          input.write("set -b\nsleep 0.2 &\n")
+          input.flush
+          transcript << error.readpartial(1024) until transcript.include?("Done")
+          assert_includes transcript, "Done"
+          input.write("exit\n")
+          input.close
+          assert worker.value.success?
+        end
+      ensure
+        Process.kill("KILL", worker.pid) if worker.alive?
+      end
+    end
+  end
+
+  def test_times_type_verbose_and_unalias_error_status
+    output, error, status = invoke("-c", "times; type if; unalias missing; printf 'status:%s' \"$?\"")
+    assert status.success?, error
+    assert_match(/\A\d+m\d+\.\d+s \d+m\d+\.\d+s\n\d+m\d+\.\d+s \d+m\d+\.\d+s\nif is keyword\nstatus:2\z/, output)
+    assert_includes error, "unalias: not found"
+    output, error, status = invoke("-v", "-c", "printf hello\nset -\nprintf done\n")
+    assert status.success?, error
+    assert_equal "hellodone", output
+    assert_includes error, "printf hello\n"
+    refute_includes error, "printf done"
+  end
+end

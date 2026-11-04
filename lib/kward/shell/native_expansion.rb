@@ -28,7 +28,7 @@ module Kward
         when "?" then @status.to_s
         when "!" then @last_background_pid.to_s
         when "$" then @shell_pid.to_s
-        when "-" then Builtins::SHELL_OPTIONS.select { |_, name| @options.include?(name) }.keys.join
+        when "-" then Builtins::SHELL_OPTIONS.select { |_, name| @options.include?(name) }.keys.join + (@interactive ? "i" : "")
         when "#" then @arguments.length.to_s
         when "@" then @arguments.join(" ")
         when "*" then @arguments.join(ifs[0].to_s)
