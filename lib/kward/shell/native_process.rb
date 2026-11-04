@@ -17,6 +17,32 @@ module Kward
       FCNTL = Fiddle::Function.new(Fiddle::Handle::DEFAULT["fcntl"], [Fiddle::TYPE_INT, Fiddle::TYPE_INT, Fiddle::TYPE_INT], Fiddle::TYPE_INT)
       CLOSE = Fiddle::Function.new(Fiddle::Handle::DEFAULT["close"], [Fiddle::TYPE_INT], Fiddle::TYPE_INT)
 
+      # Ruby does not expose WCONTINUED on every supported platform.
+      # sys/wait.h on Darwin; Linux bits/waitflags.h uses 0x08.
+      WAIT_CONTINUED = if Process.const_defined?(:WCONTINUED)
+        Process.const_get(:WCONTINUED)
+      elsif RUBY_PLATFORM.include?("darwin")
+        0x10
+      elsif RUBY_PLATFORM.include?("linux")
+        0x08
+      else
+        0
+      end
+
+      def self.wait(pid)
+        flags = Process::WUNTRACED | WAIT_CONTINUED
+        _, status = Process.wait2(pid, flags)
+        # A group can resume while its supervisor still holds a stop report.
+        # Prefer newer kernel state before propagating that stop back to the group.
+        if status.stopped?
+          while (update = Process.waitpid2(pid, flags | Process::WNOHANG))
+            status = update.last
+            break if status.exited? || status.signaled?
+          end
+        end
+        status
+      end
+
       def self.spawn(executable, arguments, environment, cwd:, streams:, mask: nil)
         validate(arguments, environment)
         streams.values.compact.uniq.each(&:flush)

@@ -268,7 +268,7 @@ printf 'Last status: %s\n' "$?"
 
 Job control is on by default in `/shell`; standalone scripts can enable it with `set -m`. Ctrl-Z stops a foreground job and returns terminal ownership to kwsh. Terminal modes are saved with the stopped job and restored on `fg`, including for programs that suspend themselves after entering raw mode. Use `bg %1` to continue it in the background, or `fg %1` to return it to the terminal. Without job control, asynchronous input defaults to `/dev/null` unless explicitly redirected.
 
-Hosted jobs remain tab-owned: closing the shell kills its owned groups, including stopped jobs. A forked hosted scope waits for its own background work before reporting completion, keeping descendants owned; standalone scripts do not impose that host-lifecycle rule. Background terminal output can arrive between submissions; redirect long-running jobs to files when output ordering matters. Script jobs are separate from Kward's tab-detached foreground-command feature.
+Hosted jobs remain tab-owned: closing the shell kills its owned groups, including stopped jobs. A forked hosted scope waits for its own background work before reporting completion, keeping descendants owned; standalone scripts do not impose that host-lifecycle rule. In `/shell`, background terminal output is drained and discarded while the prompt is idle so logging cannot block a server after `bg`. Output written during another command can still mix with that command's output. Redirect long-running jobs to files when you need to retain logs, for example `rake docs:serve >docs-server.log 2>&1 &`. Script jobs are separate from Kward's tab-detached foreground-command feature.
 
 ### Handle signals and replace a script
 

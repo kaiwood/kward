@@ -712,14 +712,14 @@ module Kward
 
       def wait(pid)
         loop do
-          _, status = Process.wait2(pid, Process::WUNTRACED)
+          status = NativeProcess.wait(pid)
           if status.stopped?
             # Programs such as pagers can suspend themselves, not the entire
             # group. Surface that stop through the native job supervisor.
             Process.kill(status.stopsig, -@owned_job_group) if @owned_job_group == Process.getpgrp
             next
           end
-          return status.exitstatus || 128 + status.termsig
+          return status.exitstatus || 128 + status.termsig if status.exited? || status.signaled?
         end
       end
 

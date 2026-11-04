@@ -56,6 +56,108 @@ class TestPersistentShellSession < KwardTestCase
     end
   end
 
+  def test_terminal_stopped_server_keeps_running_after_background_resume
+    Dir.mktmpdir("persistent-background-resume") do |dir|
+      shell = build_shell(dir)
+      reader, writer = IO.pipe
+      sink = Sink.new
+      code = <<~'RUBY'
+        STDOUT.sync = true
+        puts 'ready'
+        loop do
+          File.write('heartbeat', Process.clock_gettime(Process::CLOCK_MONOTONIC).to_s)
+          sleep 0.02
+        end
+      RUBY
+      command = Shellwords.join([RbConfig.ruby, "-e", code])
+      result = nil
+      thread = Thread.new { result = shell.run_interactive(command, input: reader, sink: sink) }
+      path = File.join(dir, "heartbeat")
+      wait_until(timeout: 3) { sink.output.include?("ready") && File.exist?(path) }
+      writer.write("\x1a")
+      writer.flush
+      assert thread.join(3), "foreground server did not stop"
+      assert_equal 128 + Signal.list.fetch("TSTP"), result.exit_status
+      stopped = File.read(path)
+      assert_equal 0, shell.run_for_agent("bg").exit_status
+      wait_until(timeout: 3) { File.read(path) != stopped }
+      sleep 0.1
+      resumed = File.read(path)
+      wait_until(timeout: 3) { File.read(path) != resumed }
+      assert_empty shell.run_for_agent("jobs -s").output.delete_prefix("$ jobs -s\n").strip
+    ensure
+      shell&.close
+      thread&.join(1)
+      reader&.close
+      writer&.close
+    end
+  end
+
+  def test_background_server_handles_repeated_requests_while_shell_is_idle
+    Dir.mktmpdir("persistent-background-output") do |dir|
+      shell = build_shell(dir)
+      reader, writer = IO.pipe
+      sink = Sink.new
+      code = <<~'RUBY'
+        require 'socket'
+        STDOUT.sync = STDERR.sync = true
+        server = TCPServer.new('127.0.0.1', 0)
+        File.write('port', server.addr[1].to_s)
+        puts 'ready'
+        loop do
+          client = server.accept
+          client.gets
+          STDOUT.write('o' * 131_072)
+          STDERR.write('e' * 131_072)
+          client.puts 'ok'
+          client.close
+        end
+      RUBY
+      command = Shellwords.join([RbConfig.ruby, "-e", code])
+      thread = Thread.new { shell.run_interactive(command, input: reader, sink: sink) }
+      wait_until(timeout: 3) { sink.output.include?("ready") }
+      writer.write("\x1a")
+      writer.flush
+      assert thread.join(3), "foreground server did not stop"
+      assert_equal 0, shell.run_for_agent("bg").exit_status
+
+      3.times do
+        TCPSocket.open("127.0.0.1", Integer(File.read(File.join(dir, "port")))) do |client|
+          client.puts "request"
+          assert IO.select([client], nil, nil, 3), "background server blocked writing terminal output"
+          assert_equal "ok\n", client.gets
+        end
+      end
+      result = shell.run_for_agent("printf 'foreground still works'")
+      assert_equal 0, result.exit_status
+      assert_includes result.output, "foreground still works"
+    ensure
+      shell&.close
+      thread&.join(1)
+      reader&.close
+      writer&.close
+    end
+  end
+
+  def test_continuous_background_output_does_not_hold_the_prompt
+    Dir.mktmpdir("persistent-background-flood") do |dir|
+      shell = build_shell(dir, max_output_bytes: 1_024)
+      code = <<~'RUBY'
+        STDOUT.sync = true
+        STDOUT.write('x' * 65_536)
+        File.write('flooding', '')
+        loop { STDOUT.write('x' * 65_536) }
+      RUBY
+      command = "#{Shellwords.join([RbConfig.ruby, '-e', code])} & while [ ! -f flooding ]; do sleep 0.01; done"
+      thread = Thread.new { shell.run_for_agent(command) }
+      assert thread.join(3), "continuous background output prevented command completion"
+      assert_includes thread.value.output, "output truncated"
+    ensure
+      shell&.close
+      thread&.join(1)
+    end
+  end
+
   def test_terminal_stop_and_foreground_resume_restore_shell_ownership
     Dir.mktmpdir("persistent-jobs") do |dir|
       shell = build_shell(dir)

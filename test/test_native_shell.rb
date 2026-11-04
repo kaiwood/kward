@@ -35,6 +35,59 @@ class TestNativeShell < KwardTestCase
     assert_equal expected, output
   end
 
+  def test_resumed_child_status_supersedes_a_stale_stop_report
+    reader, writer = IO.pipe
+    pid = Process.fork do
+      writer.close
+      Process.kill("STOP", Process.pid)
+      reader.read(1)
+      Process.kill("STOP", Process.pid)
+      reader.read(1)
+      exit!(7)
+    end
+    reader.close
+    original_wait = Process.method(:wait2)
+    # Reproduce continuation after wait obtains a stop, but before the native
+    # supervisor handles it. The child stays alive so continuation is observable.
+    Process.define_singleton_method(:wait2) do |child, flags|
+      result = original_wait.call(child, flags)
+      Process.kill("CONT", child) if result.last.stopped?
+      result
+    end
+    status = Kward::NativeShell::NativeProcess.wait(pid)
+    refute status.stopped?, "a resumed child must not be reported as stopped"
+    refute status.exited?
+    refute status.signaled?
+    Process.define_singleton_method(:wait2, original_wait)
+
+    writer.write("x")
+    writer.flush
+    status = Kward::NativeShell::NativeProcess.wait(pid)
+    assert status.stopped?, "a subsequent genuine stop must still be reported"
+    Process.kill("CONT", pid)
+    writer.write("x")
+    writer.flush
+    exit_status = @runtime.send(:wait, pid)
+    pid = nil
+    assert_equal 7, exit_status
+  ensure
+    Process.define_singleton_method(:wait2, original_wait) if original_wait
+    if pid
+      begin
+        Process.kill("KILL", pid)
+      rescue Errno::ESRCH
+        # The child may have exited while an assertion was failing.
+      end
+      begin
+        Process.wait(pid)
+      rescue Errno::ECHILD
+        # A terminal status may already have been collected.
+      end
+    end
+    reader&.close unless reader&.closed?
+    writer&.close unless writer&.closed?
+  end
+
   def test_background_lists_have_isolated_state_and_waitable_statuses
     assert_output("parent:7:1:127", <<~'SHELL')
       value=parent

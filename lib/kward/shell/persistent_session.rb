@@ -272,6 +272,7 @@ module Kward
     end
 
     def start_process
+      @protocol_pending = false
       ready = Queue.new
       @control, child_control = UNIXSocket.pair
       @control.sync = true
@@ -284,7 +285,9 @@ module Kward
             @writer = writer
             @pid = pid
             ready << true
-            sleep 0.05 until @closed
+            until @closed
+              sleep 0.01 unless drain_idle_output
+            end
           end
         rescue StandardError => e
           ready << e
@@ -312,6 +315,7 @@ module Kward
         ensure_open
         cancellation&.raise_if_cancelled!
         marker = next_marker
+        @protocol_pending = true
         write_protocol_command(command, marker, suppress_git_pager: suppress_git_pager, config: config)
         read_until_marker(
           marker,
@@ -409,6 +413,7 @@ module Kward
               max_output_bytes
             )
             drain_prompt_output
+            @protocol_pending = false
             return {
               output: captured,
               status: status,
@@ -532,8 +537,27 @@ module Kward
       buffer.bytesize - suffix_length
     end
 
+    # Idle job output must not fill the PTY and block background processes.
+    # Never compete with an active reader, including a tab-detached command
+    # whose protocol outlives execute_protocol's command mutex ownership.
+    def drain_idle_output
+      return false unless @command_mutex.try_lock
+
+      begin
+        return false if @protocol_pending || @closed
+
+        chunk = read_chunk
+        !chunk.nil? && chunk != :wait_readable
+      ensure
+        @command_mutex.unlock
+      end
+    rescue IOError, Errno::EIO
+      false
+    end
+
     def drain_prompt_output
-      loop do
+      # A continuously writing job must not prevent returning to the prompt.
+      16.times do
         readable = IO.select([@reader], nil, nil, 0.01)&.first || []
         break unless readable.include?(@reader)
 
