@@ -290,6 +290,21 @@ Brace expansion runs before substitutions and only on unquoted source text. It s
 
 Assignment and expansion errors, and errors from directly invoked special builtins, stop non-interactive scripts even without `set -e`. Their EXIT trap still runs. In interactive `/shell`, these errors stop the current submission but leave the session usable. Ordinary utility and compound-command redirection failures return a nonzero status without terminating the shell; `command` also suppresses a special builtin's special error-exit behavior. `set -e` adds exit-on-failure behavior while respecting conditional tests, negated pipelines, and non-final AND-OR commands.
 
+### Keep working after a directory rename
+
+The active directory is retained by identity, not just its pathname. A rename does not redirect subsequent commands into a replacement directory at the old name:
+
+```sh
+cd build/staging
+mv ../staging ../ready
+printf 'done\n' >status.txt       # writes in build/ready
+pwd -P                          # reports the current physical pathname
+```
+
+External commands, subshells, native scripts, `. ./library`, relative redirections and globs continue using that directory. `$PWD` retains the shell's logical spelling until a later directory change; `pwd -L` falls back to physical reporting when that spelling no longer identifies the directory. Logical `cd missing/..` fails rather than silently cancelling the missing component, and non-directory or dangling-symlink components fail too.
+
+If the current directory is removed, pathname reporting can fail, while external execution and `cd -P ..` can still work according to the filesystem's rules. Relative file opens and child directory entry use retained descriptors, without changing Kward's host-process directory. Physical name discovery uses macOS `F_GETPATH` or Linux `/proc/self/fd`; Linux needs `/proc` mounted for name-based operations. These changes do not bypass command sandboxing or expose private handles as shell descriptors.
+
 ### Run and control background work
 
 ```sh

@@ -117,6 +117,8 @@ class TestNativeShellInvocation < KwardTestCase
     runtime = Kward::NativeShell::Runtime.new(env: {})
     assert_equal "1", runtime.variables.fetch("OPTIND")
     refute runtime.environment.key?("OPTIND"), "OPTIND must not be exported by default"
+  ensure
+    runtime&.close
   end
 
   def test_startup_preserves_valid_logical_pwd_and_exports_it
@@ -167,8 +169,12 @@ class TestNativeShellInvocation < KwardTestCase
       File.symlink(dir, logical)
       [other, logical].each do |pwd|
         runtime = Kward::NativeShell::Runtime.new(cwd: dir, env: { "PWD" => pwd }, hosted: true)
-        assert_equal dir, runtime.cwd
-        assert_equal dir, runtime.variables.fetch("PWD")
+        begin
+          assert_equal dir, runtime.cwd
+          assert_equal dir, runtime.variables.fetch("PWD")
+        ensure
+          runtime.close
+        end
       end
     end
   end
@@ -304,6 +310,7 @@ class TestNativeShellInvocation < KwardTestCase
         Kward::NativeShell::ScriptRunner.load_startup(runtime, input: StringIO.new, output: StringIO.new, error: StringIO.new)
       ensure
         Process.define_singleton_method(:euid, original)
+        runtime.close
       end
       refute runtime.variables.key?("VALUE")
     end

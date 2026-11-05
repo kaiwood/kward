@@ -92,7 +92,7 @@ module Kward
             next [value] if @options.include?("noglob")
             pattern = Fields.pattern(characters, glob: true)
             matches = if pattern.match?(/[*?\[]/)
-              Locale.with(@variables) { |locale| Glob.new(pattern, cwd: @cwd, locale: locale, globstar: @globstar).matches }
+              Locale.with(@variables) { |locale| Glob.new(pattern, cwd: @directory, locale: locale, globstar: @globstar).matches }
             else
               []
             end

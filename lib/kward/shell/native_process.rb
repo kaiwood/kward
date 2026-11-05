@@ -60,6 +60,14 @@ module Kward
         validate(arguments, environment)
         load_path = $LOAD_PATH.map { |path| File.expand_path(path) }
         streams.values.compact.uniq.each(&:flush)
+        # Keep directory ownership intact even if exec fails after remapping.
+        # This runs only in an exec-bound process, never in the agent host.
+        if cwd.respond_to?(:enter)
+          cwd.protect_descriptors(streams.keys)
+          cwd.enter
+        else
+          Dir.chdir(cwd)
+        end
         # Snapshot all sources before replacing any standard descriptor:
         # `2>&1 >file` must retain the original stdout for stderr.
         copies = streams.transform_values do |io|
@@ -92,7 +100,6 @@ module Kward
         end
         copies.values.compact.each(&:close)
         File.umask(mask) if mask
-        Dir.chdir(cwd)
         begin
           execve(executable, arguments, environment)
         rescue Errno::ENOEXEC

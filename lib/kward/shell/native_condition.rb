@@ -16,7 +16,7 @@ module Kward
         when :unary
           operator, word = values
           value = scalar(word)
-          path = File.expand_path(value, @cwd)
+          path = @directory.resolve(value) unless %w[-n -z -v -t].include?(operator)
           case operator
           when "-n" then !value.empty?
           when "-z" then value.empty?
@@ -57,7 +57,7 @@ module Kward
             operators = { "-eq" => "==", "-ne" => "!=", "-lt" => "<", "-le" => "<=", "-gt" => ">", "-ge" => ">=" }
             Arithmetic.binary(operators.fetch(operator), arithmetic_value(value).to_i, arithmetic_value(other).to_i) == 1
           when "-nt", "-ot", "-ef"
-            first, second = [value, other].map { |name| File.expand_path(name, @cwd) }
+            first, second = [value, other].map { |name| @directory.resolve(name) }
             if operator == "-ef"
               File.exist?(first) && File.exist?(second) && File.identical?(first, second)
             elsif operator == "-nt"

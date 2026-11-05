@@ -40,6 +40,11 @@ class TestShellPrompt < KwardTestCase
     assert_includes instructions, "initialize PPID to the parent process ID, and reset OPTIND to 1"
     assert_includes instructions, "hosted sessions retain their explicit workspace root"
     assert_includes instructions, "a leading - operand is ignored"
+    assert_includes instructions, "alias listings use quoted name=value entries without an alias prefix"
+    assert_includes instructions, "including assignment-only commands"
+    assert_includes instructions, "umask supports -S/--, permission copies such as g=u"
+    assert_includes instructions, "cd supports CDPATH and -P -e"
+    assert_includes instructions, "retain directory identity across renames"
     refute_includes instructions, "Command/arithmetic substitution"
   end
 

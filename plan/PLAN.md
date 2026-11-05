@@ -85,12 +85,12 @@ Relevant code: `native_builtins.rb` and `native_runtime.rb`.
 
 Relevant code: directory state in `native_runtime.rb` and process execution in `native_process.rb`.
 
-- [ ] Fix logical `cd` normalization so `cd missing/..` fails instead of removing the missing component and succeeding.
-- [ ] Check preceding components before eliminating `..`, including non-directories and symbolic links.
-- [ ] Stop relying only on a pathname to represent the active directory. Preserve directory identity across renames and handle removal according to the underlying filesystem semantics.
-- [ ] Keep logical `PWD` presentation distinct from the mechanism used to retain the actual current directory.
-- [ ] Ensure external commands, subshells, sourcing, relative redirections, and relative pathname expansion use the correct directory after a rename.
-- [ ] Give any retained directory handles explicit ownership and cleanup. Do not change Kward's process-global working directory as a shortcut.
+- [x] Fix logical `cd` normalization so `cd missing/..` fails instead of removing the missing component and succeeding.
+- [x] Check preceding components before eliminating `..`, including non-directories and symbolic links.
+- [x] Stop relying only on a pathname to represent the active directory. Preserve directory identity across renames and handle removal according to the underlying filesystem semantics.
+- [x] Keep logical `PWD` presentation distinct from the mechanism used to retain the actual current directory.
+- [x] Ensure external commands, subshells, sourcing, relative redirections, and relative pathname expansion use the correct directory after a rename.
+- [x] Give any retained directory handles explicit ownership and cleanup. Do not change Kward's process-global working directory as a shortcut.
 
 **Key regression:** enter a directory, rename it through a child command, then execute another command successfully from the same directory.
 
@@ -259,7 +259,7 @@ Do not expand this plan merely to add Bash arrays, `[[ … ]]`, regex matching, 
 
 ## Step 3 verification — aliases and tracing
 
-- Commit: `fix(shell): complete alias names and assignment tracing` (separate step commit; parent `e91fedd0`). Darwin arm64, Ruby 4.0.3; Linux not run.
+- Commit: `5cda44c` — `fix(shell): complete alias names and assignment tracing` (parent `e91fedd0`). Darwin arm64, Ruby 4.0.3; Linux not run.
 - References: POSIX alias STDOUT, XBD 3.10, and SCL set `-x` (links above/in matrix). Required names, listing/lookup quoting and restoration, and command-description separation covered. Existing shared-lexer/recursion tests remain unchanged.
 - New focused cases failed before implementation: 3 runs, 10 assertions, 3 failures. After implementation the focused shell command above (seed 31927) passed: **296 runs, 1,980 assertions, 0 failures/errors/skips**.
 - Assignment expansions execute once in order, tracing before assignment/dispatch; stderr redirections retain existing trace routing. Redirection-only commands also trace. UP PS4 expansion remains step 10.
@@ -267,9 +267,19 @@ Do not expand this plan merely to add Bash arrays, `[[ … ]]`, regex matching, 
 
 ## Step 4 verification — umask and cd options
 
-- Commit: `fix(shell): complete umask modes and cd physical reporting` (separate step commit; parent `5cda44c`). Darwin arm64, Ruby 4.0.3; Linux not run.
+- Commit: `0a7c06c` — `fix(shell): complete umask modes and cd physical reporting` (parent `5cda44c`). Darwin arm64, Ruby 4.0.3; Linux not run.
 - Read POSIX umask OPTIONS/OPERANDS/STDOUT, chmod symbolic grammar, and cd algorithm/options/status. Added `test_native_shell_utilities.rb`: before implementation, **5 runs, 33 assertions, 4 failures**; invalid-input atomicity already passed.
 - Final focused shell command above, seed 45126: **301 runs, 2,087 assertions, 0 failures/errors/skips**. Covers copy/compound/empty symbolic operations, query/set distinction, round trips, subshell file modes, invalid masks, physical/logical option precedence and CDPATH regressions.
 - Path-reporting denial is injected deterministically after validating a real target directory, including a subsequent write proving the change persisted. This avoids root/filesystem-dependent permission skips; no environmental skips were needed. The directory-handle implementation in step 5 must preserve this distinction.
 - Non-permission symbolic s/t bits are ignored (POSIX leaves their umask interpretation unspecified); X consults original allowed execute bits. Host umask isolation tests still pass.
 - Docs, scoped guidance and matrix updated. `git diff --check` passed. Full suite will run after step 5; no unrelated baseline failure was modified.
+
+## Step 5 verification — directory identity
+
+- Commit: `fix(shell): retain current directory identity across renames` (separate step commit containing this record; parent `0a7c06c`). Darwin arm64, Ruby 4.0.3. Linux was not run: Docker is installed but its daemon/socket is unavailable; no images were downloaded or services started.
+- Used POSIX cd steps 7–10, pwd logical/physical behavior and SCL execution-environment requirements. Directory mechanics live in `native_directory.rb`: search-only openat handles, owned copies/cleanup, relative file opening, kernel physical-name discovery and exec-bound fchdir. No agent-host process-global chdir; no shell fallback. Linux name discovery requires mounted procfs (documented), while Darwin uses the kernel F_GETPATH/MAXPATHLEN contract.
+- Initial new directory regressions before implementation: **6 runs, 7 assertions, 6 failures**, covering missing/invalid components, rename/replacement, relative execution, relative redirection, deleted directories and host isolation.
+- Final focused shell command above, seed 17371: **311 runs, 2,175 assertions, 0 failures, 0 errors, 0 skips**. The ten new directory tests cover subshells, native source/scripts, relative PATH cache invalidation even when the old pathname is replaced, globs, physical parent navigation after removal, actual search-only permissions, descriptor closure/copying/close-on-exec, descriptor-remapping failure, and unchanged host cwd. The step 4 injected physical-reporting-failure regression still verifies a successful subsequent relative write; it was strengthened to check that `pwd -L` does not print a dot-containing fallback after that reporting failure.
+- Full repository command above, seed 1407: **2,577 runs, 13,594 assertions, 1 failure, 0 errors, 2 skips**. Only the same baseline editor-spinner failure (`test/test_editor_prompt.rb:109`, expected `· ·`, rendered `⠋`) remains. The two disabled Bubblewrap integration skips remain; the new permission-sensitive directory test did not skip on this host.
+- Preserved existing cd error text. Added explicit closure to prior invocation fixtures now owning directory handles. Removed the new mutable-literal warning; no debug artifacts or failed-hypothesis leftovers remain. `git diff --check` passed.
+- Updated docs, changelog, scoped prompt/tests, AGENTS and matrix CD-2/CWD-1. Frontend support remains unchanged: persistent shell TUI-only, standalone executable available through existing CLI/RPC/Pan external-command paths. Broader race/permission/locale auditing and the remaining steps remain open; these passing regressions are not certification.

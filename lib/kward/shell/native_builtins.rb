@@ -117,10 +117,10 @@ module Kward
         env = clear ? {} : environment
         NativeProcess.validate(arguments, env)
         if @replace_process
-          result = NativeProcess.replace(executable, arguments, env, cwd: @cwd, streams: streams, mask: @umask)
+          result = NativeProcess.replace(executable, arguments, env, cwd: @directory, streams: streams, mask: @umask)
           raise Flow.new(:exit, result)
         else
-          pid = NativeProcess.spawn(executable, arguments, env, cwd: @cwd, streams: streams, mask: @umask, hosted: @hosted)
+          pid = NativeProcess.spawn(executable, arguments, env, cwd: @directory, streams: streams, mask: @umask, hosted: @hosted)
           result = wait(pid)
           pid = nil
           # The protocol worker must return its final state before exiting.
@@ -227,16 +227,16 @@ module Kward
         raise ExecutionError, "source nesting exceeds 100 levels" if @source_depth >= 100
         name = args.first
         path = if name.include?("/")
-          File.expand_path(name, @cwd)
+          name
         else
-          @variables.fetch("PATH", "/usr/bin:/bin").split(":", -1).map { |directory| File.expand_path(File.join(directory.empty? ? "." : directory, name), @cwd) }.find { |candidate| File.file?(candidate) }
+          @variables.fetch("PATH", "/usr/bin:/bin").split(":", -1).map { |directory| @directory.resolve(File.join(directory.empty? ? "." : directory, name)) }.find { |candidate| File.file?(candidate) }
         end
         raise ExecutionError, ".: file not found: #{name}" unless path
         previous = @arguments
         @arguments = args.drop(1) if args.length > 1
         @source_depth += 1
         begin
-          File.open(path) { |input| evaluate_program(input, streams) }
+          @directory.open_file(path) { |input| evaluate_program(input, streams) }
         rescue Flow => flow
           raise unless flow.kind == :return
           flow.status

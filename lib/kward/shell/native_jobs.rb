@@ -36,6 +36,8 @@ module Kward
         @jobs.clear
         @owned_descriptors.each { |io| io.close unless io.closed? }
         @owned_descriptors.clear
+      ensure
+        close_directory
       end
 
       private

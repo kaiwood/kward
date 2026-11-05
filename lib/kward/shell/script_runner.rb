@@ -69,6 +69,8 @@ module Kward
       rescue ArgumentError, SystemCallError => e
         error.puts("kwsh: #{e.message}")
         2
+      ensure
+        runtime&.send(:close_directory)
       end
 
       def load_startup(runtime, input:, output:, error:)

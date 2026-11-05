@@ -18,8 +18,25 @@ module Kward
       end
 
       def matches
-        walk(@root, @absolute ? "/" : "", 0, 0)
+        root = @root
+        prefix = +(@absolute ? "/" : "")
+        index = 0
+        if root.respond_to?(:access_path)
+          # Resolve literal directory prefixes through the retained descriptor,
+          # including ../patterns when the current directory has been removed.
+          while index < @parts.length - 1 && !Pattern.new(@parts[index], locale: @locale).wildcards?
+            prefix << @parts[index].gsub(/\\(.)/m, '\1') << "/"
+            index += 1
+          end
+          opened = Directory.new(prefix, base: root) unless prefix.empty?
+          root = (opened || root).access_path
+        end
+        walk(root, prefix, index, index)
         @matches.uniq.sort { |left, right| @locale.compare(left, right) }
+      rescue Errno::ENOENT, Errno::ENOTDIR, Errno::EACCES
+        []
+      ensure
+        opened&.close
       end
 
       private

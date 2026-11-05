@@ -91,9 +91,11 @@ class TestNativeShellUtilities < KwardTestCase
             raise Errno::EACCES, path if path == target
             original.call(path, *args)
           end
-          status = runtime.run("cd #{flags} target", output: output, error: error)
+          status = runtime.run("cd #{flags} ./target", output: output, error: error)
           assert_equal(flags == "-Pe" ? 1 : 0, status)
           assert File.identical?(target, runtime.cwd)
+          assert_empty output.string
+          refute_equal 0, runtime.run("pwd -L", output: output, error: error)
           assert_empty output.string
           assert_equal 0, runtime.run(": >proof", output: output, error: error)
           assert File.file?(File.join(target, "proof"))

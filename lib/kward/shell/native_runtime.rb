@@ -3,6 +3,7 @@ require "set"
 require "tempfile"
 require_relative "native_syntax"
 require_relative "native_process"
+require_relative "native_directory"
 require_relative "native_expansion"
 require_relative "native_substitution"
 require_relative "native_builtins"
@@ -42,9 +43,10 @@ module Kward
       SPECIAL = %w[export readonly eval . unset exit return break continue shift set exec trap times :].freeze
       BUILTINS = (SPECIAL + %w[true false cd pwd alias unalias read getopts command shopt declare umask kwsh jobs fg bg wait kill hash type]).freeze
 
-      attr_reader :cwd, :variables, :aliases, :status, :exited
+      attr_reader :variables, :aliases, :status, :exited
 
-      def initialize(cwd: Dir.pwd, env: ENV.to_h, aliases: {}, arguments: [], name: "kwsh", interactive: false, replace_process: false, descriptors: {}, hosted: interactive)
+      def initialize(cwd: Dir.pwd, env: ENV.to_h, aliases: {}, arguments: [], name: "kwsh", interactive: false, replace_process: false, descriptors: {}, hosted: interactive, directory: nil)
+        @directory = directory ? directory.dup : Directory.new(cwd)
         @cwd = File.expand_path(cwd)
         @cwd = initial_directory(env["PWD"]) unless hosted
         @variables = env.dup
@@ -81,6 +83,12 @@ module Kward
         @exited = false
         @loop_depth = 0
         @function_depth = 0
+      end
+
+      def cwd
+        @directory.same?(@cwd) ? @cwd : @directory.physical_path
+      rescue SystemCallError
+        @cwd
       end
 
       def environment
@@ -135,12 +143,16 @@ module Kward
 
       private
 
+      def close_directory
+        @directory.close
+      end
+
       def initial_directory(inherited)
         # Validate against the runtime's directory, never the host process cwd.
-        if inherited&.start_with?("/") && inherited.split("/").none? { |part| part == "." || part == ".." } && File.identical?(inherited, @cwd)
+        if inherited&.start_with?("/") && inherited.split("/").none? { |part| part == "." || part == ".." } && @directory.same?(inherited)
           return inherited
         end
-        File.realpath(@cwd)
+        @directory.physical_path
       rescue SystemCallError
         # POSIX leaves PWD unspecified when the physical path cannot be found.
         @cwd
@@ -440,7 +452,8 @@ module Kward
         when "pwd"
           flags = builtin_flags(args, "LP", "pwd")
           raise ExecutionError, "pwd: unexpected operand" unless args.empty?
-          write_line(streams, flags.last == "P" ? File.realpath(@cwd) : @cwd)
+          logical = flags.last != "P" && @cwd.split("/").none? { |part| part == "." || part == ".." } && @directory.same?(@cwd)
+          write_line(streams, logical ? @cwd : @directory.physical_path)
           0
         when "export" then export(args, streams)
         when "read" then read_variables(args, streams)
@@ -553,13 +566,12 @@ module Kward
           return start_job(Node.new(kind: :script, values: [args], source: @command_description), streams, background: false)
         end
         raise ExecutionError, "Usage: kwsh <file> [arguments...]" if args.empty?
-        path = File.expand_path(args.first, @cwd)
-        source = File.read(path)
+        source = @directory.open_file(args.first, &:read)
         streams.values.compact.uniq.each(&:flush)
         pid = Process.fork do
           Signal.trap("INT", "DEFAULT")
           File.umask(@umask)
-          runtime = self.class.new(cwd: @cwd, env: environment, arguments: args.drop(1), name: args.first, interactive: @hosted, hosted: @hosted)
+          runtime = self.class.new(cwd: cwd, directory: @directory, env: environment, arguments: args.drop(1), name: args.first, interactive: @hosted, hosted: @hosted)
           runtime.send(:reset_child_state, job_group: @owned_job_group)
           runtime.run(source, input: streams[0], output: streams[1], error: streams[2])
           runtime.send(:wait_builtin, [], streams) if @hosted
@@ -652,24 +664,28 @@ module Kward
         prefix = nil
         unless target.start_with?("/", "./", "../") || %w[. ..].include?(target) || args.first == "-"
           prefix = @variables.fetch("CDPATH", "").split(":", -1).find do |directory|
-            candidate = File.expand_path(File.join(directory.empty? ? "." : directory, target), @cwd)
-            File.directory?(candidate) && File.executable?(candidate)
+            candidate = @directory.resolve(File.join(directory.empty? ? "." : directory, target))
+            File.directory?(candidate)
           end
         end
         target = File.join(prefix, target) if prefix && !prefix.empty?
-        path = if physical
-          target.start_with?("/") ? target : File.join(@cwd, target)
+        path = physical ? target : logical_directory(target)
+        base = cwd
+        operand = if !physical && path == base
+          "."
+        elsif !physical && path.start_with?(base.delete_suffix("/") + "/")
+          path.delete_prefix(base.delete_suffix("/") + "/")
         else
-          File.expand_path(target, @cwd)
+          path
         end
-        raise ExecutionError, "cd: no such directory: #{target}" unless File.directory?(path)
-        raise ExecutionError, "cd: permission denied: #{target}" unless File.executable?(path)
+        replacement = Directory.new(operand, base: @directory)
         status = 0
         if physical
           begin
-            path = File.realpath(path)
+            path = replacement.physical_path
           rescue SystemCallError => e
-            # The directory change succeeded; only physical name reporting failed.
+            # The descriptor is valid even when its physical name is unavailable.
+            path = target.start_with?("/") ? target : File.join(cwd, target)
             if flags.include?("e")
               streams[2]&.puts("kwsh: cd: #{e.message}")
               status = 1
@@ -677,11 +693,40 @@ module Kward
           end
         end
         @variables["OLDPWD"] = @cwd
+        previous = @directory
+        @directory = replacement
+        replacement = nil
+        previous.close
         @cwd = path
         @variables["PWD"] = @cwd
         @exported.merge(%w[PWD OLDPWD])
+        @command_hash.clear
         write_line(streams, @cwd) if args.first == "-" || prefix && !prefix.empty?
         status
+      rescue Errno::ENOENT, Errno::ENOTDIR
+        raise ExecutionError, "cd: no such directory: #{target}"
+      rescue Errno::EACCES
+        raise ExecutionError, "cd: permission denied: #{target}"
+      ensure
+        replacement&.close
+      end
+
+      def logical_directory(target)
+        path = target.start_with?("/") ? target : File.join(cwd, target)
+        components = []
+        path.split("/").each do |component|
+          next if component.empty? || component == "."
+          if component == ".."
+            unless components.empty?
+              preceding = "/#{components.join('/')}"
+              raise ExecutionError, "cd: not a directory: #{preceding}" unless File.directory?(preceding)
+              components.pop
+            end
+          else
+            components << component
+          end
+        end
+        "/#{components.join('/')}"
       end
 
       def read_variables(args, streams)
@@ -787,11 +832,13 @@ module Kward
             redirected[descriptor] = target == "-" ? nil : redirected[target.to_i]
           else
             mode = { "<" => "r", ">" => "w", ">|" => "w", ">>" => "a", "<>" => File::RDWR | File::CREAT }.fetch(operator)
-            path = File.expand_path(target, @cwd)
-            mode = File::WRONLY | File::CREAT | File::EXCL if operator == ">" && @options.include?("noclobber") && (!File.exist?(path) || File.file?(path))
+            if operator == ">" && @options.include?("noclobber")
+              path = @directory.resolve(target)
+              mode = File::WRONLY | File::CREAT | File::EXCL if !File.exist?(path) || File.file?(path)
+            end
             previous_mask = File.umask(@umask)
             begin
-              file = File.open(path, mode)
+              file = @directory.open_file(target, mode)
             ensure
               File.umask(previous_mask)
             end
@@ -811,17 +858,25 @@ module Kward
 
       def executable_path(name)
         if name.include?("/")
-          File.expand_path(name, @cwd)
+          @directory.resolve(name)
         else
-          if @hash_path != @variables["PATH"]
+          current_path = begin
+            @directory.access_path
+          rescue SystemCallError
+            nil
+          end
+          path_key = [@variables["PATH"], current_path]
+          if @hash_path != path_key
             @command_hash.clear
-            @hash_path = @variables["PATH"]
+            @hash_path = path_key
           end
           cached = @command_hash[name]
           return cached if cached && File.file?(cached) && File.executable?(cached)
           @command_hash.delete(name)
-          candidates = @variables.fetch("PATH", "/usr/bin:/bin").split(":", -1).map do |directory|
-            File.expand_path(File.join(directory.empty? ? "." : directory, name), @cwd)
+          candidates = @variables.fetch("PATH", "/usr/bin:/bin").split(":", -1).filter_map do |directory|
+            @directory.resolve(File.join(directory.empty? ? "." : directory, name))
+          rescue Errno::ENOENT, Errno::EACCES
+            nil
           end
           candidates.find { |path| File.file?(path) && File.executable?(path) } || candidates.find { |path| File.exist?(path) }
         end
@@ -837,7 +892,7 @@ module Kward
           streams[2]&.puts("kwsh: #{name}: command not found")
           return 127
         end
-        pid = NativeProcess.spawn(executable, arguments, environment, cwd: @cwd, streams: streams, mask: @umask, hosted: @hosted)
+        pid = NativeProcess.spawn(executable, arguments, environment, cwd: @directory, streams: streams, mask: @umask, hosted: @hosted)
         result = wait(pid)
         pid = nil
         result
