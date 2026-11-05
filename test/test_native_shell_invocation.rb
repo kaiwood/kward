@@ -12,6 +12,69 @@ class TestNativeShellInvocation < KwardTestCase
                   RbConfig.ruby, EXECUTABLE, *args, **options)
   end
 
+  def test_required_alias_names_and_restorable_listing_format
+    names = %w[1 a!b a%b a,b a-b a@b _ -dash]
+    source = names.map { |name| "alias -- #{Shellwords.escape("#{name}=printf '%s' '#{name}|' ")}" }.join("\n")
+    source << "\n" << names.join("\n") << "\nalias\n"
+    output, error, status = invoke("-c", source)
+    assert status.success?, error
+    assert_empty error
+    values = output.split("|", names.length + 1)
+    listing = values.pop
+    assert_equal names, values
+    listing.lines.each do |line|
+      refute line.start_with?("alias ")
+      name, value = line.chomp.split("=", 2)
+      assert_includes names, name
+      assert_equal "printf '%s' '#{name}|' ", Shellwords.split(value).fetch(0)
+    end
+    restored = listing.lines.map { |line| "alias -- #{line}" }.join + names.join("\n")
+    output, error, status = invoke("-c", restored)
+    assert status.success?, error
+    assert_equal names.map { |name| "#{name}|" }.join, output
+    assert_empty error
+  end
+
+  def test_alias_lookup_quoting_is_separate_from_command_descriptions
+    output, error, status = invoke("-c", "alias sample=\"printf '%s' 'two words'\"\nalias sample\ncommand -v sample\ntype sample\n")
+    assert status.success?, error
+    assert_empty error
+    listing, command, type = output.lines
+    assert listing.start_with?("sample=")
+    assert_equal "alias #{listing}", command
+    assert_equal command, type
+  end
+
+  def test_xtrace_expands_assignments_once_before_execution_and_uses_redirected_stderr
+    Dir.mktmpdir("native-trace") do |dir|
+      output, error, status = invoke("-c", <<~'SHELL', chdir: dir)
+        set -x
+        >marker 2>redirect-trace
+        first=$(printf once >>count; printf value) second=$first 2>trace
+        before=$(printf 'expanding\n' >&2; printf ready) printf 'executing\n' >&2
+        set +x
+        cat trace
+        cat count
+        printf ':%s:%s' "$first" "$second"
+      SHELL
+      assert status.success?, error
+      assert_equal "+ \n", File.read(File.join(dir, "redirect-trace"))
+      assert File.exist?(File.join(dir, "marker"))
+      assert_includes output, "+ first=value\n"
+      assert_includes output, "+ second=value\n"
+      assert output.end_with?("once:value:value")
+      expansion = error.index("expanding\n")
+      assignment = error.index("+ before=ready\n")
+      execution = error.index("\nexecuting\n")
+      refute_nil expansion
+      refute_nil assignment
+      refute_nil execution
+      assert_operator expansion, :<, assignment
+      assert_operator assignment, :<, execution
+      refute_includes error, "+ first=value"
+    end
+  end
+
   def test_startup_initializes_ppid_and_optind_in_clean_and_inherited_environments
     source = <<~'SHELL'
       printf '%s:%s\n' "$PPID" "$OPTIND"

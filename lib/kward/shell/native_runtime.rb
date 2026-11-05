@@ -389,10 +389,10 @@ module Kward
         end
         persistent = SPECIAL.include?(arguments.first)
         with_redirects(redirects, streams, fatal: persistent) do |redirected|
-          redirected[2]&.puts("+ #{Shellwords.join(arguments)}") if @options.include?("xtrace") && !arguments.empty?
           if arguments.empty?
             assigning = true
-            assignments.each { |key, value| assign(key, expand(value, assignment: true).join) }
+            redirected[2]&.puts("+ ") if assignments.empty? && @options.include?("xtrace")
+            assignments.each { |key, value| assign_word(key, value, redirected) }
             next @substitution_status || 0
           end
           raise ExecutionError, "array prefix assignments require an assignment-only command" if assignments.any? { |key, _| key.is_a?(Reference) || @arrays.key?(key) }
@@ -401,10 +401,11 @@ module Kward
           begin
             assigning = true
             assignments.each do |key, value|
-              assign(key, expand(value, assignment: true).join)
+              assign_word(key, value, redirected)
               @exported.add(key) if !persistent || name == "exec"
             end
             assigning = false
+            redirected[2]&.puts("+ #{Shellwords.join(arguments)}") if @options.include?("xtrace")
             dispatch(arguments, redirected)
           rescue ExecutionError, SystemCallError, IOError, ArgumentError => e
             command_error(e, redirected, fatal: assigning || persistent)
@@ -573,6 +574,14 @@ module Kward
         terminate(pid) if pid
       end
 
+      def assign_word(key, word, streams)
+        value = expand(word, assignment: true).join
+        if @options.include?("xtrace") && key.is_a?(String)
+          streams[2]&.puts("+ #{key}=#{Shellwords.escape(value)}")
+        end
+        assign(key, value)
+      end
+
       def assign(key, value)
         return array_store(key, value) if key.is_a?(Reference)
         validate_name(key)
@@ -614,17 +623,17 @@ module Kward
       def alias_command(args, streams)
         builtin_flags(args, "", "alias")
         if args.empty?
-          @aliases.sort.each { |key, value| write_line(streams, "alias #{key}=#{Shellwords.escape(value)}") }
+          @aliases.sort.each { |key, value| write_line(streams, "#{key}=#{Shellwords.escape(value)}") }
         else
           args.each do |argument|
             key, value = argument.split("=", 2)
-            unless key.match?(/\A[A-Za-z_][A-Za-z0-9_-]*\z/)
+            unless key.match?(/\A[A-Za-z0-9_!%,@-]+\z/)
               raise ExecutionError, "invalid alias name: #{key}"
             end
             if value
               @aliases[key] = value
             elsif @aliases.key?(key)
-              write_line(streams, "alias #{key}=#{Shellwords.escape(@aliases[key])}")
+              write_line(streams, "#{key}=#{Shellwords.escape(@aliases[key])}")
             else
               raise ExecutionError, "alias: not found: #{key}"
             end

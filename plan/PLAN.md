@@ -55,12 +55,12 @@ Relevant code: `native_runtime.rb`, `native_expansion.rb`, `script_runner.rb`, a
 
 Relevant code: `native_runtime.rb`, `native_syntax.rb`, and the alias/invocation tests.
 
-- [ ] Accept all required alias names, including numeric names and names containing the permitted `!`, `%`, `,`, `-`, `@`, and `_` characters.
-- [ ] Add regression cases such as `1`, `a%b`, `a@b`, and `a,b`. Do not require extension-only names such as names containing a dot.
-- [ ] Change `alias` listing output to the specified `name=value` format with suitable quoting, without the extra `alias ` prefix.
-- [ ] Keep `alias` output requirements separate from the command-description requirements of `command -v` and `type`.
-- [ ] Make `set -x` trace assignment-only commands, not just commands with a non-empty argument vector.
-- [ ] Check tracing order against expansion, execution, and stderr redirection.
+- [x] Accept all required alias names, including numeric names and names containing the permitted `!`, `%`, `,`, `-`, `@`, and `_` characters.
+- [x] Add regression cases such as `1`, `a%b`, `a@b`, and `a,b`. Do not require extension-only names such as names containing a dot.
+- [x] Change `alias` listing output to the specified `name=value` format with suitable quoting, without the extra `alias ` prefix.
+- [x] Keep `alias` output requirements separate from the command-description requirements of `command -v` and `type`.
+- [x] Make `set -x` trace assignment-only commands, not just commands with a non-empty argument vector.
+- [x] Check tracing order against expansion, execution, and stderr redirection.
 
 **Regression coverage:** alias definition, lookup, listing, quoting, substitution, recursion protection, and assignment-only tracing. Preserve shared-stream quote and here-document handling.
 
@@ -256,3 +256,11 @@ Do not expand this plan merely to add Bash arrays, `[[ … ]]`, regex matching, 
 - [`umask`](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/umask.html) and [`chmod` symbolic modes](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/chmod.html)
 - [`fc`](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/fc.html)
 - [`ulimit`](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/ulimit.html)
+
+## Step 3 verification — aliases and tracing
+
+- Commit: `fix(shell): complete alias names and assignment tracing` (separate step commit; parent `e91fedd0`). Darwin arm64, Ruby 4.0.3; Linux not run.
+- References: POSIX alias STDOUT, XBD 3.10, and SCL set `-x` (links above/in matrix). Required names, listing/lookup quoting and restoration, and command-description separation covered. Existing shared-lexer/recursion tests remain unchanged.
+- New focused cases failed before implementation: 3 runs, 10 assertions, 3 failures. After implementation the focused shell command above (seed 31927) passed: **296 runs, 1,980 assertions, 0 failures/errors/skips**.
+- Assignment expansions execute once in order, tracing before assignment/dispatch; stderr redirections retain existing trace routing. Redirection-only commands also trace. UP PS4 expansion remains step 10.
+- Documentation and scoped shell guidance updated; no frontend capability changes. `git diff --check` passed. Full suite deferred to the end of steps 3–5; the step 1/2 editor-spinner baseline failure remains recorded above.
