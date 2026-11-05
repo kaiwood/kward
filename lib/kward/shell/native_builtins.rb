@@ -176,8 +176,9 @@ module Kward
       end
 
       def umask_builtin(args, streams)
-        if args.empty? || args == ["-S"]
-          text = if args.empty?
+        flags = builtin_flags(args, "S", "umask")
+        if args.empty?
+          text = unless flags.include?("S")
             format("%04o", @umask)
           else
             %w[u g o].each_with_index.map do |who, index|
@@ -191,21 +192,30 @@ module Kward
         end
         raise ExecutionError, "umask: expected one mask" unless args.length == 1
         value = args.first
-        if value.match?(/\A[0-7]{1,4}\z/) && value.to_i(8) <= 0o777
+        if value.match?(/\A[0-7]+\z/) && value.to_i(8) <= 0o777
           @umask = value.to_i(8)
           return 0
         end
         allowed = 0o777 & ~@umask
+        executable = allowed & 0o111 != 0
+        shifts = { "u" => 6, "g" => 3, "o" => 0 }
         value.split(",", -1).each do |clause|
-          match = clause.match(/\A([ugoa]*)([+=-])([rwx]*)\z/)
+          match = clause.match(/\A([ugoa]*)((?:[+=-](?:[ugo]|[rwxXst]*))+)\z/)
           raise ExecutionError, "umask: invalid symbolic mask" unless match
-          who, operator, permissions = match.captures
+          who, actions = match.captures
           who = "ugo" if who.empty? || who.include?("a")
-          bits = permissions.chars.reduce(0) { |mask, letter| mask | { "r" => 4, "w" => 2, "x" => 1 }.fetch(letter) }
-          who.chars.uniq.each do |group|
-            shift = { "u" => 6, "g" => 3, "o" => 0 }.fetch(group)
-            allowed &= ~(7 << shift) if operator == "="
-            allowed = operator == "-" ? allowed & ~(bits << shift) : allowed | (bits << shift)
+          actions.scan(/([+=-])([ugo]|[rwxXst]*)/).each do |operator, permissions|
+            bits = if shifts.key?(permissions)
+              (allowed >> shifts.fetch(permissions)) & 7
+            else
+              # Non-permission s/t bits do not affect the creation mask.
+              permissions.chars.reduce(0) { |mask, letter| mask | { "r" => 4, "w" => 2, "x" => 1, "X" => executable ? 1 : 0 }.fetch(letter, 0) }
+            end
+            who.chars.uniq.each do |group|
+              shift = shifts.fetch(group)
+              allowed &= ~(7 << shift) if operator == "="
+              allowed = operator == "-" ? allowed & ~(bits << shift) : allowed | (bits << shift)
+            end
           end
         end
         @umask = 0o777 & ~allowed

@@ -643,8 +643,8 @@ module Kward
       end
 
       def change_directory(args, streams)
-        flags = builtin_flags(args, "LP", "cd")
-        physical = flags.last == "P"
+        flags = builtin_flags(args, "LPe", "cd")
+        physical = flags.reverse.find { |flag| flag == "L" || flag == "P" } == "P"
         raise ExecutionError, "cd: too many arguments" if args.length > 1
         target = args.first || @variables["HOME"]
         target = @variables["OLDPWD"] if target == "-"
@@ -657,15 +657,31 @@ module Kward
           end
         end
         target = File.join(prefix, target) if prefix && !prefix.empty?
-        path = physical ? File.realpath(target, @cwd) : File.expand_path(target, @cwd)
+        path = if physical
+          target.start_with?("/") ? target : File.join(@cwd, target)
+        else
+          File.expand_path(target, @cwd)
+        end
         raise ExecutionError, "cd: no such directory: #{target}" unless File.directory?(path)
         raise ExecutionError, "cd: permission denied: #{target}" unless File.executable?(path)
+        status = 0
+        if physical
+          begin
+            path = File.realpath(path)
+          rescue SystemCallError => e
+            # The directory change succeeded; only physical name reporting failed.
+            if flags.include?("e")
+              streams[2]&.puts("kwsh: cd: #{e.message}")
+              status = 1
+            end
+          end
+        end
         @variables["OLDPWD"] = @cwd
         @cwd = path
         @variables["PWD"] = @cwd
         @exported.merge(%w[PWD OLDPWD])
         write_line(streams, @cwd) if args.first == "-" || prefix && !prefix.empty?
-        0
+        status
       end
 
       def read_variables(args, streams)

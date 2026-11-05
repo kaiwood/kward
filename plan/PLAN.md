@@ -70,12 +70,12 @@ Relevant code: `native_runtime.rb`, `native_syntax.rb`, and the alias/invocation
 
 Relevant code: `native_builtins.rb` and `native_runtime.rb`.
 
-- [ ] Implement the applicable symbolic-mode grammar for `umask`, including permission-copy forms such as `g=u` and supported combinations of symbolic operations.
-- [ ] Accept required option forms, including `umask -- 022` and `umask -S 022`.
-- [ ] Preserve the rule that setting a mask does not print the query output merely because `-S` was supplied.
-- [ ] Verify numeric and symbolic mask round trips and effects on subsequently created files.
-- [ ] Add POSIX.1-2024 `cd -P -e` support, including the required failure status when the directory changes successfully but its pathname cannot be determined.
-- [ ] Preserve last-option-wins behavior for `-L` and `-P` and the existing `CDPATH` behavior.
+- [x] Implement the applicable symbolic-mode grammar for `umask`, including permission-copy forms such as `g=u` and supported combinations of symbolic operations.
+- [x] Accept required option forms, including `umask -- 022` and `umask -S 022`.
+- [x] Preserve the rule that setting a mask does not print the query output merely because `-S` was supplied.
+- [x] Verify numeric and symbolic mask round trips and effects on subsequently created files.
+- [x] Add POSIX.1-2024 `cd -P -e` support, including the required failure status when the directory changes successfully but its pathname cannot be determined.
+- [x] Preserve last-option-wins behavior for `-L` and `-P` and the existing `CDPATH` behavior.
 
 **Regression coverage:** permission copying, option terminators, symbolic operations, file creation, subshell isolation, and physical-directory reporting failures. Use controlled fixtures for permission-sensitive tests and explicitly report environmental skips.
 
@@ -264,3 +264,12 @@ Do not expand this plan merely to add Bash arrays, `[[ … ]]`, regex matching, 
 - New focused cases failed before implementation: 3 runs, 10 assertions, 3 failures. After implementation the focused shell command above (seed 31927) passed: **296 runs, 1,980 assertions, 0 failures/errors/skips**.
 - Assignment expansions execute once in order, tracing before assignment/dispatch; stderr redirections retain existing trace routing. Redirection-only commands also trace. UP PS4 expansion remains step 10.
 - Documentation and scoped shell guidance updated; no frontend capability changes. `git diff --check` passed. Full suite deferred to the end of steps 3–5; the step 1/2 editor-spinner baseline failure remains recorded above.
+
+## Step 4 verification — umask and cd options
+
+- Commit: `fix(shell): complete umask modes and cd physical reporting` (separate step commit; parent `5cda44c`). Darwin arm64, Ruby 4.0.3; Linux not run.
+- Read POSIX umask OPTIONS/OPERANDS/STDOUT, chmod symbolic grammar, and cd algorithm/options/status. Added `test_native_shell_utilities.rb`: before implementation, **5 runs, 33 assertions, 4 failures**; invalid-input atomicity already passed.
+- Final focused shell command above, seed 45126: **301 runs, 2,087 assertions, 0 failures/errors/skips**. Covers copy/compound/empty symbolic operations, query/set distinction, round trips, subshell file modes, invalid masks, physical/logical option precedence and CDPATH regressions.
+- Path-reporting denial is injected deterministically after validating a real target directory, including a subsequent write proving the change persisted. This avoids root/filesystem-dependent permission skips; no environmental skips were needed. The directory-handle implementation in step 5 must preserve this distinction.
+- Non-permission symbolic s/t bits are ignored (POSIX leaves their umask interpretation unspecified); X consults original allowed execute bits. Host umask isolation tests still pass.
+- Docs, scoped guidance and matrix updated. `git diff --check` passed. Full suite will run after step 5; no unrelated baseline failure was modified.
