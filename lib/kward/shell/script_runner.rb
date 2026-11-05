@@ -32,12 +32,12 @@ module Kward
             end
           end
         end
+        args.shift if args.first == "-"
         command = args.shift if mode == "c"
         raise ArgumentError, "-c requires a command" if mode == "c" && !command
-        file = args.shift unless mode || args.empty? || args.first == "-"
-        args.shift if !mode && !file && args.first == "-"
+        file = args.shift unless mode || args.empty?
         command_name = args.shift if mode == "c"
-        name ||= command_name || file || "kwsh"
+        name ||= command_name || file || $0
         interactive ||= !hosted && !command && !file && input.tty? && error.tty?
         runtime = Runtime.new(arguments: args, name: name, replace_process: !hosted,
                               interactive: interactive || hosted, hosted: hosted, descriptors: descriptors)

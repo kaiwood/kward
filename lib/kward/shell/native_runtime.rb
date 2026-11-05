@@ -46,9 +46,12 @@ module Kward
 
       def initialize(cwd: Dir.pwd, env: ENV.to_h, aliases: {}, arguments: [], name: "kwsh", interactive: false, replace_process: false, descriptors: {}, hosted: interactive)
         @cwd = File.expand_path(cwd)
+        @cwd = initial_directory(env["PWD"]) unless hosted
         @variables = env.dup
         @variables["PWD"] = @cwd
         @exported = Set.new(@variables.keys)
+        @variables["PPID"] = Process.ppid.to_s
+        @variables["OPTIND"] = "1"
         @variables["IFS"] = Fields::DEFAULT_IFS
         @variables["LINENO"] = "1"
         @line_tracking = true
@@ -131,6 +134,17 @@ module Kward
       end
 
       private
+
+      def initial_directory(inherited)
+        # Validate against the runtime's directory, never the host process cwd.
+        if inherited&.start_with?("/") && inherited.split("/").none? { |part| part == "." || part == ".." } && File.identical?(inherited, @cwd)
+          return inherited
+        end
+        File.realpath(@cwd)
+      rescue SystemCallError
+        # POSIX leaves PWD unspecified when the physical path cannot be found.
+        @cwd
+      end
 
       def validate_parameter_text(word)
         word.parts.each do |part|

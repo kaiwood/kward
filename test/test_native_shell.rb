@@ -527,7 +527,7 @@ class TestNativeShell < KwardTestCase
       assert_equal 7, status, error
       assert_empty error
       assert_equal "#{name}|#{argument}|parent||7|#{File.realpath(@directory)}\n", output
-      assert_equal @directory, @runtime.cwd
+      assert_equal File.realpath(@directory), @runtime.cwd
       assert_equal "parent", @runtime.variables["EXPORTED"]
       refute File.exist?(File.join(@directory, "sentinel"))
     end

@@ -129,6 +129,20 @@ printf 'printf hello\n' | kwsh -s
 
 From a checkout, use `ruby exe/kwsh`. Standalone stdin processing leaves each command's input available to `read` and external programs; it does not read the entire input stream ahead of execution. The rich interactive composer remains a Kward `/shell` feature. Standalone `kwsh -i` provides a plain line-oriented prompt, also selected automatically when reading commands from stdin with stdin and stderr attached to a terminal.
 
+Startup sets `PPID` to the shell's parent process ID and `OPTIND` to `1`, even if those variables were inherited with different values. Subshells and command substitutions retain the current values instead of reinitializing them. `OPTIND` is not exported by default.
+
+Standalone startup preserves an inherited `PWD` when it names the current directory with an absolute pathname and has no `.` or `..` components, including valid symlink-based logical paths. Otherwise it uses the physical pathname (`pwd -P`). Valid inherited paths beyond `PATH_MAX` are also retained when the filesystem can resolve them; if permissions prevent determining the physical pathname, POSIX leaves the value unspecified. Hosted `/shell` continues to use its explicit workspace root rather than adopting inherited `PWD`.
+
+For file execution, `$0` is the command-file operand. With `-c`, an explicit command name becomes `$0`; otherwise, and when reading stdin, `$0` comes from the executable invocation (for example, `exe/kwsh` when launched with `ruby exe/kwsh`), not a fixed `kwsh` string. A leading single `-` ends option processing and is ignored before selecting operands:
+
+```sh
+kwsh - scripts/check.kwsh README.md      # read the file, not stdin
+kwsh -c - 'printf "%s:%s\n" "$0" "$1"' check README.md
+printf '%s\n' 'printf "%s\n" "$1"' | kwsh -s - README.md
+```
+
+A lone `kwsh -` still reads commands from stdin. Do not combine this leading `-` with `--`; POSIX leaves that combination undefined.
+
 For a standalone interactive session:
 
 ```sh
@@ -371,6 +385,7 @@ Native scripting is being extended in tested stages, targeting POSIX.1-2024 plus
 - [x] Native interpretation of executable text after `ENOEXEC`, including standalone `exec` and hosted job ownership.
 - [x] Arithmetic-expansion substitutions, POSIX case fall-through, initial IFS, LINENO, and command-reporting precedence.
 - [x] Shared-stream aliases, core builtin option combinations, command hashing, CDPATH, times, standalone interactive invocation, and guarded ENV startup.
+- [x] Startup PPID/OPTIND, inherited logical PWD validation, invocation-derived `$0`, and leading `-` operand handling.
 - [x] Bounded multi-character collation, including mixed brackets, ranges, trimming, and pathname matching.
 - [x] Requirement-linked regression cases for quoting, splitting, redirections, continuations, errors, special builtins, invocation, jobs, and locale integration.
 

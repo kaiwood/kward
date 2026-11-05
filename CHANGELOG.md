@@ -38,6 +38,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Corrected native kwsh startup `PPID`/`OPTIND`, standalone inherited logical `PWD` validation, invocation-derived `$0`, and leading `-` operand handling, while preserving hosted workspace ownership and stdin command boundaries.
 - Fixed native shell redirection operands being split/globbed, here-document continuation order, and premature execution of backslash-continued input lines.
 - Protected TUI tab shortcuts across shell keyboard-mode changes and screen switches, restored composer terminal modes on handback, and hardened fragmented key and bracketed-paste handling without unbounded output buffering.
 - Corrected native kwsh fatal-error handling and POSIX `errexit` inheritance, preserving interactive recovery, subshell isolation, special-builtin behavior through `command`, and EXIT traps.

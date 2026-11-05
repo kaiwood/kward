@@ -12,6 +12,154 @@ class TestNativeShellInvocation < KwardTestCase
                   RbConfig.ruby, EXECUTABLE, *args, **options)
   end
 
+  def test_startup_initializes_ppid_and_optind_in_clean_and_inherited_environments
+    source = <<~'SHELL'
+      printf '%s:%s\n' "$PPID" "$OPTIND"
+      (printf '%s:%s\n' "$PPID" "$OPTIND")
+      printf '%s\n' "$(printf '%s:%s' "$PPID" "$OPTIND")"
+      getopts a option -a
+      printf '%s:%s\n' "$option" "$OPTIND"
+    SHELL
+    [{}, { "PPID" => "bogus", "OPTIND" => "9" }].each do |env|
+      output, error, status = invoke("-c", source, env: { "PATH" => "/usr/bin:/bin" }.merge(env), unsetenv_others: true)
+      assert status.success?, error
+      assert_equal ("#{Process.pid}:1\n" * 3) + "a:2\n", output
+      assert_empty error
+    end
+  end
+
+  def test_startup_variables_are_available_in_file_and_stdin_modes
+    Dir.mktmpdir("native-startup") do |dir|
+      file = File.join(dir, "script")
+      source = 'printf "%s:%s" "$PPID" "$OPTIND"'
+      File.write(file, source)
+      [[file], [], ["-s"]].each do |args|
+        output, error, status = invoke(*args, stdin_data: source, env: { "PPID" => "0", "OPTIND" => "8" })
+        assert status.success?, error
+        assert_equal "#{Process.pid}:1", output
+        assert_empty error
+      end
+    end
+  end
+
+  def test_subshells_preserve_current_optind_without_resetting_parent_state
+    output, error, status = invoke("-c", <<~'SHELL')
+      getopts a option -a
+      (printf '%s:' "$OPTIND"; OPTIND=1)
+      printf '%s:%s' "$(printf '%s' "$OPTIND")" "$OPTIND"
+    SHELL
+    assert status.success?, error
+    assert_equal "2:2:2", output
+    assert_empty error
+    runtime = Kward::NativeShell::Runtime.new(env: {})
+    assert_equal "1", runtime.variables.fetch("OPTIND")
+    refute runtime.environment.key?("OPTIND"), "OPTIND must not be exported by default"
+  end
+
+  def test_startup_preserves_valid_logical_pwd_and_exports_it
+    Dir.mktmpdir("native-pwd") do |dir|
+      physical = File.realpath(dir)
+      Dir.mkdir(File.join(dir, "real"))
+      logical = File.join(dir, "link")
+      File.symlink(File.join(dir, "real"), logical)
+      [logical, "#{logical}//"].each do |pwd|
+        output, error, status = invoke("-c", <<~'SHELL', env: { "PWD" => pwd }, chdir: logical)
+          printf '%s\n' "$PWD"
+          pwd -L
+          pwd -P
+          (printf '%s\n' "$PWD")
+          env | grep '^PWD='
+          cd ..
+          pwd -L
+        SHELL
+        assert status.success?, error
+        assert_equal "#{pwd}\n#{pwd}\n#{physical}/real\n#{pwd}\nPWD=#{pwd}\n#{dir}\n", output
+        assert_empty error
+      end
+    end
+  end
+
+  def test_startup_replaces_missing_or_invalid_pwd_with_physical_path
+    Dir.mktmpdir("native-pwd") do |dir|
+      real = File.join(dir, "real")
+      Dir.mkdir(real)
+      logical = File.join(dir, "link")
+      File.symlink(real, logical)
+      file = File.join(dir, "file")
+      File.write(file, "not a directory")
+      [nil, "", "link", dir, file, "#{dir}/missing", "#{logical}/.", "#{logical}/../real"].each do |pwd|
+        output, error, status = invoke("-c", 'printf "%s\n" "$PWD"; pwd -L', env: { "PWD" => pwd }, chdir: logical)
+        assert status.success?, error
+        assert_equal "#{File.realpath(real)}\n" * 2, output
+        assert_empty error
+      end
+    end
+  end
+
+  def test_hosted_startup_keeps_the_explicit_workspace_root
+    Dir.mktmpdir("native-hosted-pwd") do |dir|
+      other = File.join(dir, "other")
+      Dir.mkdir(other)
+      logical = File.join(dir, "link")
+      File.symlink(dir, logical)
+      [other, logical].each do |pwd|
+        runtime = Kward::NativeShell::Runtime.new(cwd: dir, env: { "PWD" => pwd }, hosted: true)
+        assert_equal dir, runtime.cwd
+        assert_equal dir, runtime.variables.fetch("PWD")
+      end
+    end
+  end
+
+  def test_default_zero_comes_from_invocation_and_explicit_command_names_win
+    source = 'printf "<%s>:%s:<%s>" "$0" "$#" "${1-unset}"'
+    [["-c", source], [], ["-s"]].each do |args|
+      output, error, status = invoke(*args, stdin_data: source)
+      assert status.success?, error
+      assert_equal "<#{EXECUTABLE}>:0:<unset>", output
+      assert_empty error
+    end
+    ["custom name", ""].each do |name|
+      output, error, status = invoke("-c", source, name, "argument")
+      assert status.success?, error
+      assert_equal "<#{name}>:1:<argument>", output
+      assert_empty error
+    end
+    output, error, status = Open3.capture3(RbConfig.ruby, "./exe/kwsh", "-c", source, chdir: File.expand_path("..", __dir__))
+    assert status.success?, error
+    assert_equal "<./exe/kwsh>:0:<unset>", output
+    assert_empty error
+  end
+
+  def test_leading_dash_is_ignored_before_file_and_command_operands
+    source = 'printf "<%s>:%s:<%s>" "$0" "$#" "${1-unset}"'
+    Dir.mktmpdir("native-operands") do |dir|
+      File.write(File.join(dir, "script"), source)
+      [["script", "argument"], ["-", "script", "argument"]].each do |args|
+        output, error, status = invoke(*args, chdir: dir, stdin_data: "printf wrong-input")
+        assert status.success?, error
+        assert_equal "<script>:1:<argument>", output
+        assert_empty error
+      end
+    end
+    [["-c", "-", source, "name", "argument"], ["-s", "-", "argument"]].each do |args|
+      output, error, status = invoke(*args, stdin_data: source)
+      assert status.success?, error
+      assert_equal "<#{args.first == '-c' ? 'name' : EXECUTABLE}>:1:<argument>", output
+      assert_empty error
+    end
+    output, error, status = invoke("-c", "-", source)
+    assert status.success?, error
+    assert_equal "<#{EXECUTABLE}>:0:<unset>", output
+    assert_empty error
+  end
+
+  def test_lone_dash_still_reads_stdin_without_read_ahead
+    output, error, status = invoke("-", stdin_data: "read value\npayload\nprintf '%s:%s' \"$0\" \"$value\"\n")
+    assert status.success?, error
+    assert_equal "#{EXECUTABLE}:payload", output
+    assert_empty error
+  end
+
   def test_alias_text_shares_quotes_and_here_documents_with_the_input_stream
     cases = {
       "alias say=\"printf '%s' '\"\nsay hello'\n" => " hello",

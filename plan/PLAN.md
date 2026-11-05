@@ -41,11 +41,11 @@ Matrix: [POSIX_REQUIREMENTS.md](POSIX_REQUIREMENTS.md). Broad clauses and utilit
 
 Relevant code: `native_runtime.rb`, `native_expansion.rb`, `script_runner.rb`, and `exe/kwsh`.
 
-- [ ] Initialize `PPID` to the parent process ID at shell startup. Preserve its required value in subshell environments.
-- [ ] Initialize `OPTIND` to `1` on invocation rather than relying on a fallback inside `getopts`.
-- [ ] Preserve an inherited `PWD` when it satisfies the standard's requirements for an absolute logical pathname of the current directory. Handle invalid values according to the specified fallback rules.
-- [ ] Derive the default `$0` from the invocation rather than hard-coding `kwsh`. Preserve the separate rules for command files and an explicit `-c` command name.
-- [ ] Correct handling of a leading `-` operand, including `kwsh - script` and the applicable stdin/command-string forms.
+- [x] Initialize `PPID` to the parent process ID at shell startup. Preserve its required value in subshell environments.
+- [x] Initialize `OPTIND` to `1` on invocation rather than relying on a fallback inside `getopts`.
+- [x] Preserve an inherited `PWD` when it satisfies the standard's requirements for an absolute logical pathname of the current directory. Handle invalid values according to the specified fallback rules.
+- [x] Derive the default `$0` from the invocation rather than hard-coding `kwsh`. Preserve the separate rules for command files and an explicit `-c` command name.
+- [x] Correct handling of a leading `-` operand, including `kwsh - script` and the applicable stdin/command-string forms.
 
 **Regression coverage:** clean and inherited environments, valid and invalid logical `PWD`, symlinked directories, file/stdin/`-c` modes, explicit command names, positional arguments, and subshell state.
 
@@ -228,7 +228,19 @@ Record each completed step's commit, test commands/results, platform, and any ju
 - Existing failure: `TestEditorPrompt#test_editor_stays_visible_and_shows_spinner_while_agent_runs`, `test/test_editor_prompt.rb:109`; expected spinner text `· ·`, received `⠋`. No shell implementation had been changed. Leave this unrelated test/code untouched.
 - Skip detail confirmed with `ruby -Itest test/sandbox/test_linux_bubblewrap_runner.rb --verbose`: `test_denied_child_network_cannot_connect_to_loopback` and `test_workspace_write_enforces_filesystem_boundary` are disabled unless `KWARD_RUN_BUBBLEWRAP_TESTS=1` (also require Linux). Follow-up: 5 runs, 16 assertions, 0 failures/errors, 2 skips.
 - All planned gaps now have matrix entries; Base, UP, XSI and intentional hosted differences are separated. Final exhaustive auditing remains step 12.
-- Implementation-step commit: `docs(shell): record POSIX baseline and requirement matrix` (this step's commit). Documentation-only changes; `git diff --check` passed.
+- Implementation-step commit: `23d0aad` — `docs(shell): record POSIX baseline and requirement matrix`. Documentation-only changes; `git diff --check` passed.
+
+### Step 2 verification — initialization and invocation
+
+- Implementation-step commit: `fix(shell): correct POSIX initialization and invocation` (the separate commit containing this record; parent `23d0aad`). Platform remains Darwin arm64, Ruby 4.0.3; Linux verification remains outstanding.
+- Read POSIX.1-2024 SCL 2.5.2–2.5.3, `sh` OPTIONS/OPERANDS/STDIN, and `getopts` DESCRIPTION (primary links below and in the matrix). Preserve resolvable valid inherited logical paths even beyond PATH_MAX (a permitted choice); physical-path permission failures have an unspecified PWD. Tests do not turn undefined `-` plus `--` combinations into requirements.
+- Added nine invocation regressions. Before implementation, `ruby -Itest test/test_native_shell_invocation.rb`: **22 runs, 146 assertions, 6 failures, 1 error, 0 skips**, demonstrating absent startup variables, discarded logical PWD, hard-coded `$0`, and incorrect `- script` selection.
+- After implementation, the same invocation command, seed 11845: **22 runs, 208 assertions, 0 failures, 0 errors, 0 skips**.
+- Final focused shell command above, seed 41581: **293 runs, 1,917 assertions, 0 failures, 0 errors, 0 skips**. Includes prompt guidance, hosted-root isolation, subshell state, native executable-text fallback and stdin handoff coverage.
+- Final full repository command above, seed 1132: **2,559 runs, 13,336 assertions, 1 failure, 0 errors, 2 skips**. The same existing editor-spinner failure at `test/test_editor_prompt.rb:109` and disabled Bubblewrap integration skips remain; no unrelated code/tests were changed.
+- One existing native-fallback test expectation now uses `File.realpath(@directory)`: startup without inherited PWD must select the physical pathname, so macOS `/var/...` becomes `/private/var/...`. The assertion still verifies that the child did not change its parent's directory.
+- Updated user docs, shell-agent guidance, changelog, agent conventions and matrix INIT-1 through INIT-5. No new frontend API: persistent shell support remains explicitly TUI-only; standalone kwsh is still an ordinary sandboxed external program for RPC/Pan tools.
+- Reviewed the diff and ran `git diff --check`; no debug artifacts, shell fallback, host-directory mutation or unrelated cleanup. The remaining plan steps and unaudited matrix rows stay open.
 
 ## Not required for POSIX shell conformance
 
