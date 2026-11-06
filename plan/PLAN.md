@@ -100,11 +100,11 @@ Relevant code: directory state in `native_runtime.rb` and process execution in `
 
 Relevant code: `script_runner.rb`, `native_runtime.rb`, `native_process.rb`, and descriptor lifecycle helpers.
 
-- [ ] Make descriptors inherited by standalone kwsh available to shell redirections within the supported descriptor range.
-- [ ] Add a parent-process fixture that supplies an open descriptor 3, then verify `cat <&3` can read it.
-- [ ] Cover writable inherited descriptors, duplication, closing, persistence through `exec`, and propagation into children and native executable-text fallback.
-- [ ] Distinguish user-inherited descriptors from Ruby/Kward private descriptors. Do not expose host protocol sockets or other internal resources.
-- [ ] Verify descriptor ownership and close-on-exec behavior, including failure paths.
+- [x] Make descriptors inherited by standalone kwsh available to shell redirections within the supported descriptor range.
+- [x] Add a parent-process fixture that supplies an open descriptor 3, then verify `cat <&3` can read it.
+- [x] Cover writable inherited descriptors, duplication, closing, persistence through `exec`, and propagation into children and native executable-text fallback.
+- [x] Distinguish user-inherited descriptors from Ruby/Kward private descriptors. Do not expose host protocol sockets or other internal resources.
+- [x] Verify descriptor ownership and close-on-exec behavior, including failure paths.
 
 **Complete when:** inherited descriptors 0–9 behave correctly without exposing private host descriptors or leaking handles.
 
@@ -283,3 +283,11 @@ Do not expand this plan merely to add Bash arrays, `[[ … ]]`, regex matching, 
 - Full repository command above, seed 1407: **2,577 runs, 13,594 assertions, 1 failure, 0 errors, 2 skips**. Only the same baseline editor-spinner failure (`test/test_editor_prompt.rb:109`, expected `· ·`, rendered `⠋`) remains. The two disabled Bubblewrap integration skips remain; the new permission-sensitive directory test did not skip on this host.
 - Preserved existing cd error text. Added explicit closure to prior invocation fixtures now owning directory handles. Removed the new mutable-literal warning; no debug artifacts or failed-hypothesis leftovers remain. `git diff --check` passed.
 - Updated docs, changelog, scoped prompt/tests, AGENTS and matrix CD-2/CWD-1. Frontend support remains unchanged: persistent shell TUI-only, standalone executable available through existing CLI/RPC/Pan external-command paths. Broader race/permission/locale auditing and the remaining steps remain open; these passing regressions are not certification.
+
+## Step 6 verification — inherited descriptors
+
+- Added `test/test_native_shell_descriptors.rb`: parent-supplied input/output descriptors 3–9, shared offsets, exec duplication/closing, native scripts and ENOEXEC propagation, explicit ownership and startup-error cleanup, and private-handle exclusion. Initial regressions: 5 runs, 8 assertions, 4 failures.
+- Focused descriptor suite: 8 runs, 61 assertions, no failures/errors/skips (seed 62750).
+- Related shell suite: 319 runs, 2,236 assertions, no failures/errors/skips (seed 53747); prompt assertions were added afterward and verified separately.
+- Standalone discovery excludes CLOEXEC handles; embedded callers retain explicit borrowed maps. Runner resource cleanup is separate from hosted descendant cleanup. Verification is on macOS arm64; Linux remains unverified.
+- Authority: POSIX.1-2024 SCL 2.7 and 2.13, https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html .

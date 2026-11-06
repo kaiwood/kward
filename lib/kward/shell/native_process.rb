@@ -30,6 +30,19 @@ module Kward
         0
       end
 
+      # Only the standalone executable calls this discovery boundary. Hosted
+      # runtimes receive an explicit descriptor map, never the agent's open IOs.
+      def self.inherited_descriptors
+        (3..9).each_with_object({}) do |descriptor, streams|
+          flags = FCNTL.call(descriptor, Fcntl::F_GETFD, 0)
+          next if flags < 0 || flags & Fcntl::FD_CLOEXEC != 0
+          io = IO.for_fd(descriptor)
+          io.close_on_exec = true
+          io.sync = true
+          streams[descriptor] = io
+        end
+      end
+
       def self.wait(pid)
         flags = Process::WUNTRACED | WAIT_CONTINUED
         _, status = Process.wait2(pid, flags)
@@ -115,10 +128,13 @@ module Kward
             hosted = ARGV.shift == "1"
             descriptors = ARGV.shift.split(",").to_h do |value|
               fd = Integer(value)
-              [fd, IO.for_fd(fd, autoclose: false)]
+              io = IO.for_fd(fd)
+              io.close_on_exec = true
+              io.sync = true
+              [fd, io]
             end
             name = ARGV.shift
-            exit Kward::NativeShell::ScriptRunner.run(["--", *ARGV], name: name, descriptors: descriptors, hosted: hosted)
+            exit Kward::NativeShell::ScriptRunner.run(["--", *ARGV], name: name, descriptors: descriptors, own_descriptors: true, hosted: hosted)
           RUBY
           descriptors = streams.filter_map { |fd, io| fd if fd > 2 && io }.join(",")
           execve(RbConfig.ruby, [RbConfig.ruby, "--disable=gems,rubyopt", "-e", bootstrap, "--",

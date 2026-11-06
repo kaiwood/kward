@@ -45,7 +45,7 @@ module Kward
 
       attr_reader :variables, :aliases, :status, :exited
 
-      def initialize(cwd: Dir.pwd, env: ENV.to_h, aliases: {}, arguments: [], name: "kwsh", interactive: false, replace_process: false, descriptors: {}, hosted: interactive, directory: nil)
+      def initialize(cwd: Dir.pwd, env: ENV.to_h, aliases: {}, arguments: [], name: "kwsh", interactive: false, replace_process: false, descriptors: {}, own_descriptors: false, hosted: interactive, directory: nil)
         @directory = directory ? directory.dup : Directory.new(cwd)
         @cwd = File.expand_path(cwd)
         @cwd = initial_directory(env["PWD"]) unless hosted
@@ -73,7 +73,7 @@ module Kward
         @traps = {}
         @pending_signals = []
         @persistent_descriptors = descriptors.dup
-        @owned_descriptors = []
+        @owned_descriptors = own_descriptors ? descriptors.values.compact.uniq : []
         @active_streams = []
         @replace_process = replace_process
         @interactive = interactive
@@ -142,6 +142,13 @@ module Kward
       end
 
       private
+
+      def close_resources
+        @owned_descriptors.each { |io| io.close unless io.closed? }
+        @owned_descriptors.clear
+      ensure
+        close_directory
+      end
 
       def close_directory
         @directory.close
@@ -571,7 +578,8 @@ module Kward
         pid = Process.fork do
           Signal.trap("INT", "DEFAULT")
           File.umask(@umask)
-          runtime = self.class.new(cwd: cwd, directory: @directory, env: environment, arguments: args.drop(1), name: args.first, interactive: @hosted, hosted: @hosted)
+          runtime = self.class.new(cwd: cwd, directory: @directory, env: environment, arguments: args.drop(1), name: args.first,
+                                   interactive: @hosted, hosted: @hosted, descriptors: streams.reject { |fd, _| fd < 3 })
           runtime.send(:reset_child_state, job_group: @owned_job_group)
           runtime.run(source, input: streams[0], output: streams[1], error: streams[2])
           runtime.send(:wait_builtin, [], streams) if @hosted

@@ -45,6 +45,8 @@ class TestShellPrompt < KwardTestCase
     assert_includes instructions, "umask supports -S/--, permission copies such as g=u"
     assert_includes instructions, "cd supports CDPATH and -P -e"
     assert_includes instructions, "retain directory identity across renames"
+    assert_includes instructions, "Standalone kwsh inherits descriptors 3-9"
+    assert_includes instructions, "hosted sessions do not expose private host descriptors"
     refute_includes instructions, "Command/arithmetic substitution"
   end
 

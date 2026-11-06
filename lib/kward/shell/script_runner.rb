@@ -6,7 +6,7 @@ module Kward
     module ScriptRunner
       module_function
 
-      def run(arguments, input: $stdin, output: $stdout, error: $stderr, name: nil, descriptors: {}, hosted: false)
+      def run(arguments, input: $stdin, output: $stdout, error: $stderr, name: nil, descriptors: {}, own_descriptors: false, hosted: false)
         args = arguments.dup
         options = []
         mode = nil
@@ -40,7 +40,7 @@ module Kward
         name ||= command_name || file || $0
         interactive ||= !hosted && !command && !file && input.tty? && error.tty?
         runtime = Runtime.new(arguments: args, name: name, replace_process: !hosted,
-                              interactive: interactive || hosted, hosted: hosted, descriptors: descriptors)
+                              interactive: interactive || hosted, hosted: hosted, descriptors: descriptors, own_descriptors: own_descriptors)
         runtime.send(:reset_child_state, job_group: Process.getpgrp) if hosted
         unless options.empty?
           status = runtime.run("set #{Shellwords.join(options)}", input: input, output: output, error: error)
@@ -70,7 +70,8 @@ module Kward
         error.puts("kwsh: #{e.message}")
         2
       ensure
-        runtime&.send(:close_directory)
+        runtime&.send(:close_resources)
+        descriptors.values.compact.uniq.each { |io| io.close unless io.closed? } if own_descriptors
       end
 
       def load_startup(runtime, input:, output:, error:)

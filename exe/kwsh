@@ -4,4 +4,5 @@ $LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
 
 require "kward/shell/script_runner"
 
-exit Kward::NativeShell::ScriptRunner.run(ARGV)
+descriptors = Kward::NativeShell::NativeProcess.inherited_descriptors
+exit Kward::NativeShell::ScriptRunner.run(ARGV, descriptors: descriptors, own_descriptors: true)

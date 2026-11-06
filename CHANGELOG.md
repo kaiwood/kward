@@ -6,6 +6,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Standalone kwsh now supports inherited descriptors 3–9 for redirection, duplication, closing, native scripts, child commands, and executable-text fallback, without exposing hosted private descriptors.
+
 - Added bounded multi-character locale collation across native case patterns, parameter trimming, and globs, plus requirement-linked POSIX and installed-locale regression coverage.
 - Added native shared-stream aliases, core builtin flag combinations, command hashing, `type`, `times`, `CDPATH`, and standalone interactive `kwsh -i` with guarded `ENV` startup and parameter-expanded prompts.
 - Added POSIX arithmetic-expansion substitutions, `case ;&` fall-through, and source-aware `LINENO`; new shells reset inherited `IFS`, and `command -V` follows function/builtin execution precedence.

@@ -127,6 +127,14 @@ kwsh -n scripts/check.kwsh             # syntax check without execution
 printf 'printf hello\n' | kwsh -s
 ```
 
+Standalone kwsh accepts inherited file descriptors 3–9 as well as standard input, output, and error. For example, from a parent shell:
+
+```sh
+kwsh -c 'cat <&3; printf "done\n" >&9' 3<input.txt 9>status.txt
+```
+
+Inherited descriptors support duplication, persistent `exec` redirection, and explicit closing. They reach child commands, native scripts, and executable-text fallback. The maximum supported shell redirection descriptor is 9. Discovery happens only at the standalone executable boundary; embedded runtimes and hosted `/shell` never discover Kward's private sockets or other open handles. Caller-supplied runtime descriptors remain borrowed unless ownership is explicitly transferred. This does not change RPC/Pan shell capabilities or sandbox policy.
+
 From a checkout, use `ruby exe/kwsh`. Standalone stdin processing leaves each command's input available to `read` and external programs; it does not read the entire input stream ahead of execution. The rich interactive composer remains a Kward `/shell` feature. Standalone `kwsh -i` provides a plain line-oriented prompt, also selected automatically when reading commands from stdin with stdin and stderr attached to a terminal.
 
 Startup sets `PPID` to the shell's parent process ID and `OPTIND` to `1`, even if those variables were inherited with different values. Subshells and command substitutions retain the current values instead of reinitializing them. `OPTIND` is not exported by default.
