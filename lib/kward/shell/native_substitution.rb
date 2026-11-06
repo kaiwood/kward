@@ -11,10 +11,12 @@ module Kward
         streams.values.compact.uniq.each(&:flush)
         Process.fork do
           reset_child_state
-          Signal.trap("INT", "DEFAULT") unless @traps["INT"] == ""
           if asynchronous
-            Signal.trap("INT", "IGNORE")
-            Signal.trap("QUIT", "IGNORE")
+            %w[INT QUIT].each do |name|
+              @entry_ignored.add(name)
+              @traps[name] = ""
+              Signal.trap(name, "IGNORE")
+            end
           end
           if group
             Process.setpgid(0, 0)

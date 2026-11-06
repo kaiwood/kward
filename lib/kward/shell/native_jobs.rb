@@ -126,9 +126,9 @@ module Kward
       def wait_job(job, streams, stopped: false, interruptible: false)
         until job.state == :done || stopped && job.state == :stopped
           if interruptible && !@pending_signals.empty?
-            signal = @pending_signals.first
-            run_pending_traps(streams)
-            return 128 + Signal.list.fetch(signal)
+            # Evaluation records wait's interrupted status before running the
+            # deferred action, so the trap observes the status of wait itself.
+            return 128 + Signal.list.fetch(@pending_signals.first)
           end
           result = Process.waitpid2(job.pid, Process::WNOHANG | Process::WUNTRACED)
           result ? update_job(job, result.last) : sleep(0.01)

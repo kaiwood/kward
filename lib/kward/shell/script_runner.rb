@@ -42,30 +42,32 @@ module Kward
         runtime = Runtime.new(arguments: args, name: name, replace_process: !hosted,
                               interactive: interactive || hosted, hosted: hosted, descriptors: descriptors, own_descriptors: own_descriptors)
         runtime.send(:reset_child_state, job_group: Process.getpgrp) if hosted
-        unless options.empty?
-          status = runtime.run("set #{Shellwords.join(options)}", input: input, output: output, error: error)
-          return status unless status.zero?
-        end
-        load_startup(runtime, input: input, output: output, error: error) if interactive
-        unless runtime.exited
-          if command
-            runtime.run(command, input: input, output: output, error: error)
-          elsif file
-            File.open(file) do |source|
-              if interactive
-                run_interactive(runtime, source, input: input, output: output, error: error)
-              else
-                runtime.run_input(source, input: input, output: output, error: error)
-              end
-            end
-          elsif interactive
-            run_interactive(runtime, input, input: input, output: output, error: error)
-          else
-            runtime.run_input(input, input: input, output: output, error: error)
+        runtime.with_signals do
+          unless options.empty?
+            status = runtime.run("set #{Shellwords.join(options)}", input: input, output: output, error: error)
+            return status unless status.zero?
           end
+          load_startup(runtime, input: input, output: output, error: error) if interactive
+          unless runtime.exited
+            if command
+              runtime.run(command, input: input, output: output, error: error)
+            elsif file
+              File.open(file) do |source|
+                if interactive
+                  run_interactive(runtime, source, input: input, output: output, error: error)
+                else
+                  runtime.run_input(source, input: input, output: output, error: error)
+                end
+              end
+            elsif interactive
+              run_interactive(runtime, input, input: input, output: output, error: error)
+            else
+              runtime.run_input(input, input: input, output: output, error: error)
+            end
+          end
+          runtime.send(:wait_builtin, [], { 0 => input, 1 => output, 2 => error }.merge(descriptors)) if hosted
+          runtime.finish(input: input, output: output, error: error)
         end
-        runtime.send(:wait_builtin, [], { 0 => input, 1 => output, 2 => error }.merge(descriptors)) if hosted
-        runtime.finish(input: input, output: output, error: error)
       rescue ArgumentError, SystemCallError => e
         error.puts("kwsh: #{e.message}")
         2
@@ -88,17 +90,19 @@ module Kward
         runtime.with_signals do
           until runtime.exited
             begin
-              runtime.notify_jobs(error: error, force: source.empty?)
-              prompt = source.empty? ? "PS1" : "PS2"
-              default = source.empty? ? "$ " : "> "
-              begin
-                error.write(runtime.expand_parameters(runtime.variables.fetch(prompt, default)))
-              rescue ExpansionError, ExecutionError => e
-                error.puts("kwsh: #{prompt}: #{e.message}")
-                error.write(default)
+              line = runtime.with_prompt_input do
+                runtime.notify_jobs(error: error, force: source.empty?)
+                prompt = source.empty? ? "PS1" : "PS2"
+                default = source.empty? ? "$ " : "> "
+                begin
+                  error.write(runtime.expand_parameters(runtime.variables.fetch(prompt, default)))
+                rescue ExpansionError, ExecutionError => e
+                  error.puts("kwsh: #{prompt}: #{e.message}")
+                  error.write(default)
+                end
+                error.flush
+                read_line(source_input, runtime, input: input, output: output, error: error)
               end
-              error.flush
-              line = read_line(source_input, runtime, input: input, output: output, error: error)
               unless line
                 runtime.run(source, input: input, output: output, error: error) unless source.empty?
                 break

@@ -15,6 +15,7 @@ require_relative "native_program"
 module Kward
   module NativeShell
     class ExecutionError < StandardError; end
+    class InvalidSignal < ExecutionError; end
 
     class Flow < StandardError
       attr_reader :kind, :status
@@ -70,7 +71,9 @@ module Kward
         @globstar = false
         @options = Set.new(interactive ? ["monitor"] : [])
         @jobs = {}
-        @traps = {}
+        @entry_ignored = Set.new(NativeProcess.ignored_signals.map { |name| Signal.list.key(Signal.list.fetch(name)) })
+        @entry_ignored.subtract(%w[TSTP TTIN TTOU]) if hosted
+        @traps = @entry_ignored.to_h { |name| [name, ""] }
         @pending_signals = []
         @persistent_descriptors = descriptors.dup
         @owned_descriptors = own_descriptors ? descriptors.values.compact.uniq : []
@@ -304,8 +307,8 @@ module Kward
         failed_command = %i[simple subshell test arithmetic redirect].include?(node.kind) ||
                          node.kind == :pipeline && node.values.first.length > 1
         negated = node.kind == :pipeline && node.values.last
-        raise Flow.new(:exit, @status) if failed_command && !negated && @options.include?("errexit") && !@ignore_failure && !@status.zero?
         run_pending_traps(streams)
+        raise Flow.new(:exit, @status) if failed_command && !negated && @options.include?("errexit") && !@ignore_failure && !@status.zero?
         @status
       ensure
         @streams = previous_streams
@@ -576,7 +579,7 @@ module Kward
         source = @directory.open_file(args.first, &:read)
         streams.values.compact.uniq.each(&:flush)
         pid = Process.fork do
-          Signal.trap("INT", "DEFAULT")
+          reset_child_state
           File.umask(@umask)
           runtime = self.class.new(cwd: cwd, directory: @directory, env: environment, arguments: args.drop(1), name: args.first,
                                    interactive: @hosted, hosted: @hosted, descriptors: streams.reject { |fd, _| fd < 3 })
@@ -900,7 +903,7 @@ module Kward
           streams[2]&.puts("kwsh: #{name}: command not found")
           return 127
         end
-        pid = NativeProcess.spawn(executable, arguments, environment, cwd: @directory, streams: streams, mask: @umask, hosted: @hosted)
+        pid = NativeProcess.spawn(executable, arguments, environment, cwd: @directory, streams: streams, mask: @umask, hosted: @hosted, signals: child_signal_dispositions)
         result = wait(pid)
         pid = nil
         result

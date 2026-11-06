@@ -18,6 +18,9 @@ module Kward
       FCNTL = Fiddle::Function.new(Fiddle::Handle::DEFAULT["fcntl"], [Fiddle::TYPE_INT, Fiddle::TYPE_INT, Fiddle::TYPE_INT], Fiddle::TYPE_INT)
       CLOSE = Fiddle::Function.new(Fiddle::Handle::DEFAULT["close"], [Fiddle::TYPE_INT], Fiddle::TYPE_INT)
 
+      SIGACTION = Fiddle::Function.new(Fiddle::Handle::DEFAULT["sigaction"],
+                                      [Fiddle::TYPE_INT, Fiddle::TYPE_VOIDP, Fiddle::TYPE_VOIDP], Fiddle::TYPE_INT)
+
       # Ruby does not expose WCONTINUED on every supported platform.
       # sys/wait.h on Darwin; Linux bits/waitflags.h uses 0x08.
       WAIT_CONTINUED = if Process.const_defined?(:WCONTINUED)
@@ -43,6 +46,17 @@ module Kward
         end
       end
 
+      def self.ignored_signals
+        # Darwin and Linux place the handler pointer first. This buffer exceeds
+        # both supported sigaction layouts; querying never changes a disposition.
+        action = Fiddle::Pointer.malloc(256, Fiddle::RUBY_FREE)
+        Signal.list.filter_map do |name, number|
+          next if number.zero? || %w[KILL STOP].include?(name)
+          raise SystemCallError.new("sigaction", Fiddle.last_error) if SIGACTION.call(number, nil, action) < 0
+          name if action[0, Fiddle::SIZEOF_VOIDP].unpack1("J") == 1 # SIG_IGN
+        end
+      end
+
       def self.wait(pid)
         flags = Process::WUNTRACED | WAIT_CONTINUED
         _, status = Process.wait2(pid, flags)
@@ -57,10 +71,10 @@ module Kward
         status
       end
 
-      def self.spawn(executable, arguments, environment, cwd:, streams:, mask: nil, hosted: false)
+      def self.spawn(executable, arguments, environment, cwd:, streams:, mask: nil, hosted: false, signals: {})
         validate(arguments, environment)
         streams.values.compact.uniq.each(&:flush)
-        Process.fork { exit!(replace(executable, arguments, environment, cwd: cwd, streams: streams, mask: mask, hosted: hosted)) }
+        Process.fork { exit!(replace(executable, arguments, environment, cwd: cwd, streams: streams, mask: mask, hosted: hosted, signals: signals)) }
       end
 
       def self.validate(arguments, environment)
@@ -69,7 +83,7 @@ module Kward
         end
       end
 
-      def self.replace(executable, arguments, environment, cwd:, streams:, mask: nil, hosted: false)
+      def self.replace(executable, arguments, environment, cwd:, streams:, mask: nil, hosted: false, signals: {})
         validate(arguments, environment)
         load_path = $LOAD_PATH.map { |path| File.expand_path(path) }
         streams.values.compact.uniq.each(&:flush)
@@ -113,6 +127,7 @@ module Kward
         end
         copies.values.compact.each(&:close)
         File.umask(mask) if mask
+        signals.each { |name, handler| Signal.trap(name, handler) }
         begin
           execve(executable, arguments, environment)
         rescue Errno::ENOEXEC

@@ -345,11 +345,24 @@ printf '%s\n' ready >&3
 exec 3>&-
 ```
 
-`trap` accepts signal names (with or without `SIG`), numbers, and `EXIT` / `0`. An empty action ignores a signal; `-` resets it. `trap` and `trap -p [signals...]` print reusable definitions. Actions execute as native source at interpreter safe points, preserving the interrupted `$?` unless they explicitly exit. Trapped signals interrupt the `wait` builtin; when waiting for an ordinary foreground command, actions run after that command finishes. Caught traps reset in subshells; ignored signals remain ignored. `KILL` and `STOP` cannot be trapped. `EXIT` runs once on normal completion, explicit exit, or `errexit`.
+`trap` accepts signal names (with or without `SIG`), numbers, and `EXIT` / `0`. An empty action ignores a signal; `-` resets it to the shell's default. Bare `trap` lists non-default actions, including inherited ignores. `trap -p [--] [signals...]` also reports defaults, so saved output can undo traps added later:
+
+```sh
+saved=$(trap -p)
+trap 'printf "Interrupted\n"' INT
+# Run native commands with the temporary action.
+eval "$saved"
+```
+
+Subshells and command substitutions reset caught execution actions immediately, but retain the parent's actions for trap inspection until a `trap` command supplies operands. This keeps `saved=$(trap -p)` useful without running the parent's handlers in the child. Non-interactive shells cannot catch or reset signals ignored on entry; interactive shells can override them. Invalid signal names return a nonzero status with a diagnostic, without aborting the rest of a script.
+
+Actions execute as native source at interpreter safe points, preserving the interrupted `$?` unless they explicitly exit. Trapped signals interrupt the `wait` builtin; the action sees `128 + signal number` and runs before an `errexit` exit. When waiting for an ordinary foreground command, actions run after that command finishes. `EXIT` runs once on normal completion, explicit exit, or `errexit`. `KILL` and `STOP` cannot be caught or ignored; default resets are harmless. Ruby reserves `ILL`, `FPE`, `BUS`, `SEGV`, and `VTALRM`: kwsh can report their default dispositions but cannot install actions for them. This remains a conformance limitation.
+
+Standalone interactive kwsh ignores `TERM` and `QUIT` by default. It also ignores `TTIN`, `TTOU`, and `TSTP` while monitoring jobs (and chooses to keep ignoring them with monitoring disabled). `INT` discards unfinished prompt input; while executing a command, an `INT` sent only to the shell does not interrupt that command. Terminal-generated Ctrl+C normally targets the foreground job, whose signal status is returned to the prompt. These shell-only defaults are reset for child commands, native scripts, and executable-text fallback; explicitly ignored signals remain ignored.
 
 In standalone `kwsh`, `exec program args...` uses direct `execve`: it preserves the PID, does not run an EXIT trap on success, and never falls back to `/bin/sh`. `exec -c` clears the child's environment; `-a name` selects argv[0], `-l` prefixes it with `-`, and `--` ends options. Without a program, redirections persist.
 
-The TUI worker must retain its private control channel. Its hosted `exec` therefore runs the replacement program, reports final state, and ends the logical shell session rather than replacing the protocol process. Hosted child scopes also retain their supervisors so that `exec` cannot abandon background descendants. `USR2` is reserved for hosted shutdown and cannot be trapped in that worker; standalone scripts may trap it normally. Closing a tab is forced host cleanup, not a normal EXIT-trap invocation.
+The TUI worker must retain its private control channel. Its hosted `exec` therefore runs the replacement program, reports final state, and ends the logical shell session rather than replacing the protocol process. Hosted child scopes also retain their supervisors so that `exec` cannot abandon background descendants. `USR2` is reserved for hosted shutdown, omitted from that worker's trap listings, and cannot be trapped there; standalone scripts may trap it normally. Closing a tab is forced host cleanup, not a normal EXIT-trap invocation.
 
 ### Read aliases and scripts in order
 
@@ -435,7 +448,7 @@ ruby -Itest -e '(Dir["test/test_native_shell*.rb"] + %w[test/test_persistent_she
 | Aliases, builtin options, startup identity checks, terminal invocation | `test/test_native_shell_invocation.rb` |
 | Deterministic collation paths and work bounds | `test/test_native_shell_pattern.rb` |
 | Installed-locale matching, trimming, globbing, and locale restoration | `test/test_native_shell_locale.rb` |
-| Script modes, native execution, traps, descriptors, and process ownership | `test/test_native_shell.rb`, `test/test_native_shell_runner.rb`, `test/test_persistent_shell_session.rb` |
+| Script modes, native execution, traps, descriptors, and process ownership | `test/test_native_shell.rb`, `test/test_native_shell_runner.rb`, `test/test_native_shell_descriptors.rb`, `test/test_native_shell_signals.rb`, `test/test_persistent_shell_session.rb` |
 
 Installed multi-character collation tests require Czech or Slovak UTF-8 locale data and explicitly skip when unavailable. Deterministic matcher tests still run everywhere. Use POSIX.1-2024 as the authority when adding cases; Bash and the host `/bin/sh` can help investigate differences but are not conformance oracles. Do not turn implementation-defined or unspecified behavior into a purported universal requirement.
 

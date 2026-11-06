@@ -114,16 +114,20 @@ Supporting descriptors above 9 is not a prerequisite: POSIX permits an implement
 
 Relevant code: `native_traps.rb`, `native_jobs.rb`, `script_runner.rb`, and process/substitution lifecycle code.
 
-- [ ] Initialize the required interactive signal dispositions: ignore `SIGTERM` and `SIGQUIT` by default, and implement the required monitor-mode handling of `SIGTTIN`, `SIGTTOU`, and `SIGTSTP`.
-- [ ] Verify `SIGINT` handling at the prompt and during command execution.
-- [ ] Preserve the rule that signals ignored on entry to a non-interactive shell cannot be trapped or reset by that shell.
-- [ ] Make `trap -p` report all required conditions, including default dispositions. Explicit requests such as `trap -p INT` must produce restorable output.
-- [ ] Include inherited ignored signals where required in trap listings.
-- [ ] Preserve trap inspection/save-and-restore behavior across subshells and command substitutions, even when execution dispositions are reset on entry to the subshell.
-- [ ] Test restoration through `saved=$(trap -p)` followed by `eval "$saved"`.
-- [ ] Keep the hosted shutdown signal reservation and descendant ownership rules unchanged.
+- [x] Initialize the required interactive signal dispositions: ignore `SIGTERM` and `SIGQUIT` by default, and implement the required monitor-mode handling of `SIGTTIN`, `SIGTTOU`, and `SIGTSTP`.
+- [x] Verify `SIGINT` handling at the prompt and during command execution.
+- [x] Preserve the rule that signals ignored on entry to a non-interactive shell cannot be trapped or reset by that shell.
+- [x] Make `trap -p` report all required conditions, including default dispositions. Explicit requests such as `trap -p INT` must produce restorable output.
+- [x] Include inherited ignored signals where required in trap listings.
+- [x] Preserve trap inspection/save-and-restore behavior across subshells and command substitutions, even when execution dispositions are reset on entry to the subshell.
+- [x] Test restoration through `saved=$(trap -p)` followed by `eval "$saved"`.
+- [x] Keep the hosted shutdown signal reservation and descendant ownership rules unchanged.
 
 **Regression coverage:** isolated subprocess tests for inherited dispositions, default and explicit traps, trap inspection, EXIT status, deferred handlers, job-control signals, and cancellation. Bound all waits and clean up every child; do not risk leaving stopped or orphaned processes.
+
+- [ ] Verify the selected signal/trap regressions on Linux (local Docker daemon unavailable).
+
+**Implementation note:** macOS regressions cover the changes below, but the cross-platform completion gate remains open. Ruby-reserved `ILL`, `FPE`, `BUS`, `SEGV`, and `VTALRM` actions remain unsupported; their default dispositions can be listed/restored. This step does not close the full trap utility audit.
 
 **Complete when:** signal defaults, trap mutation restrictions, and trap round trips satisfy the selected requirements on macOS and Linux.
 
@@ -133,7 +137,7 @@ Relevant code: `native_builtins.rb`, `native_process.rb`, and standalone interac
 
 - [ ] Prevent a missing executable from terminating an interactive shell.
 - [ ] Test both PATH lookup failure and an explicit missing pathname; also audit found-but-unexecutable files and other execution failures.
-- [ ] Ensure recovery leaves the interpreter's descriptors and directory state usable. Merely removing an exit instruction is not sufficient if replacement preparation has already mutated process state.
+- [ ] Ensure recovery leaves the interpreter's descriptors, directory state, and signal dispositions usable. Merely removing an exit instruction is not sufficient if replacement preparation has already mutated process state.
 - [ ] Verify the user can submit a fresh command after the failure. Do not require continuation of an abandoned input submission where the standard permits recovery at the next submission.
 - [ ] Preserve true process replacement on successful standalone `exec`, including PID behavior and native ENOEXEC fallback.
 - [ ] Keep hosted supervised execution and shutdown behavior explicit and separately tested.
@@ -291,3 +295,15 @@ Do not expand this plan merely to add Bash arrays, `[[ … ]]`, regex matching, 
 - Related shell suite: 319 runs, 2,236 assertions, no failures/errors/skips (seed 53747); prompt assertions were added afterward and verified separately.
 - Standalone discovery excludes CLOEXEC handles; embedded callers retain explicit borrowed maps. Runner resource cleanup is separate from hosted descendant cleanup. Verification is on macOS arm64; Linux remains unverified.
 - Authority: POSIX.1-2024 SCL 2.7 and 2.13, https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html .
+
+## Step 7 verification — signal defaults and trap round trips
+
+- Added `test/test_native_shell_signals.rb` with isolated, time-bounded subprocess fixtures. Initial seven regressions produced six failures (seed 4776). Final focused run: **18 runs, 64 assertions, no failures/errors/skips**, seed 65379.
+- Covered interactive TERM/QUIT and monitor stop-signal defaults; INT at an incomplete prompt, sent only to the shell during a command, and delivered to a foreground child; inherited ignored dispositions and interactive overrides; explicit/default trap listings; nested subshell inspection and execution reset; save/restore; EXIT status; asynchronous INT/QUIT inheritance; exec/native-script/ENOEXEC defaults; and hosted round trips without changing worker handlers or exposing USR2.
+- Strengthened the existing interrupted-wait regression to assert the status observed by the trap. It initially reported 0 rather than 128 + signal. Actions now run after recording wait's status and before errexit; a separate regression covers that ordering.
+- Inherited-ignore discovery uses read-only sigaction, not temporary changes to host dispositions. Interactive handlers remain scoped across startup and execution. Trap inspection snapshots preserve the originating hosted shutdown reservation. Unchanged default resets do not replace host handlers.
+- Related shell suite: **337 runs, 2,310 assertions, no failures/errors/skips**, seed 27540, `/tmp/kward-step7-shell-final.log`.
+- Full repository suite: **2,603 runs, 13,729 assertions, 1 failure, 0 errors, 2 skips**, seed 64485, `/tmp/kward-step7-full.log`. The sole failure is the pre-existing editor spinner assertion at `test/test_editor_prompt.rb:109` (expected `· ·`, rendered `⠋`); the existing Bubblewrap integration tests remain disabled. No unrelated tests were changed.
+- `git diff --check` passed. Verified with Ruby 4.0.3 on macOS arm64. Linux verification remains **open**: the installed Docker client cannot connect to its daemon; no daemon was started or images downloaded. Ruby-reserved ILL/FPE/BUS/SEGV/VTALRM actions remain an explicit limitation (SIG-5), not a closed conformance requirement.
+- Step 6 implementation commit: `b4bddbc` (`fix(shell): support inherited standalone descriptors`). Step 7 is committed separately after this verification record.
+- Authorities: https://pubs.opengroup.org/onlinepubs/9799919799/utilities/sh.html (ASYNCHRONOUS EVENTS), https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html#tag_19_29 (trap and SCL 2.12/2.13), and Ruby's reserved-signal implementation at https://github.com/ruby/ruby/blob/37003e92e8e59dca22c8f71fff101109192b82a9/signal.c#L1359-L1383 .

@@ -88,10 +88,10 @@ class TestNativeShellRunner < KwardTestCase
   end
 
   def test_wait_is_interruptible_by_a_trapped_signal
-    source = %q{trap 'printf signal:' USR1; { sleep 0.1; kill -USR1 $$; sleep 0.1; } & pid=$!; wait "$pid"; printf '%s:' "$?"; wait "$pid"; printf '%s' "$?"}
+    source = %q{trap 'printf "signal:%s:" "$?"' USR1; { sleep 0.1; kill -USR1 $$; sleep 0.1; } & pid=$!; wait "$pid"; printf '%s:' "$?"; wait "$pid"; printf '%s' "$?"}
     output, error, status = run_kwsh("-c", source)
     assert status.success?, error
-    assert_equal "signal:#{128 + Signal.list.fetch('USR1')}:0", output
+    assert_equal "signal:#{128 + Signal.list.fetch('USR1')}:#{128 + Signal.list.fetch('USR1')}:0", output
     assert_empty error
   end
 

@@ -40,6 +40,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Corrected native kwsh interactive signal defaults, protected inherited ignored signals, and made `trap -p` output include defaults and survive subshell save/restore. Interrupted `wait` traps now observe the wait status and run before `errexit`; hosted shutdown ownership is unchanged.
+
 - Kept native shell directory identity across renames for execution, sourcing, redirection and globbing, with owned close-on-exec handles and no host cwd changes. Logical `cd` now validates components before removing `..`.
 - Completed native `umask` symbolic permission copying, sequential operations and `-S`/`--` handling, and added `cd -P -e` pathname-reporting status without undoing successful directory changes.
 - Corrected native alias names and quoted listing output, and traced expanded assignment-only commands without evaluating substitutions twice.
