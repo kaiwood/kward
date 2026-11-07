@@ -159,7 +159,7 @@ ENV="$HOME/.kwsh-env" kwsh -i
 kwsh -ec 'printf "%s\n" "$1"' example argument
 ```
 
-Interactive startup parameter-expands `ENV` and executes the named native file when it exists. Non-interactive invocations ignore `ENV`; startup loading is also disabled when real and effective user or group IDs differ. This executable startup file is separate from declarative `kwshrc`. `PS1` and `PS2` support parameter expansion; command substitutions in startup path or prompt text are rejected. Errors leave the prompt usable, and input is read without consuming a following command's stdin. Shell options may be grouped and may follow `-c` or `-s`. Standalone command history and `fc` are available; vi/emacs line-editing modes remain separate milestones.
+Interactive startup parameter-expands `ENV` and executes the named native file when it exists. Non-interactive invocations ignore `ENV`; startup loading is also disabled when real and effective user or group IDs differ. This executable startup file is separate from declarative `kwshrc`. `PS1` and `PS2` support parameter expansion; `PS1` then replaces `!` with the next history number and `!!` with a literal `!`. Trace prefixes parameter-expand `PS4` (default `+ `); command substitutions in startup path or prompt text are rejected. Errors leave the prompt usable, and input is read without consuming a following command's stdin. Shell options may be grouped and may follow `-c` or `-s`. Standalone command history and `fc` are available; vi/emacs line-editing modes remain separate milestones.
 
 Executable text files without a shebang also run natively when invoked from kwsh:
 
@@ -505,6 +505,12 @@ Installed multi-character collation tests require Czech or Slovak UTF-8 locale d
 Language and state transitions remain native; implementing these features must not introduce a Bash or `/bin/sh` fallback. Declarative `kwshrc` loading and ordinary model/RPC command isolation remain separate contracts.
 
 References: [POSIX Shell Command Language](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html), [POSIX read](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/read.html), [Bash parameter expansion](https://www.gnu.org/software/bash/manual/html_node/Shell-Parameter-Expansion.html), and [Bash arrays](https://www.gnu.org/software/bash/manual/html_node/Arrays.html), [POSIX wait](https://pubs.opengroup.org/onlinepubs/9799919799.2024edition/utilities/wait.html), and [POSIX job control](https://pubs.opengroup.org/onlinepubs/9799919799.2024edition/utilities/fg.html), and [Apple newlocale](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/newlocale.3.html).
+
+### Prompt options and mail
+
+`set -o ignoreeof` prevents accidental terminal Ctrl+D exits; use `exit` explicitly, or disable it with `set +o ignoreeof`. Permanent EOF on a non-terminal still ends input instead of spinning. `set -o nolog` is accepted and listed but intentionally has no effect, as permitted for this obsolete option.
+
+Set `MAIL` to a mailbox pathname, or `MAILPATH` to colon-separated `path%message` entries. `MAILPATH` takes precedence even when empty; `\%` represents a literal percent in a pathname. Before primary prompts, kwsh checks for creation or modification since the previous check. `MAILCHECK` defaults to 600 seconds; `0` checks at every primary prompt. Invalid intervals use the default. The first check establishes a baseline. Optional messages are parameter-expanded, never evaluated as commands; the default is `you have mail`. These notifications belong to standalone prompts, not the hosted composer.
 
 ### Standalone command history
 

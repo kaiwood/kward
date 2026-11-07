@@ -166,12 +166,12 @@ Treat this as a separate milestone after core correctness. Divide it into small,
 
 - [x] Implement the command-history model and `fc`, including `HISTFILE`, `HISTSIZE`, and `FCEDIT` behavior.
 - [ ] Implement the required vi command-line editing behavior and `set -o vi`.
-- [ ] Implement `set -o ignoreeof`.
-- [ ] Accept `set -o nolog`; the obsolete option may have no effect where the standard permits that.
-- [ ] Implement PS1 exclamation-mark/history-number expansion, including `!` and `!!`.
-- [ ] Parameter-expand `PS4` for execution traces rather than hard-coding `+ `.
-- [ ] Implement mail notification behavior controlled by `MAIL`, `MAILPATH`, and `MAILCHECK`.
-- [ ] Preserve existing guarded `ENV` startup and parameter-expanded prompt behavior.
+- [x] Implement `set -o ignoreeof`.
+- [x] Accept `set -o nolog`; the obsolete option may have no effect where the standard permits that.
+- [x] Implement PS1 exclamation-mark/history-number expansion, including `!` and `!!`.
+- [x] Parameter-expand `PS4` for execution traces rather than hard-coding `+ `.
+- [x] Implement mail notification behavior controlled by `MAIL`, `MAILPATH`, and `MAILCHECK`.
+- [x] Preserve existing guarded `ENV` startup and parameter-expanded prompt behavior.
 - [x] Define private storage and cleanup rules for history and edited history files, and test cancellation and editor failures.
 
 **Complete when:** the UP entries in the requirement matrix are implemented and tested, or the project explicitly declines that optional profile without claiming it is complete.
@@ -335,3 +335,10 @@ Do not expand this plan merely to add Bash arrays, `[[ … ]]`, regex matching, 
 - Added six history regressions. Initial four tests failed before implementation. Cancellation uses an isolated runtime with an injected interrupted editor; a first test fixture assumed Minitest `stub`, unavailable here, and was corrected to the repository's singleton-method pattern without changing assertions.
 - Related shell suite: **355 runs, 2,446 assertions, no failures/errors/skips**, seed 50823 (`/tmp/kward-step10-history.log`). `git diff --check` passed. macOS arm64 / Ruby 4.0.3 verified; Linux remains pending.
 - References: https://pubs.opengroup.org/onlinepubs/9799919799/utilities/fc.html and https://pubs.opengroup.org/onlinepubs/9799919799/utilities/sh.html. Step 10 remains open for editing, prompts/options, mail, and the remaining UP audit.
+
+## Step 10b verification — prompts, EOF options, and mail
+
+- Added PS1 parameter-then-exclamation passes, PS4 parameter expansion with safe diagnostic/fallback, no-op nolog, terminal ignoreeof, and monotonic MAILCHECK polling before primary prompts. MAILPATH precedence, escaped percent pathnames, creation/mtime tracking and parameter-only custom messages are covered. Non-terminal permanent EOF still terminates input rather than busy-looping.
+- Initial interactive suite: 5 tests, 3 failures and 2 errors. After implementation: **5 runs, 32 assertions**, passing; includes a real PTY Ctrl+D/explicit-exit test. Existing ENV identity-gate and no-input-read-ahead tests remain unchanged.
+- Related shell suite: **360 runs, 2,478 assertions, no failures/errors/skips**, seed 48681 (`/tmp/kward-step10-prompts.log`). macOS verified; Linux pending. vi editing and the remaining UP audit are still open.
+- Authority: sh environment/extended description and SCL 2.5.3 / set in https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html .

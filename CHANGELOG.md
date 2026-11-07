@@ -6,6 +6,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added native PS4 parameter expansion, standalone PS1 history numbering, terminal `ignoreeof`, compatible no-op `nolog`, and MAIL/MAILPATH/MAILCHECK notifications.
+
 - Added standalone native command history and `fc` listing, substitution, and private editor workflows, with opt-in `HISTFILE` persistence and `HISTSIZE` retention. Hosted history remains separate.
 
 - Standalone kwsh now supports inherited descriptors 3–9 for redirection, duplication, closing, native scripts, child commands, and executable-text fallback, without exposing hosted private descriptors.

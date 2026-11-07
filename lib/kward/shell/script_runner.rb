@@ -93,17 +93,16 @@ module Kward
               line = runtime.with_prompt_input do
                 runtime.notify_jobs(error: error, force: source.empty?)
                 prompt = source.empty? ? "PS1" : "PS2"
-                default = source.empty? ? "$ " : "> "
-                begin
-                  error.write(runtime.expand_parameters(runtime.variables.fetch(prompt, default)))
-                rescue ExpansionError, ExecutionError => e
-                  error.puts("kwsh: #{prompt}: #{e.message}")
-                  error.write(default)
-                end
+                runtime.check_mail(error) if source.empty?
+                error.write(runtime.prompt_text(prompt, error: error))
                 error.flush
                 read_line(source_input, runtime, input: input, output: output, error: error)
               end
               unless line
+                if source_input.tty? && runtime.option_enabled?("ignoreeof") && !runtime.exited
+                  error.puts("kwsh: use exit to leave the shell")
+                  next
+                end
                 runtime.run(source, input: input, output: output, error: error) unless source.empty?
                 break
               end

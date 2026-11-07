@@ -8,6 +8,7 @@ require_relative "native_expansion"
 require_relative "native_substitution"
 require_relative "native_builtins"
 require_relative "native_history"
+require_relative "native_interactive"
 require_relative "native_arrays"
 require_relative "native_jobs"
 require_relative "native_traps"
@@ -37,6 +38,7 @@ module Kward
       include Substitution
       include Builtins
       include HistoryCommands
+      include Interactive
       include Condition
       include Arrays
       include Jobs
@@ -415,7 +417,7 @@ module Kward
         with_redirects(redirects, streams, fatal: persistent) do |redirected|
           if arguments.empty?
             assigning = true
-            redirected[2]&.puts("+ ") if assignments.empty? && @options.include?("xtrace")
+            trace("", redirected) if assignments.empty?
             assignments.each { |key, value| assign_word(key, value, redirected) }
             next @substitution_status || 0
           end
@@ -429,7 +431,7 @@ module Kward
               @exported.add(key) if !persistent || name == "exec"
             end
             assigning = false
-            redirected[2]&.puts("+ #{Shellwords.join(arguments)}") if @options.include?("xtrace")
+            trace(Shellwords.join(arguments), redirected)
             dispatch(arguments, redirected)
           rescue ExecutionError, SystemCallError, IOError, ArgumentError => e
             command_error(e, redirected, fatal: assigning || persistent)
@@ -603,7 +605,7 @@ module Kward
       def assign_word(key, word, streams)
         value = expand(word, assignment: true).join
         if @options.include?("xtrace") && key.is_a?(String)
-          streams[2]&.puts("+ #{key}=#{Shellwords.escape(value)}")
+          trace("#{key}=#{Shellwords.escape(value)}", streams)
         end
         assign(key, value)
       end

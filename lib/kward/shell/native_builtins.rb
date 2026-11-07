@@ -168,7 +168,7 @@ module Kward
           flags.each do |flag|
             name = if flag == "o"
               if args.empty?
-                (SHELL_OPTIONS.values + ["pipefail"]).each do |entry|
+                (SHELL_OPTIONS.values + %w[pipefail ignoreeof nolog]).each do |entry|
                   write_line(streams, "set #{@options.include?(entry) ? '-' : '+'}o #{entry}")
                 end
                 next
@@ -177,7 +177,7 @@ module Kward
             else
               SHELL_OPTIONS[flag]
             end
-            raise ExecutionError, "set: unsupported option #{name || flag}" unless (SHELL_OPTIONS.values + ["pipefail"]).include?(name)
+            raise ExecutionError, "set: unsupported option #{name || flag}" unless (SHELL_OPTIONS.values + %w[pipefail ignoreeof nolog]).include?(name)
             enabled ? @options.add(name) : @options.delete(name)
           end
         end
