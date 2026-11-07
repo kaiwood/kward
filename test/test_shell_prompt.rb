@@ -23,6 +23,8 @@ class TestShellPrompt < KwardTestCase
     assert_includes instructions, "unless the user explicitly requests that"
     assert_includes instructions, "not executable scripts"
     assert_includes instructions, "echo $((5 + 2)) prints 7"
+    assert_includes instructions, "Arithmetic has no fixed expression-byte limit"
+    assert_includes instructions, "safety quotas still apply to standalone and hosted execution"
     assert_includes instructions, "Use adjacent closing parentheses for portable syntax"
     assert_includes instructions, "echo $((5 + 2) ) works too"
     assert_includes instructions, "${name:-default}"

@@ -148,13 +148,15 @@ Relevant code: `native_builtins.rb`, `native_process.rb`, and standalone interac
 
 Relevant code: arithmetic, parser, alias, substitution, pattern, glob, and job limits.
 
-- [ ] Inventory every explicit size, depth, count, and work limit.
-- [ ] Classify each limit against the standard: permitted implementation limit, underlying system constraint, or additional product safety policy.
-- [ ] Add a regression for an otherwise valid arithmetic expression exceeding 4,096 bytes without overflowing an integer, such as `1` followed by many `+ 0` terms.
-- [ ] Remove or redesign artificial restrictions that contradict standalone conformance requirements. Do not replace them with unsafe evaluation or recursive wildcard matching.
-- [ ] Separate hosted safety quotas from standalone behavior where needed, or explicitly document the remaining nonconformance.
-- [ ] Retain necessary host capture bounds, cancellation, resource ownership, and sandbox protections.
-- [ ] Document supported arithmetic precision and other implementation-defined choices accurately; exact Bash integer behavior is not the target.
+- [x] Inventory every explicit size, depth, count, and work limit.
+- [x] Classify each limit against the standard: permitted implementation limit, underlying system constraint, or additional product safety policy.
+- [x] Add a regression for an otherwise valid arithmetic expression exceeding 4,096 bytes without overflowing an integer, such as `1` followed by many `+ 0` terms.
+- [x] Remove or redesign artificial restrictions that contradict standalone conformance requirements. Do not replace them with unsafe evaluation or recursive wildcard matching.
+- [x] Separate hosted safety quotas from standalone behavior where needed, or explicitly document the remaining nonconformance.
+- [x] Retain necessary host capture bounds, cancellation, resource ownership, and sandbox protections.
+- [x] Document supported arithmetic precision and other implementation-defined choices accurately; exact Bash integer behavior is not the target.
+
+**Disposition:** the arithmetic expression-byte and flat-chain recursion restrictions are removed. The remaining quotas are retained and explicitly classified in `doc/shell.md` under Resource limits and conformance. This completes the inventory/policy-disclosure milestone, not standalone resource-limit conformance; there is no unrestricted mode.
 
 **Complete when:** every limit has an explicit standards justification or a clearly identified non-conforming mode/policy. Do not remove all safeguards indiscriminately.
 
@@ -315,3 +317,14 @@ Do not expand this plan merely to add Bash arrays, `[[ … ]]`, regex matching, 
 - A regression exposed Ruby timer-thread descriptor corruption when low descriptors were closed during a failed replacement. Standalone startup now performs a same-PID trusted-Ruby bootstrap with 3–9 reserved, moves inherited user IOs to private CLOEXEC handles, and keeps reservation handles out of the shell map. Hosted startup is unchanged. User programs still use direct execve and native-only ENOEXEC fallback.
 - Focused suite: **8 runs, 67 assertions**, no failures/errors/skips (seed 46837). Related suite before the final cleanup regression and prompt assertions: **344 runs, 2,373 assertions**, no failures/errors/skips (seed 22290); the final focused/prompt checks cover those additions. Full repository verification follows step 9.
 - Verified on macOS arm64; Linux remains unverified. Authority: https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html#exec and SCL 2.8.1 / 2.9.1.6.
+
+## Step 9 verification — resource-limit inventory and arithmetic length
+
+- Inventoried native arithmetic, parser/expansion, aliases, evaluation, substitution, matcher, pathname traversal, job records, PID spellings, descriptors, extension limits, executable-text detection, directory APIs, and adjacent host capture/history/context/lifecycle bounds in `doc/shell.md`. Read chunk sizes, ABI buffers and polling intervals are distinguished from cumulative quotas. Base-affecting safety policies apply to standalone as well as hosted execution and remain explicitly non-conforming; extension policies and genuine system constraints are separate.
+- Added `test/test_native_shell_limits.rb`. Initial run: 4 tests, 1 assertion, 1 failure and 3 errors from the arithmetic byte/literal caps (seed 57816). Removed both lexer/parser expression-byte guards and replaced recursive left-spine evaluation with an iterative chain, keeping lazy right operands and assignment order. Integer spelling normalization discards leading zeros before precision checks and bounds conversion of significant digits.
+- The old test asserting that a 4,097-byte addition must fail was replaced with an exact successful-result assertion. Its independent excessive-nesting and overflow assertions remain intact. An initial hosted test fixture used StringIO with external printf, which cannot be remapped to OS descriptors; the fixture now tests a hosted assignment and its stored arithmetic value directly, without changing process IO behavior.
+- Focused limits suite: **4 runs, 25 assertions**, no failures/errors/skips (seed 58296). Existing native suite: **114 runs, 775 assertions**, no failures/errors/skips. Noexec/static syntax checks remain side-effect-free; existing capture, matcher, brace and nesting-bound regressions still pass.
+- Final related shell suite covering steps 8 and 9: **349 runs, 2,410 assertions, no failures/errors/skips**, seed 43059, `/tmp/kward-step9-shell-final.log`.
+- Full repository suite: **2,615 runs, 13,829 assertions, 1 failure, 0 errors, 2 skips**, seed 26466, `/tmp/kward-step9-full.log`. The only failure remains `TestEditorPrompt#test_editor_stays_visible_and_shows_spinner_while_agent_runs`, `test/test_editor_prompt.rb:109`, expected `· ·` versus `⠋`. Existing Bubblewrap integration skips remain; unrelated tests were not changed.
+- `git diff --check` passed. Verified on macOS arm64 / Ruby 4.0.3; Linux verification remains pending. Step 8 was committed separately as `6dc9e32` (`fix(shell): recover safely from failed interactive exec`).
+- Authorities: https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html (2.3, 2.6.3/2.6.4, 2.7, 2.9, 2.14), and https://pubs.opengroup.org/onlinepubs/9799919799/utilities/sh.html (input files). This record does not close the remaining Base/UP/XSI audits or certify conformance.

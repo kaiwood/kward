@@ -40,6 +40,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Removed native arithmetic's 4,096-byte expression ceiling and recursive evaluation of flat binary chains. Long non-overflowing expressions and zero-padded integers now work; precision, nesting, and other safety policies remain explicit in the resource-limit inventory.
+
 - Failed standalone interactive kwsh `exec` now recovers for a fresh submission while retaining successful redirections. Internal IO, directory, mask, and signal state is restored; descriptor reservation keeps Ruby VM handles out of the shell's 3–9 range.
 
 - Corrected native kwsh interactive signal defaults, protected inherited ignored signals, and made `trap -p` output include defaults and survive subshell save/restore. Interrupted `wait` traps now observe the wait status and run before `errexit`; hosted shutdown ownership is unchanged.

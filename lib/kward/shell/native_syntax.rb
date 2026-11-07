@@ -316,7 +316,6 @@ module Kward
         @arithmetic_depth += 1
         raise SyntaxError, "arithmetic nesting exceeds 100 levels" if @arithmetic_depth > 100
         advance(2)
-        start = @index
         depth = 0
         expression = []
         until current.nil?
@@ -324,7 +323,6 @@ module Kward
             raise IncompleteInput, "line #{@line}: unclosed arithmetic expansion; expected ))" unless @source[@index + 1]
             closing = @source[@index..][/\A\)[ \t]*\)/]
             raise SyntaxError, "line #{@line}: expected a second ) to close arithmetic expansion" unless closing
-            raise SyntaxError, "arithmetic expression exceeds 4096 bytes" if @source[start...@index].bytesize > 4096
             word = Word.new(parts: expression)
             Arithmetic::Parser.new(word.literal.to_s).parse if word.literal
             advance(closing.length)

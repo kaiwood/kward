@@ -356,8 +356,9 @@ class TestNativeShell < KwardTestCase
     assert_output("7\n", "echo $((5 +\n2) )")
   end
 
-  def test_arithmetic_limits_nesting_expression_length_and_result_size
-    expressions = ["(" * 101 + "1" + ")" * 101, "1+" * 2_048 + "1", "9" * 1_234]
+  def test_arithmetic_retains_nesting_and_result_limits_but_accepts_long_flat_expressions
+    assert_output("2049\n", "echo $((#{'1+' * 2_048}1))")
+    expressions = ["(" * 101 + "1" + ")" * 101, "9" * 1_234]
     expressions.each do |expression|
       status, _, error = execute("echo $((#{expression}))")
       assert_equal 2, status

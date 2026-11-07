@@ -2,21 +2,29 @@ require "strscan"
 
 module Kward
   module NativeShell
-    # Bounded arithmetic ASTs preserve short-circuiting and lvalue ownership.
+    # Integer arithmetic ASTs preserve short-circuiting and lvalue ownership.
     # Parsing is independent of shell state; evaluation never uses Ruby eval.
     module Arithmetic
       class Error < StandardError; end
-      MAX_BYTES = 4_096
       MAX_BITS = 4_096
       MAX_DEPTH = 100
 
       def self.integer(text)
         value = text.to_s.strip
         return 0 if value.empty?
-        unless value.bytesize <= MAX_BYTES && value.match?(/\A[+-]?(?:0[xX][0-9a-fA-F]+|0[0-7]*|[1-9][0-9]*)\z/)
+        unless value.match?(/\A[+-]?(?:0[xX][0-9a-fA-F]+|0[0-7]*|[1-9][0-9]*)\z/)
           raise Error, "arithmetic requires an integer value"
         end
-        bounded(Integer(value, 0))
+        negative = value.start_with?("-")
+        digits = value.delete_prefix("+").delete_prefix("-")
+        base = digits.start_with?("0x", "0X") ? 16 : digits.start_with?("0") ? 8 : 10
+        digits = digits[2..] if base == 16
+        digits = digits.sub(/\A0+/, "")
+        return 0 if digits.empty?
+        # More significant digits than bits cannot fit in any supported base.
+        # Reject before constructing a huge integer; leading zeros cost no bits.
+        raise Error, "arithmetic result exceeds #{MAX_BITS} bits" if digits.length > MAX_BITS
+        bounded(Integer(digits, base) * (negative ? -1 : 1))
       end
 
       def self.bounded(value)
@@ -105,10 +113,25 @@ module Kward
           when :conditional
             condition, yes, no = args
             evaluate(evaluate(condition).zero? ? no : yes)
-          when :binary
-            operator, left, right = args
-            value = evaluate(left)
-            if operator == "&&"
+          when :binary then binary_chain(node)
+          end
+        ensure
+          @depth -= 1
+        end
+
+        private
+
+        # A long left-associative chain is not recursive expression nesting.
+        def binary_chain(node)
+          operations = []
+          while node.first == :binary
+            _, operator, left, right = node
+            operations << [operator, right]
+            node = left
+          end
+          value = evaluate(node)
+          operations.reverse_each do |operator, right|
+            value = if operator == "&&"
               value.zero? ? 0 : (evaluate(right).zero? ? 0 : 1)
             elsif operator == "||"
               value.zero? ? (evaluate(right).zero? ? 0 : 1) : 1
@@ -116,11 +139,8 @@ module Kward
               Arithmetic.binary(operator, value, evaluate(right))
             end
           end
-        ensure
-          @depth -= 1
+          value
         end
-
-        private
 
         def read(name)
           raise Error, "recursive arithmetic variable: #{name}" if @reading.include?(name)
@@ -145,7 +165,6 @@ module Kward
         PRECEDENCE = LEVELS.each_with_index.each_with_object({}) { |(operators, index), result| operators.each { |operator| result[operator] = index + 1 } }.freeze
 
         def initialize(source)
-          raise Error, "arithmetic expression exceeds #{MAX_BYTES} bytes" if source.bytesize > MAX_BYTES
           @scanner = StringScanner.new(source)
           @depth = 0
           advance
