@@ -164,7 +164,7 @@ Relevant code: arithmetic, parser, alias, substitution, pattern, glob, and job l
 
 Treat this as a separate milestone after core correctness. Divide it into small, independently tested commits.
 
-- [ ] Implement the command-history model and `fc`, including `HISTFILE`, `HISTSIZE`, and `FCEDIT` behavior.
+- [x] Implement the command-history model and `fc`, including `HISTFILE`, `HISTSIZE`, and `FCEDIT` behavior.
 - [ ] Implement the required vi command-line editing behavior and `set -o vi`.
 - [ ] Implement `set -o ignoreeof`.
 - [ ] Accept `set -o nolog`; the obsolete option may have no effect where the standard permits that.
@@ -172,7 +172,7 @@ Treat this as a separate milestone after core correctness. Divide it into small,
 - [ ] Parameter-expand `PS4` for execution traces rather than hard-coding `+ `.
 - [ ] Implement mail notification behavior controlled by `MAIL`, `MAILPATH`, and `MAILCHECK`.
 - [ ] Preserve existing guarded `ENV` startup and parameter-expanded prompt behavior.
-- [ ] Define private storage and cleanup rules for history and edited history files, and test cancellation and editor failures.
+- [x] Define private storage and cleanup rules for history and edited history files, and test cancellation and editor failures.
 
 **Complete when:** the UP entries in the requirement matrix are implemented and tested, or the project explicitly declines that optional profile without claiming it is complete.
 
@@ -328,3 +328,10 @@ Do not expand this plan merely to add Bash arrays, `[[ … ]]`, regex matching, 
 - Full repository suite: **2,615 runs, 13,829 assertions, 1 failure, 0 errors, 2 skips**, seed 26466, `/tmp/kward-step9-full.log`. The only failure remains `TestEditorPrompt#test_editor_stays_visible_and_shows_spinner_while_agent_runs`, `test/test_editor_prompt.rb:109`, expected `· ·` versus `⠋`. Existing Bubblewrap integration skips remain; unrelated tests were not changed.
 - `git diff --check` passed. Verified on macOS arm64 / Ruby 4.0.3; Linux verification remains pending. Step 8 was committed separately as `6dc9e32` (`fix(shell): recover safely from failed interactive exec`).
 - Authorities: https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html (2.3, 2.6.3/2.6.4, 2.7, 2.9, 2.14), and https://pubs.opengroup.org/onlinepubs/9799919799/utilities/sh.html (input files). This record does not close the remaining Base/UP/XSI audits or certify conformance.
+
+## Step 10a verification — standalone history and fc
+
+- Implemented lazy standalone history, numeric/relative/prefix selection, listing/reverse ranges, substitution, direct-argv editor invocation, assignment/redirection inheritance, failed-editor suppression, and private temporary cleanup. HISTFILE persistence is opt-in; HISTSIZE defaults to 512 and is sampled at initialization. Unsafe files fall back to memory, without chmod or following symlinks; forked copies cannot persist parent history.
+- Added six history regressions. Initial four tests failed before implementation. Cancellation uses an isolated runtime with an injected interrupted editor; a first test fixture assumed Minitest `stub`, unavailable here, and was corrected to the repository's singleton-method pattern without changing assertions.
+- Related shell suite: **355 runs, 2,446 assertions, no failures/errors/skips**, seed 50823 (`/tmp/kward-step10-history.log`). `git diff --check` passed. macOS arm64 / Ruby 4.0.3 verified; Linux remains pending.
+- References: https://pubs.opengroup.org/onlinepubs/9799919799/utilities/fc.html and https://pubs.opengroup.org/onlinepubs/9799919799/utilities/sh.html. Step 10 remains open for editing, prompts/options, mail, and the remaining UP audit.

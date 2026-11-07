@@ -17,6 +17,7 @@ class TestShellPrompt < KwardTestCase
   def test_shell_prompt_describes_the_native_subset_without_implicit_fallback
     instructions = Kward::ShellPrompt.system_message.fetch(:content)
     assert_includes instructions, "native kwsh, not Bash or /bin/sh"
+    assert_includes instructions, "Native fc and HISTFILE/HISTSIZE/FCEDIT belong to standalone history"
     assert_includes instructions, "kwsh <file> [arguments]"
     assert_includes instructions, "interpreted natively after ENOEXEC"
     assert_includes instructions, "permission failures and binary-looking files are rejected"

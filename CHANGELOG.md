@@ -6,6 +6,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added standalone native command history and `fc` listing, substitution, and private editor workflows, with opt-in `HISTFILE` persistence and `HISTSIZE` retention. Hosted history remains separate.
+
 - Standalone kwsh now supports inherited descriptors 3–9 for redirection, duplication, closing, native scripts, child commands, and executable-text fallback, without exposing hosted private descriptors.
 
 - Added bounded multi-character locale collation across native case patterns, parameter trimming, and globs, plus requirement-linked POSIX and installed-locale regression coverage.

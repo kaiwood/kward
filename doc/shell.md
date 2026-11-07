@@ -159,7 +159,7 @@ ENV="$HOME/.kwsh-env" kwsh -i
 kwsh -ec 'printf "%s\n" "$1"' example argument
 ```
 
-Interactive startup parameter-expands `ENV` and executes the named native file when it exists. Non-interactive invocations ignore `ENV`; startup loading is also disabled when real and effective user or group IDs differ. This executable startup file is separate from declarative `kwshrc`. `PS1` and `PS2` support parameter expansion; command substitutions in startup path or prompt text are rejected. Errors leave the prompt usable, and input is read without consuming a following command's stdin. Shell options may be grouped and may follow `-c` or `-s`. History editing, `fc`, and vi/emacs line-editing modes are not provided by this plain prompt.
+Interactive startup parameter-expands `ENV` and executes the named native file when it exists. Non-interactive invocations ignore `ENV`; startup loading is also disabled when real and effective user or group IDs differ. This executable startup file is separate from declarative `kwshrc`. `PS1` and `PS2` support parameter expansion; command substitutions in startup path or prompt text are rejected. Errors leave the prompt usable, and input is read without consuming a following command's stdin. Shell options may be grouped and may follow `-c` or `-s`. Standalone command history and `fc` are available; vi/emacs line-editing modes remain separate milestones.
 
 Executable text files without a shebang also run natively when invoked from kwsh:
 
@@ -449,7 +449,7 @@ Authority: [POSIX shell language](https://pubs.opengroup.org/onlinepubs/97999197
 
 ### Remaining compatibility limits
 
-This is **not yet a fully POSIX- or Bash-conforming shell**. Additional builtin options, arithmetic array references, advanced array forms, and exact Bash/POSIX regular-expression semantics remain outside the implemented subset. `wait -n`, Bash pseudo-traps (`DEBUG`, `ERR`, `RETURN`), XSI `ulimit`, and standalone history/vi/emacs editing are not implemented.
+This is **not yet a fully POSIX- or Bash-conforming shell**. Additional builtin options, arithmetic array references, advanced array forms, and exact Bash/POSIX regular-expression semantics remain outside the implemented subset. `wait -n`, Bash pseudo-traps (`DEBUG`, `ERR`, `RETURN`), XSI `ulimit`, and standalone vi/emacs editing are not implemented.
 
 `capture`, `pty`, `clear`, declarative `source`, and `kward edit` remain prompt conveniences rather than scripting builtins. Native aliases use read-time token expansion; the separate one-off `!` path retains its existing single command-prefix replacement. `kwshrc` stays non-executing.
 
@@ -479,7 +479,7 @@ Native scripting is being extended in tested stages, targeting POSIX.1-2024 plus
 The remaining tracks are separate:
 
 - **POSIX verification:** broader independent clause-by-clause audits and platform/locale matrices. The tests below are regression coverage, not certification of every POSIX requirement.
-- **Optional utility/editing profiles:** XSI `ulimit`, history/`fc`, and vi/emacs editing.
+- **Optional utility/editing profiles:** XSI `ulimit` and vi/emacs editing.
 - **Bash extensions:** remaining array/conditional forms, arithmetic array references, `wait -n`, pseudo-traps, and exact Bash regex/machine-integer behavior.
 - **Remaining shared safety policies:** the resource inventory above includes limits that also affect standalone POSIX behavior; these are open conformance gaps, not just hosted differences.
 - **Intentional hosted differences:** reserved shutdown signals, supervised `exec`, tab-owned descendants, and host capture/time limits. Standalone interactive execution does not adopt hosted cleanup or reserve its shutdown signal.
@@ -505,6 +505,18 @@ Installed multi-character collation tests require Czech or Slovak UTF-8 locale d
 Language and state transitions remain native; implementing these features must not introduce a Bash or `/bin/sh` fallback. Declarative `kwshrc` loading and ordinary model/RPC command isolation remain separate contracts.
 
 References: [POSIX Shell Command Language](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html), [POSIX read](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/read.html), [Bash parameter expansion](https://www.gnu.org/software/bash/manual/html_node/Shell-Parameter-Expansion.html), and [Bash arrays](https://www.gnu.org/software/bash/manual/html_node/Arrays.html), [POSIX wait](https://pubs.opengroup.org/onlinepubs/9799919799.2024edition/utilities/wait.html), and [POSIX job control](https://pubs.opengroup.org/onlinepubs/9799919799.2024edition/utilities/fg.html), and [Apple newlocale](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/newlocale.3.html).
+
+### Standalone command history
+
+In `kwsh -i`, use `fc -l` to list recent commands, `fc -s old=new` to run the previous command with one replacement, or `fc -e vi` to edit and execute it. Numbers, negative offsets and command prefixes select entries; `fc -lnr 1 10` lists a reversed range without numbers. Replayed commands use the native interpreter, with the same assignments and redirections as `fc`.
+
+History defaults to **512 entries in memory**. For persistence, set `HISTFILE` to a private file before the first prompt (for example in your `ENV` startup file). `HISTSIZE` is a decimal entry count. Both are read once when history is first used; later changes do not reconfigure it. No file is created implicitly under `HOME`. History can contain secrets: do not enable persistence for sensitive sessions.
+
+History files use private JSONL records with stable, increasing numbers. New files are mode 0600; existing files must be regular, owned by the current user, mode 0600, and have one hard link. Symlinks and unsafe/inaccessible files fall back to memory without modifying their permissions. Updates are locked, but simultaneous shells can overwrite each other's snapshots; use separate files for independent terminals. Forked environments do not write their parent's history.
+
+`FCEDIT` is parameter-expanded and names one executable (default `ed`), not shell source or a command plus arguments. Explicit `fc -e editor` overrides it. Edited commands live in a mode-0600 file inside a private temporary directory, removed on completion, failure, or cancellation. A failed/cancelled editor never executes its buffer or adds it to history. As with other temporary files, an uncatchable process kill can leave a private directory behind.
+
+Native `fc` is standalone-only. Kward's hosted `/shell` retains its existing workspace history and composer ownership; RPC does not acquire a terminal editor or history-file API.
 
 ## Ask the shell agent
 

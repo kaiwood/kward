@@ -117,7 +117,9 @@ module Kward
               rescue SyntaxError
                 # Runtime owns the diagnostic, status, and interactive recovery.
               end
-              runtime.run(text, input: input, output: output, error: error)
+              runtime.with_history_entry(text) do
+                runtime.run(text, input: input, output: output, error: error)
+              end
               source.clear
             rescue Interrupt
               runtime.interrupt_input

@@ -124,6 +124,7 @@ module Kward
         env = clear ? {} : environment
         NativeProcess.validate(arguments, env)
         if @replace_process
+          @history&.commit_pending
           result = NativeProcess.replace(executable, arguments, env, cwd: @directory, streams: streams, mask: @umask, signals: child_signal_dispositions, recover: recover)
           NativeProcess.redirect_standard_streams(@persistent_descriptors) if recover
           raise Flow.new(recover ? :abort : :exit, result)

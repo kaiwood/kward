@@ -7,6 +7,7 @@ require_relative "native_directory"
 require_relative "native_expansion"
 require_relative "native_substitution"
 require_relative "native_builtins"
+require_relative "native_history"
 require_relative "native_arrays"
 require_relative "native_jobs"
 require_relative "native_traps"
@@ -35,6 +36,7 @@ module Kward
       include Expansion
       include Substitution
       include Builtins
+      include HistoryCommands
       include Condition
       include Arrays
       include Jobs
@@ -42,7 +44,7 @@ module Kward
 
       UNSUPPORTED = %w[local typeset ulimit builtin source].freeze
       SPECIAL = %w[export readonly eval . unset exit return break continue shift set exec trap times :].freeze
-      BUILTINS = (SPECIAL + %w[true false cd pwd alias unalias read getopts command shopt declare umask kwsh jobs fg bg wait kill hash type]).freeze
+      BUILTINS = (SPECIAL + %w[true false cd pwd alias unalias read getopts command shopt declare umask kwsh jobs fg bg wait kill hash type fc]).freeze
 
       attr_reader :variables, :aliases, :status, :exited
 
@@ -474,6 +476,7 @@ module Kward
         when "command" then command_builtin(args, streams)
         when "type" then command_builtin(["-V", "--", *args], streams)
         when "hash" then hash_builtin(args, streams)
+        when "fc" then fc_builtin(args, streams)
         when "times" then times_builtin(args, streams)
         when "getopts" then getopts(args, streams)
         when "jobs" then jobs_builtin(args, streams)

@@ -109,7 +109,7 @@ Each name is an independent audit target, even in grouped rows. Audit required o
 
 | ID | Requirement / POSIX reference | Profile | Owner | Coverage / verification needed | Status |
 | --- | --- | --- | --- | --- | --- |
-| UP-1 | sh history; [fc](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/fc.html); HISTFILE/HISTSIZE/FCEDIT | UP | `script_runner.rb`, future history owner | No native history/fc contract tests; add private storage/editor/cancellation/failed-editor cases (step 10) | optional profile |
+| UP-1 | sh history; [fc](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/fc.html); HISTFILE/HISTSIZE/FCEDIT | UP | `native_history.rb`, `script_runner.rb` | `test_native_shell_history.rb`: ranges, replay, private persistence, retention, failed/cancelled editors; hosted history intentionally separate | implemented/tested (macOS); Linux pending |
 | UP-2 | sh vi editing; SCL set `-o vi` | UP | `script_runner.rb`, future line editor | No native vi mode; not Kward composer editing (step 10) | optional profile |
 | UP-3 | SCL set `-o ignoreeof` | UP | `native_builtins.rb`, `script_runner.rb` | Not accepted; terminal EOF regression needed (step 10) | optional profile |
 | UP-4 | SCL set `-o nolog` (permitted no-op) | UP | `native_builtins.rb` | Not accepted; option round-trip coverage needed (step 10) | optional profile |
