@@ -2,6 +2,7 @@ require "fiddle"
 require "fcntl"
 require "io/nonblock"
 require "rbconfig"
+require_relative "native_exec_state"
 
 module Kward
   module NativeShell
@@ -46,6 +47,38 @@ module Kward
         end
       end
 
+      def self.standalone(arguments, name:)
+        inherited = inherited_descriptors
+        # Ruby owns private wake-up descriptors before this script starts.
+        # Re-exec the trusted VM with 3–9 occupied so its new private handles
+        # cannot collide with shell redirections. PID and user IOs are retained.
+        bootstrap = <<~RUBY
+          $LOAD_PATH.replace(#{$LOAD_PATH.map { |path| File.expand_path(path) }.inspect})
+          require #{File.expand_path("script_runner", __dir__).inspect}
+          descriptors = ARGV.shift.split(",").to_h do |value|
+            fd = Integer(value)
+            source = IO.for_fd(fd, autoclose: false)
+            io = IO.for_fd(source.fcntl(Fcntl::F_DUPFD, 32))
+            io.close_on_exec = true
+            io.sync = true
+            [fd, io]
+          end
+          File.open(File::NULL, "r+") do |guard|
+            (3..9).each do |fd|
+              result = Kward::NativeShell::NativeProcess::DUP2.call(guard.fileno, fd)
+              raise SystemCallError.new("dup2", Fiddle.last_error) if result < 0
+              IO.for_fd(fd, autoclose: false).close_on_exec = true
+            end
+          end
+          $0 = ARGV.shift
+          exit Kward::NativeShell::ScriptRunner.run(ARGV, descriptors: descriptors, own_descriptors: true)
+        RUBY
+        mappings = (3..9).to_h { |fd| [fd, inherited.fetch(fd) { [File::NULL, File::RDWR] }] }
+        # Only the trusted Ruby executable uses Ruby's exec API; user programs
+        # still go through execve and the native-only ENOEXEC path below.
+        Kernel.exec(RbConfig.ruby, "--disable=gems,rubyopt", "-e", bootstrap, "--", inherited.keys.join(","), name, *arguments, **mappings)
+      end
+
       def self.ignored_signals
         # Darwin and Linux place the handler pointer first. This buffer exceeds
         # both supported sigaction layouts; querying never changes a disposition.
@@ -83,7 +116,7 @@ module Kward
         end
       end
 
-      def self.replace(executable, arguments, environment, cwd:, streams:, mask: nil, hosted: false, signals: {})
+      def self.replace(executable, arguments, environment, cwd:, streams:, mask: nil, hosted: false, signals: {}, recover: false)
         validate(arguments, environment)
         load_path = $LOAD_PATH.map { |path| File.expand_path(path) }
         streams.values.compact.uniq.each(&:flush)
@@ -91,17 +124,31 @@ module Kward
         # This runs only in an exec-bound process, never in the agent host.
         if cwd.respond_to?(:enter)
           cwd.protect_descriptors(streams.keys)
+        end
+        if recover
+          streams.each_key do |fd|
+            next if fd < 3 || FCNTL.call(fd, Fcntl::F_GETFD, 0) < 0
+            # Embedded callers must not overwrite Ruby's live internal handles.
+            IO.for_fd(fd, autoclose: false)
+          end
+          state = ExecState.new(([0, 1, 2] + streams.keys + streams.values.compact.map(&:fileno)).uniq)
+        end
+        if cwd.respond_to?(:enter)
           cwd.enter
         else
           Dir.chdir(cwd)
         end
         # Snapshot all sources before replacing any standard descriptor:
         # `2>&1 >file` must retain the original stdout for stderr.
-        copies = streams.transform_values do |io|
-          next unless io
+        copies = {}
+        streams.each do |descriptor, io|
+          unless io
+            copies[descriptor] = nil
+            next
+          end
           copy = IO.for_fd(io.fcntl(Fcntl::F_DUPFD, 32))
           copy.close_on_exec = true
-          copy
+          copies[descriptor] = copy
         end
         [STDIN, STDOUT, STDERR].each_with_index do |standard, descriptor|
           source = copies[descriptor]
@@ -110,6 +157,8 @@ module Kward
             standard.close_on_exec = false
             standard.nonblock = false
             standard.sync = true
+          elsif recover
+            standard.reopen(File::NULL, descriptor.zero? ? "r" : "w")
           else
             standard.close
           end
@@ -127,7 +176,10 @@ module Kward
         end
         copies.values.compact.each(&:close)
         File.umask(mask) if mask
-        signals.each { |name, handler| Signal.trap(name, handler) }
+        signals.each do |name, handler|
+          previous = Signal.trap(name, handler)
+          state.signals[name] = previous if state
+        end
         begin
           execve(executable, arguments, environment)
         rescue Errno::ENOEXEC
@@ -161,6 +213,35 @@ module Kward
           STDERR.flush
         end
         e.is_a?(Errno::ENOENT) ? 127 : 126
+      ensure
+        begin
+          state&.restore
+        ensure
+          state&.close
+          copies&.each_value { |io| io.close if io && !io.closed? }
+        end
+      end
+
+      def self.redirect_standard_streams(streams)
+        copies = {}
+        streams.each do |fd, io|
+          next unless fd < 3
+          copies[fd] = io && IO.for_fd(io.fcntl(Fcntl::F_DUPFD, 32))
+          copies[fd].close_on_exec = true if copies[fd]
+        end
+        copies.each do |fd, source|
+          standard = [STDIN, STDOUT, STDERR][fd]
+          if source
+            standard.reopen(source)
+            standard.sync = true
+          else
+            # POSIX permits closed standard descriptors to be reopened on an
+            # unspecified file. Keep the standalone prompt's Ruby IOs usable.
+            standard.reopen(File::NULL, fd.zero? ? "r" : "w")
+          end
+        end
+      ensure
+        copies&.each_value { |io| io.close if io && !io.closed? }
       end
 
       def self.execve(executable, arguments, environment)

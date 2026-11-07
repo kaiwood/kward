@@ -135,12 +135,12 @@ Relevant code: `native_traps.rb`, `native_jobs.rb`, `script_runner.rb`, and proc
 
 Relevant code: `native_builtins.rb`, `native_process.rb`, and standalone interactive execution.
 
-- [ ] Prevent a missing executable from terminating an interactive shell.
-- [ ] Test both PATH lookup failure and an explicit missing pathname; also audit found-but-unexecutable files and other execution failures.
-- [ ] Ensure recovery leaves the interpreter's descriptors, directory state, and signal dispositions usable. Merely removing an exit instruction is not sufficient if replacement preparation has already mutated process state.
-- [ ] Verify the user can submit a fresh command after the failure. Do not require continuation of an abandoned input submission where the standard permits recovery at the next submission.
-- [ ] Preserve true process replacement on successful standalone `exec`, including PID behavior and native ENOEXEC fallback.
-- [ ] Keep hosted supervised execution and shutdown behavior explicit and separately tested.
+- [x] Prevent a missing executable from terminating an interactive shell.
+- [x] Test both PATH lookup failure and an explicit missing pathname; also audit found-but-unexecutable files and other execution failures.
+- [x] Ensure recovery leaves the interpreter's descriptors, directory state, and signal dispositions usable. Merely removing an exit instruction is not sufficient if replacement preparation has already mutated process state.
+- [x] Verify the user can submit a fresh command after the failure. Do not require continuation of an abandoned input submission where the standard permits recovery at the next submission.
+- [x] Preserve true process replacement on successful standalone `exec`, including PID behavior and native ENOEXEC fallback.
+- [x] Keep hosted supervised execution and shutdown behavior explicit and separately tested.
 
 **Complete when:** failed interactive execution recovers safely, successful standalone replacement still replaces the process, and non-interactive error consequences remain correct.
 
@@ -307,3 +307,11 @@ Do not expand this plan merely to add Bash arrays, `[[ … ]]`, regex matching, 
 - `git diff --check` passed. Verified with Ruby 4.0.3 on macOS arm64. Linux verification remains **open**: the installed Docker client cannot connect to its daemon; no daemon was started or images downloaded. Ruby-reserved ILL/FPE/BUS/SEGV/VTALRM actions remain an explicit limitation (SIG-5), not a closed conformance requirement.
 - Step 6 implementation commit: `b4bddbc` (`fix(shell): support inherited standalone descriptors`). Step 7 is committed separately after this verification record.
 - Authorities: https://pubs.opengroup.org/onlinepubs/9799919799/utilities/sh.html (ASYNCHRONOUS EVENTS), https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html#tag_19_29 (trap and SCL 2.12/2.13), and Ruby's reserved-signal implementation at https://github.com/ruby/ruby/blob/37003e92e8e59dca22c8f71fff101109192b82a9/signal.c#L1359-L1383 .
+
+## Step 8 verification — failed interactive exec
+
+- Added isolated, bounded subprocess regressions in `test/test_native_shell_exec.rb`: missing PATH and explicit paths, denied files, binary rejection, directories and long names; repeated failures, persistent stdin/stdout/stderr redirection, closed stderr, hidden reservation handles, signals/cwd/mask/FD flags, backup cleanup, and same-PID successful replacement. Initial suite: 3 runs, 16 assertions, 2 failures.
+- POSIX exec explicitly requires successfully made redirections to remain after a failure that does not exit. Recovery restores process-internal state, not the user's successful redirections. Fresh submissions are tested; continuation of the failed submission is not required.
+- A regression exposed Ruby timer-thread descriptor corruption when low descriptors were closed during a failed replacement. Standalone startup now performs a same-PID trusted-Ruby bootstrap with 3–9 reserved, moves inherited user IOs to private CLOEXEC handles, and keeps reservation handles out of the shell map. Hosted startup is unchanged. User programs still use direct execve and native-only ENOEXEC fallback.
+- Focused suite: **8 runs, 67 assertions**, no failures/errors/skips (seed 46837). Related suite before the final cleanup regression and prompt assertions: **344 runs, 2,373 assertions**, no failures/errors/skips (seed 22290); the final focused/prompt checks cover those additions. Full repository verification follows step 9.
+- Verified on macOS arm64; Linux remains unverified. Authority: https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html#exec and SCL 2.8.1 / 2.9.1.6.

@@ -103,12 +103,19 @@ module Kward
         end
         if args.empty?
           persist_descriptors(streams, @streams)
+          NativeProcess.redirect_standard_streams(@persistent_descriptors) if @replace_process
           return 0
         end
+        recover = @replace_process && interactive_scope?
+        persist_descriptors(streams, @streams) if recover
         executable = executable_path(args.first)
         unless executable
           streams[2]&.puts("kwsh: #{args.first}: command not found")
-          raise Flow.new(:exit, 127) unless @interactive
+          if recover
+            NativeProcess.redirect_standard_streams(@persistent_descriptors)
+            raise Flow.new(:abort, 127)
+          end
+          raise Flow.new(:exit, 127) unless interactive_scope?
           return 127
         end
         arguments = args.dup
@@ -117,8 +124,9 @@ module Kward
         env = clear ? {} : environment
         NativeProcess.validate(arguments, env)
         if @replace_process
-          result = NativeProcess.replace(executable, arguments, env, cwd: @directory, streams: streams, mask: @umask, signals: child_signal_dispositions)
-          raise Flow.new(:exit, result)
+          result = NativeProcess.replace(executable, arguments, env, cwd: @directory, streams: streams, mask: @umask, signals: child_signal_dispositions, recover: recover)
+          NativeProcess.redirect_standard_streams(@persistent_descriptors) if recover
+          raise Flow.new(recover ? :abort : :exit, result)
         else
           pid = NativeProcess.spawn(executable, arguments, env, cwd: @directory, streams: streams, mask: @umask, hosted: @hosted, signals: child_signal_dispositions)
           result = wait(pid)

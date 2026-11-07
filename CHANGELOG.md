@@ -40,6 +40,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Failed standalone interactive kwsh `exec` now recovers for a fresh submission while retaining successful redirections. Internal IO, directory, mask, and signal state is restored; descriptor reservation keeps Ruby VM handles out of the shell's 3–9 range.
+
 - Corrected native kwsh interactive signal defaults, protected inherited ignored signals, and made `trap -p` output include defaults and survive subshell save/restore. Interrupted `wait` traps now observe the wait status and run before `errexit`; hosted shutdown ownership is unchanged.
 
 - Kept native shell directory identity across renames for execution, sourcing, redirection and globbing, with owned close-on-exec handles and no host cwd changes. Logical `cd` now validates components before removing `..`.

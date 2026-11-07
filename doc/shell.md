@@ -362,6 +362,19 @@ Standalone interactive kwsh ignores `TERM` and `QUIT` by default. It also ignore
 
 In standalone `kwsh`, `exec program args...` uses direct `execve`: it preserves the PID, does not run an EXIT trap on success, and never falls back to `/bin/sh`. `exec -c` clears the child's environment; `-a name` selects argv[0], `-l` prefixes it with `-`, and `--` ends options. Without a program, redirections persist.
 
+A failed `exec` in standalone interactive kwsh reports status 127 (not found) or 126 (other execution failure) and accepts a fresh submission. The failed submission may be abandoned. Successful redirections on that `exec` remain in effect, including input for the next submission; save descriptors first if you intend to restore them:
+
+```sh
+exec 8>&1 9>&2
+exec ./missing >attempt.log 2>attempt.err
+printf 'status=%s\n' "$?"       # still writes to attempt.log
+exec 1>&8 2>&9                   # restore output and diagnostics
+```
+
+The interpreter restores its internal descriptors, directory, signal handlers, and process mask after failed replacement. Closed standard descriptors may be backed by `/dev/null`, as POSIX permits, so a closed stderr does not break prompt rendering. Non-interactive exec failures still exit. Successful exec still replaces the process with the same PID, including native executable-text fallback.
+
+Standalone startup performs one same-PID re-exec of the trusted Ruby binary to reserve descriptor slots 3–9 away from Ruby's private wake-up handles. The reservation handles are close-on-exec and are not shell descriptors; inherited user descriptors remain available through the explicit shell map. Ruby startup hooks are not rerun by this internal bootstrap. This is not used by hosted workers and does not change RPC/Pan capabilities or sandbox boundaries.
+
 The TUI worker must retain its private control channel. Its hosted `exec` therefore runs the replacement program, reports final state, and ends the logical shell session rather than replacing the protocol process. Hosted child scopes also retain their supervisors so that `exec` cannot abandon background descendants. `USR2` is reserved for hosted shutdown, omitted from that worker's trap listings, and cannot be trapped there; standalone scripts may trap it normally. Closing a tab is forced host cleanup, not a normal EXIT-trap invocation.
 
 ### Read aliases and scripts in order

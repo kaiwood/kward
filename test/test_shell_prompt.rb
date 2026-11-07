@@ -34,6 +34,8 @@ class TestShellPrompt < KwardTestCase
     assert_includes instructions, "shopt -s globstar"
     assert_includes instructions, "Background jobs, wait, traps, exec, jobs, fg/bg, and kill are supported"
     assert_includes instructions, "USR2 is reserved for hosted shutdown"
+    assert_includes instructions, "Failed standalone interactive exec accepts a fresh submission"
+    assert_includes instructions, "successful redirections remain in effect"
     assert_includes instructions, "trap -p includes defaults"
     assert_includes instructions, "inherited ignored signals cannot be changed in non-interactive shells"
     assert_includes instructions, "child commands reset shell-only defaults"
