@@ -1079,6 +1079,18 @@ class TestNativeShell < KwardTestCase
     assert_includes error, "invalid variable name"
   end
 
+  def test_readonly_p_output_restores_value_and_attribute
+    _, declarations, = execute("readonly AUDIT_VALUE='two words'; readonly -p")
+    fresh = Kward::NativeShell::Runtime.new(cwd: @directory, env: {})
+    status, _, error = execute(declarations + "\nAUDIT_VALUE=changed", runtime: fresh)
+
+    assert_equal 2, status
+    assert_equal "two words", fresh.variables["AUDIT_VALUE"]
+    assert_includes error, "readonly variable"
+  ensure
+    fresh&.close
+  end
+
   def test_readonly_command_lookup_and_getopts_keep_interpreter_state
     assert_output("external:pwd\navalue:3", <<~'SHELL')
       printf() { command printf '%s' external; }
