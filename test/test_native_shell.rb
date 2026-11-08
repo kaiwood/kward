@@ -436,6 +436,10 @@ class TestNativeShell < KwardTestCase
     assert_output("<one two><>7:outer", 'set -- outer; report "one two" ""; printf "%s:%s" "$?" "$1"')
   end
 
+  def test_return_uses_last_status_or_explicit_status
+    assert_output("1:42", 'report() { false; return; }; report; printf "%s:" "$?"; wrapped() { return 42; }; wrapped; printf "%s" "$?"')
+  end
+
   def test_empty_quoted_at_does_not_create_an_argument
     assert_output("0:2:a b", 'count() { printf "%s" "$#"; }; count "$@"; set -- "a b" ""; printf ":"; count "$@"; printf ":%s" "$1"')
   end
