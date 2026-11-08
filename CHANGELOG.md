@@ -6,6 +6,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added native POSIX.1-2024 `ulimit` queries and settings for file/core size, data, descriptors, stack, CPU time, and address space, with soft/hard selection and owned-process isolation from the Kward host and other sessions.
+
 - Added standalone native vi line editing with history search, motions/operators, repeat/undo, pathname expansion, and private external-vi editing. Terminal modes and command stdin are preserved; RPC reports history, line editing, and mail notifications as unsupported.
 
 - Added native PS4 parameter expansion, standalone PS1 history numbering, terminal `ignoreeof`, compatible no-op `nolog`, and MAIL/MAILPATH/MAILCHECK notifications.
@@ -45,6 +47,8 @@ All notable changes to Kward will be documented in this file.
 - Routed plugin-host Codex streaming and the OpenRouter proxy through Kward's normal Codex provider client and configured subscription credentials, rather than the public Responses API path.
 
 ### Fixed
+
+- Native `type` now rejects a missing operand, and `kill -s name` / `kill -name` accept case-independent signal names as required by POSIX.
 
 - Removed native arithmetic's 4,096-byte expression ceiling and recursive evaluation of flat binary chains. Long non-overflowing expressions and zero-padded integers now work; precision, nesting, and other safety policies remain explicit in the resource-limit inventory.
 

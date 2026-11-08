@@ -7,7 +7,7 @@ module Kward
     module ScriptRunner
       module_function
 
-      def run(arguments, input: $stdin, output: $stdout, error: $stderr, name: nil, descriptors: {}, own_descriptors: false, hosted: false)
+      def run(arguments, input: $stdin, output: $stdout, error: $stderr, name: nil, descriptors: {}, own_descriptors: false, hosted: false, process_owned: false)
         args = arguments.dup
         options = []
         mode = nil
@@ -41,7 +41,7 @@ module Kward
         name ||= command_name || file || $0
         interactive ||= !hosted && !command && !file && input.tty? && error.tty?
         runtime = Runtime.new(arguments: args, name: name, replace_process: !hosted,
-                              interactive: interactive || hosted, hosted: hosted, descriptors: descriptors, own_descriptors: own_descriptors)
+                              interactive: interactive || hosted, hosted: hosted, descriptors: descriptors, own_descriptors: own_descriptors, process_owned: process_owned)
         runtime.send(:reset_child_state, job_group: Process.getpgrp) if hosted
         runtime.with_signals do
           unless options.empty?

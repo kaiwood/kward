@@ -71,7 +71,7 @@ module Kward
             end
           end
           $0 = ARGV.shift
-          exit Kward::NativeShell::ScriptRunner.run(ARGV, descriptors: descriptors, own_descriptors: true)
+          exit Kward::NativeShell::ScriptRunner.run(ARGV, descriptors: descriptors, own_descriptors: true, process_owned: true)
         RUBY
         mappings = (3..9).to_h { |fd| [fd, inherited.fetch(fd) { [File::NULL, File::RDWR] }] }
         # Only the trusted Ruby executable uses Ruby's exec API; user programs
@@ -201,7 +201,7 @@ module Kward
               [fd, io]
             end
             name = ARGV.shift
-            exit Kward::NativeShell::ScriptRunner.run(["--", *ARGV], name: name, descriptors: descriptors, own_descriptors: true, hosted: hosted)
+            exit Kward::NativeShell::ScriptRunner.run(["--", *ARGV], name: name, descriptors: descriptors, own_descriptors: true, hosted: hosted, process_owned: true)
           RUBY
           descriptors = streams.filter_map { |fd, io| fd if fd > 2 && io }.join(",")
           execve(RbConfig.ruby, [RbConfig.ruby, "--disable=gems,rubyopt", "-e", bootstrap, "--",

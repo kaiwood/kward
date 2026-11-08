@@ -186,6 +186,58 @@ module Kward
         0
       end
 
+      RESOURCE_LIMITS = {
+        "c" => [:CORE, 512, "core file size (512 bytes)"],
+        "d" => [:DATA, 1024, "data segment size (1024 bytes)"],
+        "f" => [:FSIZE, 512, "file size (512 bytes)"],
+        "n" => [:NOFILE, 1, "open file descriptors"],
+        "s" => [:STACK, 1024, "stack size (1024 bytes)"],
+        "t" => [:CPU, 1, "CPU time (seconds)"],
+        "v" => [:AS, 1024, "address space size (1024 bytes)"]
+      }.transform_values(&:freeze).freeze
+
+      def ulimit_builtin(args, streams)
+        flags = builtin_flags(args, "HSacdfnstv", "ulimit")
+        selected = flags & RESOURCE_LIMITS.keys
+        all = flags.include?("a")
+        if (flags.include?("H") && flags.include?("S")) || selected.length > 1 ||
+            (all && (!selected.empty? || !args.empty?)) || args.length > 1
+          raise ExecutionError, "ulimit: incompatible options or operands"
+        end
+        selected = all ? RESOURCE_LIMITS.keys : [selected.first || "f"]
+        if args.empty?
+          selected.each do |flag|
+            resource, unit, label = RESOURCE_LIMITS.fetch(flag)
+            value = Process.getrlimit(resource)[flags.include?("H") ? 1 : 0]
+            text = value == Process::RLIM_INFINITY ? "unlimited" : (value / unit).to_s
+            write_line(streams, all ? "#{label} (-#{flag}) #{text}" : text)
+          end
+        else
+          # Never lower an embedding application's process-wide hard limit.
+          # Forked shell environments own their process even when their parent
+          # runtime was embedded. Dedicated entrypoints opt in explicitly.
+          unless @process_owned || Process.pid != @shell_pid
+            raise ExecutionError, "ulimit: setting limits requires an owned shell process"
+          end
+          resource, unit = RESOURCE_LIMITS.fetch(selected.first)
+          operand = args.first
+          value = if operand == "unlimited"
+            Process::RLIM_INFINITY
+          elsif operand.match?(/\A\+?[0-9]+\z/)
+            Integer(operand, 10) * unit
+          else
+            raise ExecutionError, "ulimit: invalid limit"
+          end
+          soft, hard = Process.getrlimit(resource)
+          soft = value unless flags.include?("H")
+          hard = value unless flags.include?("S")
+          Process.setrlimit(resource, soft, hard)
+        end
+        0
+      rescue SystemCallError, ArgumentError, RangeError, NotImplementedError => e
+        raise ExecutionError, "ulimit: #{e.message}"
+      end
+
       def umask_builtin(args, streams)
         flags = builtin_flags(args, "S", "umask")
         if args.empty?

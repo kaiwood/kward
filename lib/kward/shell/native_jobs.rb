@@ -217,9 +217,9 @@ module Kward
           return 0
         elsif %w[-s -n].include?(args.first)
           args.shift
-          signal = signal_name(args.shift)
+          signal = signal_name(args.shift&.upcase)
         elsif args.first&.start_with?("-") && args.first != "--"
-          signal = signal_name(args.shift[1..])
+          signal = signal_name(args.shift[1..].upcase)
         end
         args.shift if args.first == "--"
         raise ExecutionError, "kill: expected a pid or job ID" if args.empty?

@@ -44,13 +44,13 @@ module Kward
       include Jobs
       include Traps
 
-      UNSUPPORTED = %w[local typeset ulimit builtin source].freeze
+      UNSUPPORTED = %w[local typeset builtin source].freeze
       SPECIAL = %w[export readonly eval . unset exit return break continue shift set exec trap times :].freeze
-      BUILTINS = (SPECIAL + %w[true false cd pwd alias unalias read getopts command shopt declare umask kwsh jobs fg bg wait kill hash type fc]).freeze
+      BUILTINS = (SPECIAL + %w[true false cd pwd alias unalias read getopts command shopt declare umask ulimit kwsh jobs fg bg wait kill hash type fc]).freeze
 
       attr_reader :variables, :aliases, :status, :exited
 
-      def initialize(cwd: Dir.pwd, env: ENV.to_h, aliases: {}, arguments: [], name: "kwsh", interactive: false, replace_process: false, descriptors: {}, own_descriptors: false, hosted: interactive, directory: nil)
+      def initialize(cwd: Dir.pwd, env: ENV.to_h, aliases: {}, arguments: [], name: "kwsh", interactive: false, replace_process: false, descriptors: {}, own_descriptors: false, hosted: interactive, directory: nil, process_owned: false)
         @directory = directory ? directory.dup : Directory.new(cwd)
         @cwd = File.expand_path(cwd)
         @cwd = initial_directory(env["PWD"]) unless hosted
@@ -66,6 +66,7 @@ module Kward
         @arguments = arguments
         @name = name
         @shell_pid = Process.pid
+        @process_owned = process_owned
         @functions = {}
         @command_hash = {}
         @arrays = {}
@@ -474,9 +475,12 @@ module Kward
         when "readonly" then readonly(args, streams)
         when "declare" then declare_array(args)
         when "umask" then umask_builtin(args, streams)
+        when "ulimit" then ulimit_builtin(args, streams)
         when "shopt" then shopt(args, streams)
         when "command" then command_builtin(args, streams)
-        when "type" then command_builtin(["-V", "--", *args], streams)
+        when "type"
+          raise ExecutionError, "type: expected a name" if args.empty?
+          command_builtin(["-V", "--", *args], streams)
         when "hash" then hash_builtin(args, streams)
         when "fc" then fc_builtin(args, streams)
         when "times" then times_builtin(args, streams)
@@ -587,7 +591,7 @@ module Kward
           reset_child_state
           File.umask(@umask)
           runtime = self.class.new(cwd: cwd, directory: @directory, env: environment, arguments: args.drop(1), name: args.first,
-                                   interactive: @hosted, hosted: @hosted, descriptors: streams.reject { |fd, _| fd < 3 })
+                                   interactive: @hosted, hosted: @hosted, descriptors: streams.reject { |fd, _| fd < 3 }, process_owned: true)
           runtime.send(:reset_child_state, job_group: @owned_job_group)
           runtime.run(source, input: streams[0], output: streams[1], error: streams[2])
           runtime.send(:wait_builtin, [], streams) if @hosted

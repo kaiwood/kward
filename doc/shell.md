@@ -293,10 +293,40 @@ Brace expansion runs before substitutions and only on unquoted source text. It s
 - `readonly name=value`, `unset -f function`, `command [-p] [-v|-V]`, and `getopts` operate on interpreter state.
 - Explicit `eval` uses the native parser, not Ruby evaluation or a system shell. Treat its argument as executable source, not data.
 - `umask [-S] [--] [mask]` accepts octal and symbolic permissions, including copies (`g=u`) and sequential operations (`g=u-w`). Setting a mask prints nothing, even with `-S`; querying with `-S` prints reusable `u=...,g=...,o=...` permissions. `X` uses the original allowed execute bits; non-permission `s`/`t` bits are ignored. It affects redirected files and external children without changing the host process's lasting mask.
-- `cd` and `pwd` support grouped `-L` / `-P` flags and `--` (the last `-L` or `-P` wins). `cd -P -e` returns 1 if the directory changes but its physical pathname cannot be determined; without `-e`, that reporting failure still returns 0. Other `cd -P -e` errors return greater than 1 and leave the directory unchanged; `cd` searches `CDPATH` for eligible relative directory operands. `command -pv` and `command -pV` use the system default utility path without changing the caller's `PATH`. `hash [utility...]` remembers locations, `hash -r` clears them, `type` describes command resolution, and `times` reports shell/child CPU usage.
+- `cd` and `pwd` support grouped `-L` / `-P` flags and `--` (the last `-L` or `-P` wins). `cd -P -e` returns 1 if the directory changes but its physical pathname cannot be determined; without `-e`, that reporting failure still returns 0. Other `cd -P -e` errors return greater than 1 and leave the directory unchanged; `cd` searches `CDPATH` for eligible relative directory operands. `command -pv` and `command -pV` use the system default utility path without changing the caller's `PATH`. `hash [utility...]` remembers locations, `hash -r` clears them, `type name...` describes command resolution (at least one name is required), and `times` reports shell/child CPU usage.
 - `set` supports `-a`, `-b`, `-e`, `-f`, `-h`, `-m`, `-n`, `-u`, `-v`, `-x`, `-C`, their `+` inverses, named `-o` options, and `pipefail`. `set -n` checks standalone scripts without execution and is ignored by interactive `/shell`. `set -x` deliberately writes expanded commands and assignments (including assignment-only commands) to stderr after expansion and before execution; command stderr redirections also capture these traces. Do not enable it around secrets. Command substitution inherits `errexit`, following POSIX rather than Bash's default mode. `-v` echoes source as it is read; `-b` enables interactive job-completion notifications while waiting for input; `-h` remembers literal external commands when functions are defined. `set -` disables verbose and execution tracing.
 
 Assignment and expansion errors, and errors from directly invoked special builtins, stop non-interactive scripts even without `set -e`. Their EXIT trap still runs. In interactive `/shell`, these errors stop the current submission but leave the session usable. Ordinary utility and compound-command redirection failures return a nonzero status without terminating the shell; `command` also suppresses a special builtin's special error-exit behavior. `set -e` adds exit-on-failure behavior while respecting conditional tests, negated pipelines, and non-final AND-OR commands.
+
+### Limit a command's resource use
+
+Use `ulimit` to inspect the current process limits or constrain a command and its descendants. Put temporary changes in a subshell so they do not affect later commands in the session:
+
+```sh
+ulimit -a                    # list soft limits, with resource names and units
+ulimit -H -f                 # query the hard file-size limit
+(ulimit -S -f 2048 && ./build-report)  # cap each written file at 1 MiB
+```
+
+`ulimit [-H|-S] -a` lists all supported resources. `ulimit [-H|-S] [-c|-d|-f|-n|-s|-t|-v] [newlimit]` queries or sets one resource:
+
+| Option | Resource | Unit |
+| --- | --- | --- |
+| `-c` | Core file size | 512 bytes |
+| `-d` | Data segment size | 1024 bytes |
+| `-f` (default) | File size | 512 bytes |
+| `-n` | Open file descriptors | One greater than the maximum newly assigned descriptor number |
+| `-s` | Stack size | 1024 bytes |
+| `-t` | Per-process CPU time | Seconds |
+| `-v` | Address space size | 1024 bytes |
+
+Queries default to the soft limit and print a number or `unlimited`; `-H` selects the hard limit. Setting without `-H` or `-S` changes **both** limits. Use a nonnegative decimal number or `unlimited`; leading zeros are decimal. `--` and grouped flags are accepted. Invalid input, unsupported options, out-of-range numbers, and OS-rejected changes return nonzero with a diagnostic. Mutually exclusive selectors are rejected rather than applied in sequence. A failed `ulimit` is an ordinary utility failure, subject to the usual `set -e` rules.
+
+**Lowering a hard limit can be irreversible.** Soft limits can only be raised up to the hard limit, and raising a hard limit requires OS permission. Limits apply immediately to the shell itself and are inherited across forks, external commands, native scripts, and `exec`, including native executable-text fallback. Existing children keep their previous limits. File-size limits constrain writing, not reading existing files. OS/platform policies determine enforcement; these are not wall-clock timeouts or substitutes for a sandbox. Very low memory, stack, or descriptor limits can prevent the interpreter or child programs from running; native exec also needs private backup descriptors at 32 or above.
+
+In `/shell`, only its dedicated worker and subsequent descendants are affected—not the Kward agent or other tabs. Limits persist between submissions in that session. Embedded Ruby `Runtime`/`ScriptRunner` callers can query limits, but changing them requires an explicitly owned process (`process_owned: true`) or a forked shell environment. Never opt a shared application process into that contract. Standalone entrypoints and workers opt in automatically. There is no new RPC session API; sandboxed command tools may run standalone `kwsh` as before.
+
+[POSIX.1-2024 `ulimit`](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/ulimit.html) specifies all these options: only `-t` is XSI, while the rest moved into Base in Issue 8. Bash's additional resource options are not implemented. This OS interface does not remove the interpreter safety quotas listed below.
 
 ### Keep working after a directory rename
 
@@ -326,7 +356,7 @@ printf 'Last status: %s\n' "$?"
 
 `&` starts an isolated asynchronous AND-OR list, including pipelines. `$!` is its waitable leader PID. `wait` with no arguments collects all known jobs and returns zero; with operands it returns the last requested job's status. An unknown or already-collected PID returns 127. Termination by a signal returns `128 + signal number`. Completed statuses are retained until collected; there is a 1,024-job bound.
 
-`jobs` accepts `-l`, `-p`, `-r`, and `-s`. Job selectors include `%1`, `%+` / `%%` (current), `%-` (previous), `%prefix`, and `%?substring`; ambiguous selectors error. `kill [-s signal | -SIGNAL] pid-or-job...` signals a process or an entire job group. `kill -l` lists signal names and translates numbers.
+`jobs` accepts `-l`, `-p`, `-r`, and `-s`. Job selectors include `%1`, `%+` / `%%` (current), `%-` (previous), `%prefix`, and `%?substring`; ambiguous selectors error. `kill [-s signal | -SIGNAL] pid-or-job...` signals a process or an entire job group. Signal names are case-independent; numeric short forms such as `-15` are also accepted. `kill -l` lists signal names and translates numbers.
 
 Job control is on by default in `/shell`; standalone scripts can enable it with `set -m`. Ctrl-Z stops a foreground job and returns terminal ownership to kwsh. Terminal modes are saved with the stopped job and restored on `fg`, including for programs that suspend themselves after entering raw mode. Use `bg %1` to continue it in the background, or `fg %1` to return it to the terminal. Without job control, asynchronous input defaults to `/dev/null` unless explicitly redirected.
 
@@ -439,7 +469,7 @@ The classification distinguishes **permitted choices** from **system constraints
 | Executable-text detection (`native_process.rb`) | Inspect at most 4,096 bytes for binary-looking content before native ENOEXEC fallback | Permitted heuristic under SCL 2.9.1.6; **not** a script/line-length limit. |
 | Physical directory reporting (`native_directory.rb`) | macOS F_GETPATH's 1,024-byte buffer; Linux procfs name discovery | System/API constraints; the retained directory descriptor is separate from successful pathname reporting. |
 | Standalone vi alias macros (`native_vi.rb`) | 100 nested replacements and 1 MiB cumulative replacement bytes per edit line | Additional UP safety policy, not an OS limit. Does not impose a typed-line length ceiling; profile closure must account for this retained restriction. |
-| Native process and file resources | OS argument/environment size, descriptor/process limits, filesystem limits, available memory/storage, Ruby stack/runtime constraints | Underlying system constraints, not promises that every source fitting a kwsh quota can execute. No Ruby/system-shell eval fallback is introduced. |
+| Native process and file resources (`ulimit` in `native_builtins.rb`) | Inherited or explicitly set OS resource limits, argument/environment size, filesystem limits, available memory/storage, Ruby stack/runtime constraints | Underlying system constraints, not promises that every source fitting a kwsh quota can execute. No Ruby/system-shell eval fallback is introduced. |
 | Hosted capture (`kwsh.rb`, `persistent_session.rb`) | Defaults: 1 MiB output and 300-second captured-command timeout; configurable through the existing shell configuration | Host policy only, unchanged. User-owned interactive commands do not get these capture/time limits. Normal model/RPC shell tools keep their own existing sandbox and cancellation policies. |
 | Hosted context/preparation/history (`kwsh.rb`, `prompt_session.rb`) | 32,000-byte last-output context and prepared-command bound; default 1,000 history entries | Host/UI policies, not standalone shell-language limits. History remains configurable as documented below. |
 | Hosted startup/cancellation (`persistent_session.rb`) | 5-second startup wait, 1-second interrupt/escalation waits, 0.2-second PTY draining window | Host lifecycle policies, unchanged; not standalone execution quotas. |
@@ -450,7 +480,7 @@ Authority: [POSIX shell language](https://pubs.opengroup.org/onlinepubs/97999197
 
 ### Remaining compatibility limits
 
-This is **not yet a fully POSIX- or Bash-conforming shell**. Additional builtin options, arithmetic array references, advanced array forms, and exact Bash/POSIX regular-expression semantics remain outside the implemented subset. `wait -n`, Bash pseudo-traps (`DEBUG`, `ERR`, `RETURN`), XSI `ulimit`, and emacs editing are not implemented.
+This is **not yet a fully POSIX- or Bash-conforming shell**. Additional builtin options, arithmetic array references, advanced array forms, and exact Bash/POSIX regular-expression semantics remain outside the implemented subset. `wait -n`, Bash pseudo-traps (`DEBUG`, `ERR`, `RETURN`), and emacs editing are not implemented. The XSI profile remains incomplete: `echo` delegates to the host utility (whose `-n` and backslash handling is not guaranteed to be XSI-conforming), and native diagnostics do not implement message-catalog lookup through `NLSPATH`. Use `printf` for portable output.
 
 `capture`, `pty`, `clear`, declarative `source`, and `kward edit` remain prompt conveniences rather than scripting builtins. Native aliases use read-time token expansion; the separate one-off `!` path retains its existing single command-prefix replacement. `kwshrc` stays non-executing.
 
@@ -464,6 +494,7 @@ Native scripting is being extended in tested stages, targeting POSIX.1-2024 plus
 - [x] Subshells, nested command substitution, and bounded output capture.
 - [x] Here-documents, `<>` / `>|`, and descriptors 0–9.
 - [x] Native dot-sourcing, `getopts`, `readonly`, `command`, `eval`, and `umask`.
+- [x] POSIX.1-2024 `ulimit` resource queries/settings, soft/hard limits, and owned-process inheritance/isolation.
 - [x] Arithmetic operators, increment/decrement, exponentiation, and arithmetic loops, within documented bounds.
 - [x] Initial indexed/associative arrays, `[[ … ]]`, process substitution, brace expansion, and opt-in globstar.
 - [x] Standalone file/command/stdin modes, dollar-single-quotes, and the documented `set` options.
@@ -480,7 +511,7 @@ Native scripting is being extended in tested stages, targeting POSIX.1-2024 plus
 The remaining tracks are separate:
 
 - **POSIX verification:** broader independent clause-by-clause audits and platform/locale matrices. The tests below are regression coverage, not certification of every POSIX requirement.
-- **Optional utility/editing profiles:** XSI `ulimit`. Emacs editing is neither implemented nor required for the UP milestone.
+- **Optional utility/editing profiles:** XSI `echo` semantics and message catalogs remain open, alongside cross-platform verification of `ulimit -t`, `type`, numeric traps, and short-form `kill`. UP retains the vi macro-policy and platform gates. Emacs editing is neither implemented nor required for the UP milestone.
 - **Bash extensions:** remaining array/conditional forms, arithmetic array references, `wait -n`, pseudo-traps, and exact Bash regex/machine-integer behavior.
 - **Remaining shared safety policies:** the resource inventory above includes limits that also affect standalone POSIX behavior; these are open conformance gaps, not just hosted differences.
 - **Intentional hosted differences:** reserved shutdown signals, supervised `exec`, tab-owned descendants, and host capture/time limits. Standalone interactive execution does not adopt hosted cleanup or reserve its shutdown signal.

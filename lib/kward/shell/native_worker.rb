@@ -22,7 +22,7 @@ module Kward
         line = control.gets
         return unless line
         request = JSON.parse(line)
-        runtime = Runtime.new(cwd: request.fetch("cwd"), env: ENV.to_h, aliases: request.fetch("aliases", {}), interactive: true)
+        runtime = Runtime.new(cwd: request.fetch("cwd"), env: ENV.to_h, aliases: request.fetch("aliases", {}), interactive: true, process_owned: true)
         runtime.with_signals do
           loop do
             status = begin
