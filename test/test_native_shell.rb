@@ -431,6 +431,18 @@ class TestNativeShell < KwardTestCase
     SHELL
   end
 
+  def test_continue_two_restarts_the_second_enclosing_loop
+    assert_output("a1b1", <<~'SHELL')
+      for outer in a b; do
+        for inner in 1 2; do
+          printf '%s%s' "$outer" "$inner"
+          continue 2
+        done
+        printf bad
+      done
+    SHELL
+  end
+
   def test_functions_persist_and_restore_positional_arguments
     assert_output("", 'report() { printf "<%s>" "$@"; return 7; }')
     assert_output("<one two><>7:outer", 'set -- outer; report "one two" ""; printf "%s:%s" "$?" "$1"')
