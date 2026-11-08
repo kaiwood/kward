@@ -1079,6 +1079,7 @@ class TestNativeShell < KwardTestCase
 
   def test_unset_function_option_validates_names_and_preserves_variables
     assert_output("unset:function", 'f=variable; f() { printf function; }; unset -f missing; unset -v f; printf "%s:" "${f-unset}"; f')
+    assert_output("variable", 'f=variable; f() { :; }; unset -f f; printf "%s" "$f"')
     status, _, error = execute('unset -f 1bad')
     assert_equal 2, status
     assert_includes error, "invalid variable name"
@@ -1106,6 +1107,22 @@ class TestNativeShell < KwardTestCase
     assert_equal 2, execute("AUDIT_UNSET=value", runtime: fresh).first
   ensure
     fresh&.close
+  end
+
+  def test_export_and_readonly_assignment_operands_preserve_attributes_and_values
+    assert_output("two words *|two words *", <<~'SHELL')
+      value='two words *'
+      export exported=$value
+      readonly fixed=$value
+      export fixed
+      printf '%s|%s' "$exported" "$fixed"
+    SHELL
+    assert_equal "two words *", @runtime.variables["exported"]
+    assert_equal "two words *", @runtime.variables["fixed"]
+    assert_includes @runtime.environment, "exported"
+    assert_includes @runtime.environment, "fixed"
+    assert_equal 2, execute("fixed=changed").first
+    assert_equal "two words *", @runtime.variables["fixed"]
   end
 
   def test_unset_rejects_mutually_exclusive_options
@@ -1206,7 +1223,7 @@ class TestNativeShell < KwardTestCase
     status, listing, error = execute("set -o")
     assert_equal 0, status, error
 
-    %w[allexport errexit ignoreeof monitor noclobber noglob noexec nolog notify nounset verbose vi xtrace].each do |option|
+    %w[allexport errexit hashall ignoreeof monitor noclobber noglob noexec nolog notify nounset verbose vi xtrace].each do |option|
       assert_match(/\Aset [+-]o #{option}\n/, listing.lines.grep(/ #{option}\n/).first || "", option)
     end
 
