@@ -409,7 +409,7 @@ module Kward
         if position.nil? || option == ":"
           assign(name, "?")
           assign("OPTARG", option) if silent
-          streams[2]&.puts("getopts: illegal option -- #{option}") unless silent
+          streams[2]&.puts("#{@name}: getopts: illegal option -- #{option}") unless silent
         else
           assign(name, option)
           if spec.delete_prefix(":")[position + 1] == ":"
@@ -423,7 +423,7 @@ module Kward
             else
               assign(name, silent ? ":" : "?")
               assign("OPTARG", option) if silent
-              streams[2]&.puts("getopts: option requires an argument -- #{option}") unless silent
+              streams[2]&.puts("#{@name}: getopts: option requires an argument -- #{option}") unless silent
             end
             @getopts_offset = argument.length
           end

@@ -214,9 +214,10 @@ Emacs editing and command substitution in prompt strings are not required for th
 ### Step 12 audit record — in progress
 
 - Read POSIX.1-2024 `read` DESCRIPTION/STDERR: a backslash-newline continuation on a terminal in an interactive shell must prompt using `PS2`. The native `read` implementation consumed the continuation without prompting. Added a PTY regression that failed before the fix, then implemented parameter-expanded `PS2` output to stderr for interactive terminal input. This closes only that narrow item; `UTIL-6` remains unaudited.
-- Authority: https://pubs.opengroup.org/onlinepubs/9799919799/utilities/read.html .
-- Focused shell suite: **404 runs, 2,947 assertions, 0 failures/errors/skips** (seed 16692).
-- Full repository suite: **2,670 runs, 14,369 assertions, 1 failure, 0 errors, 2 skips** (seed 27346). The existing editor spinner failure remains (`test/test_editor_prompt.rb:109`, expected `· ·`, rendered `⠋`); Bubblewrap integration tests remain disabled by their existing environment gate. No unrelated changes were made.
+- Read POSIX.1-2024 `getopts`: non-silent option errors must identify the invoking program (`$0`). Native diagnostics named only `getopts`; added failing coverage for unknown options and missing option arguments, then included the runtime shell name in both diagnostics. Remaining `getopts`/`read` contracts keep `UTIL-6` open.
+- Authorities: https://pubs.opengroup.org/onlinepubs/9799919799/utilities/read.html and https://pubs.opengroup.org/onlinepubs/9799919799/utilities/getopts.html .
+- Focused shell suite after the `read` change: **404 runs, 2,947 assertions, 0 failures/errors/skips** (seed 16692). After the `getopts` diagnostic change: **405 runs, 2,957 assertions, 0 failures/errors/skips** (seed 57109); focused `getopts` tests passed (3 runs, 26 assertions, seed 47461).
+- Full repository suite, run after the `read` change and before the `getopts` diagnostic adjustment: **2,670 runs, 14,369 assertions, 1 failure, 0 errors, 2 skips** (seed 27346). The known editor spinner failure remains (`test/test_editor_prompt.rb:109`, expected `· ·`, rendered `⠋`); Bubblewrap integration tests remain disabled by their existing environment gate. No unrelated changes were made.
 - Audit is not complete: matrix rows remain unaudited; documented quota-policy nonconformance, Ruby-reserved trap limitations, XSI message-catalog/echo gaps, and missing Linux verification remain open. Do not claim Base, UP, or XSI conformance.
 
 ## Verification commands

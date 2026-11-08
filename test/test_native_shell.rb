@@ -1076,6 +1076,20 @@ class TestNativeShell < KwardTestCase
     assert_output("1:1", 'command -v ./missing; printf "%s:" "$?"; command -v ./plain-file; printf "%s" "$?"')
   end
 
+  def test_getopts_diagnostics_identify_the_invoking_shell
+    status, _, error = execute('set -- -z; getopts ab option')
+
+    assert_equal 0, status
+    assert_includes error, "kwsh:"
+    assert_includes error, "z"
+
+    status, _, error = execute('OPTIND=1; set -- -b; getopts ab: option')
+
+    assert_equal 0, status
+    assert_includes error, "kwsh:"
+    assert_includes error, "requires an argument"
+  end
+
   def test_getopts_silent_errors_reset_and_explicit_arguments
     assert_output("?:z|::b|a|a", <<~'SHELL')
       getopts ':ab:' option -z
