@@ -65,6 +65,43 @@ class TestNativeShellHistory < KwardTestCase
     assert_includes out, "\tchanged=first\n"
   end
 
+  def test_persistence_round_trips_non_utf8_command_bytes
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "history")
+      out, error, status = invoke("# \xff\nfc -l\nexit\n".b, env: { "HISTFILE" => path, "LC_ALL" => "C" })
+      assert status.success?, error
+      assert_includes out.b, "1\t# \xff\n".b
+      out, error, status = invoke("fc -ln 1 1\nexit\n", env: { "HISTFILE" => path, "LC_ALL" => "C" })
+      assert status.success?, error
+      assert_equal "\t# \xff\n".b, out.b
+    end
+  end
+
+  def test_forked_history_cannot_overwrite_parent_storage
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "history")
+      runtime = Kward::NativeShell::Runtime.new(env: { "HISTFILE" => path }, hosted: false)
+      runtime.history.add("parent=one")
+      before = File.read(path)
+      pid = fork { runtime.history.add("child=private"); exit! 0 }
+      Process.waitpid(pid)
+      assert_equal before, File.read(path)
+      runtime.history.add("parent=two")
+      assert_equal [1, 2], runtime.history.entries.map(&:first)
+      refute_includes File.read(path), "child"
+    ensure
+      runtime&.send(:close_resources)
+    end
+  end
+
+  def test_editor_setting_is_not_shell_source
+    Dir.mktmpdir do |dir|
+      _, error, = invoke("true\nfc\nexit\n", env: { "FCEDIT" => '$(touch injected)' }, chdir: dir)
+      assert_includes error, "only parameter expansion"
+      refute File.exist?(File.join(dir, "injected"))
+    end
+  end
+
   def test_persistence_size_and_unsafe_history_fallback
     Dir.mktmpdir do |dir|
       path = File.join(dir, "history")

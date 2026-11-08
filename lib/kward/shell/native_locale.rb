@@ -18,6 +18,9 @@ module Kward
       MATCH = Fiddle::Function.new(Fiddle::Handle::DEFAULT["fnmatch"], [POINTER, POINTER, Fiddle::TYPE_INT], Fiddle::TYPE_INT)
       COMPARE = Fiddle::Function.new(Fiddle::Handle::DEFAULT["strcoll"], [POINTER, POINTER], Fiddle::TYPE_INT)
 
+      UPPER = Fiddle::Function.new(Fiddle::Handle::DEFAULT["towupper"], [Fiddle::TYPE_INT], Fiddle::TYPE_INT)
+      LOWER = Fiddle::Function.new(Fiddle::Handle::DEFAULT["towlower"], [Fiddle::TYPE_INT], Fiddle::TYPE_INT)
+
       attr_reader :encoding, :multichar
 
       def self.with(variables)
@@ -52,6 +55,16 @@ module Kward
 
       def text(value)
         value.dup.force_encoding(@encoding)
+      end
+
+      def swapcase(value)
+        text(value).each_char.map do |character|
+          codepoint = character.encode(Encoding::UTF_8).ord
+          upper = UPPER.call(codepoint)
+          (upper == codepoint ? LOWER.call(codepoint) : upper).chr(Encoding::UTF_8).encode(@encoding)
+        rescue EncodingError, RangeError
+          character
+        end.join
       end
 
       def bracket?(source, value)

@@ -1,4 +1,5 @@
 require_relative "native_runtime"
+require_relative "native_vi_terminal"
 
 module Kward
   module NativeShell
@@ -94,23 +95,42 @@ module Kward
                 runtime.notify_jobs(error: error, force: source.empty?)
                 prompt = source.empty? ? "PS1" : "PS2"
                 runtime.check_mail(error) if source.empty?
-                error.write(runtime.prompt_text(prompt, error: error))
-                error.flush
-                read_line(source_input, runtime, input: input, output: output, error: error)
+                text = runtime.prompt_text(prompt, error: error)
+                if source_input.tty? && error.tty? && runtime.option_enabled?("vi")
+                  editor ||= ViTerminal.new(runtime)
+                  editor.read(source_input, prompt: text, input: input, output: output, error: error)
+                else
+                  error.write(text)
+                  error.flush
+                  read_line(source_input, runtime, input: input, output: output, error: error)
+                end
+              end
+              edited = false
+              if line.is_a?(ViEditor::Result)
+                if line.external
+                  edited = true
+                  line = runtime.vi_edit(line.text, input: input, output: output, error: error)
+                  unless line
+                    source.clear
+                    next
+                  end
+                else
+                  line = line.text
+                end
               end
               unless line
                 if source_input.tty? && runtime.option_enabled?("ignoreeof") && !runtime.exited
                   error.puts("kwsh: use exit to leave the shell")
                   next
                 end
-                runtime.run(source, input: input, output: output, error: error) unless source.empty?
+                runtime.run(source, input: input, output: output, error: error) unless source.empty? || runtime.exited
                 break
               end
               source << line
               text = source.dup.force_encoding(Encoding::UTF_8)
               text.force_encoding(Encoding::BINARY) unless text.valid_encoding?
               begin
-                Parser.parse(text, aliases: runtime.aliases, eof: false)
+                Parser.parse(text, aliases: runtime.aliases, eof: edited)
               rescue IncompleteInput
                 next
               rescue SyntaxError
@@ -143,7 +163,15 @@ module Kward
           return line if byte == "\n"
         end
       rescue EOFError
-        line unless line.empty?
+        return line unless line.empty?
+        return unless runtime.option_enabled?("ignoreeof") && !source.tty? && !runtime.exited
+        # A FIFO may acquire another writer, or a file may grow. Keep the
+        # interactive option's meaning without repeatedly printing prompts.
+        sleep 0.1
+        runtime.poll_signals(input: input, output: output, error: error)
+        runtime.notify_jobs(error: error)
+        retry unless runtime.exited
+        nil
       end
     end
   end

@@ -168,7 +168,7 @@ module Kward
           flags.each do |flag|
             name = if flag == "o"
               if args.empty?
-                (SHELL_OPTIONS.values + %w[pipefail ignoreeof nolog]).each do |entry|
+                (SHELL_OPTIONS.values + %w[pipefail ignoreeof nolog vi]).each do |entry|
                   write_line(streams, "set #{@options.include?(entry) ? '-' : '+'}o #{entry}")
                 end
                 next
@@ -177,7 +177,9 @@ module Kward
             else
               SHELL_OPTIONS[flag]
             end
-            raise ExecutionError, "set: unsupported option #{name || flag}" unless (SHELL_OPTIONS.values + %w[pipefail ignoreeof nolog]).include?(name)
+            raise ExecutionError, "set: unsupported option #{name || flag}" unless (SHELL_OPTIONS.values + %w[pipefail ignoreeof nolog vi]).include?(name)
+            raise ExecutionError, "set: native vi editing is standalone-only" if name == "vi" && enabled && @hosted
+            raise ExecutionError, "set: vi editing requires an ANSI-compatible terminal" if name == "vi" && enabled && @interactive && @variables["TERM"] == "dumb"
             enabled ? @options.add(name) : @options.delete(name)
           end
         end

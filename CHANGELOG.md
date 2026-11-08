@@ -6,6 +6,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added standalone native vi line editing with history search, motions/operators, repeat/undo, pathname expansion, and private external-vi editing. Terminal modes and command stdin are preserved; RPC reports history, line editing, and mail notifications as unsupported.
+
 - Added native PS4 parameter expansion, standalone PS1 history numbering, terminal `ignoreeof`, compatible no-op `nolog`, and MAIL/MAILPATH/MAILCHECK notifications.
 
 - Added standalone native command history and `fc` listing, substitution, and private editor workflows, with opt-in `HISTFILE` persistence and `HISTSIZE` retention. Hosted history remains separate.

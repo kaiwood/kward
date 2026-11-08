@@ -89,7 +89,11 @@ module Kward
         with_file do |file|
           file.each_line do |line|
             entry = JSON.parse(line)
-            raise ArgumentError, "invalid history" unless entry.is_a?(Array) && entry.size == 2 && entry[0].is_a?(Integer) && entry[0] >= @next_number && entry[1].is_a?(String)
+            raise ArgumentError, "invalid history" unless entry.is_a?(Array) && entry.size == 2
+            if entry[1].is_a?(Hash) && entry[1].keys == ["bytes"] && entry[1]["bytes"].is_a?(String)
+              entry[1] = entry[1]["bytes"].unpack1("m0")
+            end
+            raise ArgumentError, "invalid history" unless entry[0].is_a?(Integer) && entry[0] >= @next_number && entry[1].is_a?(String)
             @next_number = entry[0] + 1
             @entries << entry
             @entries.shift while @entries.length > @size
@@ -100,7 +104,11 @@ module Kward
       def persist
         with_file do |file|
           file.rewind
-          @entries.each { |entry| file.puts(JSON.generate(entry)) }
+          @entries.each do |number, text|
+            value = text.dup.force_encoding(Encoding::UTF_8)
+            value = { "bytes" => [text].pack("m0") } unless value.valid_encoding?
+            file.puts(JSON.generate([number, value]))
+          end
           file.truncate(file.pos)
         end
       end
@@ -175,7 +183,7 @@ module Kward
       def edit_history(source, editor, streams)
         Dir.mktmpdir("kwsh-fc-") do |directory|
           path = File.join(directory, "command")
-          File.open(path, File::WRONLY | File::CREAT | File::EXCL, 0600) { |file| file.write(source) }
+          File.open(path, File::WRONLY | File::CREAT | File::EXCL, 0600) { |file| file.chmod(0600); file.write(source) }
           result = external([editor, path], streams)
           return [result, nil] unless result.zero?
           File.open(path, File::RDONLY | File::NOFOLLOW | File::NONBLOCK) do |file|

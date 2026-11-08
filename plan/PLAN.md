@@ -165,7 +165,7 @@ Relevant code: arithmetic, parser, alias, substitution, pattern, glob, and job l
 Treat this as a separate milestone after core correctness. Divide it into small, independently tested commits.
 
 - [x] Implement the command-history model and `fc`, including `HISTFILE`, `HISTSIZE`, and `FCEDIT` behavior.
-- [ ] Implement the required vi command-line editing behavior and `set -o vi`.
+- [x] Implement the required vi command-line editing behavior and `set -o vi`.
 - [x] Implement `set -o ignoreeof`.
 - [x] Accept `set -o nolog`; the obsolete option may have no effect where the standard permits that.
 - [x] Implement PS1 exclamation-mark/history-number expansion, including `!` and `!!`.
@@ -173,6 +173,10 @@ Treat this as a separate milestone after core correctness. Divide it into small,
 - [x] Implement mail notification behavior controlled by `MAIL`, `MAILPATH`, and `MAILCHECK`.
 - [x] Preserve existing guarded `ENV` startup and parameter-expanded prompt behavior.
 - [x] Define private storage and cleanup rules for history and edited history files, and test cancellation and editor failures.
+
+- [ ] Close the UP profile gate: verify Linux and resolve/review retained vi macro depth/byte policies before claiming profile conformance.
+
+**Implementation status:** requested functionality is implemented and tested on macOS; the optional profile is not yet declared complete. `type` was reclassified as XSI after checking its Issue 8 shading.
 
 **Complete when:** the UP entries in the requirement matrix are implemented and tested, or the project explicitly declines that optional profile without claiming it is complete.
 
@@ -338,7 +342,21 @@ Do not expand this plan merely to add Bash arrays, `[[ … ]]`, regex matching, 
 
 ## Step 10b verification — prompts, EOF options, and mail
 
-- Added PS1 parameter-then-exclamation passes, PS4 parameter expansion with safe diagnostic/fallback, no-op nolog, terminal ignoreeof, and monotonic MAILCHECK polling before primary prompts. MAILPATH precedence, escaped percent pathnames, creation/mtime tracking and parameter-only custom messages are covered. Non-terminal permanent EOF still terminates input rather than busy-looping.
+- Added PS1 parameter-then-exclamation passes, PS4 parameter expansion with safe diagnostic/fallback, no-op nolog, terminal ignoreeof, and monotonic MAILCHECK polling before primary prompts. MAILPATH precedence, escaped percent pathnames, creation/mtime tracking and parameter-only custom messages are covered. The initial non-terminal EOF exception was subsequently removed in step 10c: ignoreeof now waits without prompt spinning and remains responsive to exit traps.
 - Initial interactive suite: 5 tests, 3 failures and 2 errors. After implementation: **5 runs, 32 assertions**, passing; includes a real PTY Ctrl+D/explicit-exit test. Existing ENV identity-gate and no-input-read-ahead tests remain unchanged.
 - Related shell suite: **360 runs, 2,478 assertions, no failures/errors/skips**, seed 48681 (`/tmp/kward-step10-prompts.log`). macOS verified; Linux pending. vi editing and the remaining UP audit are still open.
 - Authority: sh environment/extended description and SCL 2.5.3 / set in https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html .
+
+## Step 10c verification — vi editing and final UP implementation review
+
+- Added standalone vi insert/command modes, motion/operator families and counts, history navigation/pattern search, copy-before-edit undo, repeat across submissions, pathname completion/expansion, alias macros, comments, and private external-vi editing. Terminal handling is separate from edit state: one-byte reads, configured stty controls, scoped raw mode, safe horizontal rendering, and locale-aware characters/case/cell widths. Hosted activation is explicitly rejected.
+- Added `test_native_shell_vi.rb`: **15 runs, 87 assertions**, passing (seed 1402). Coverage includes command families, history copies/search, repeat/counts, quoted interrupts, long lines, locale text, bounded recursive macros, pathname escaping and directory suffixes, default prompts, and hosted exclusion. Real-PTY coverage in `test_native_shell_interactive.rb` now has **10 runs, 55 assertions**, passing (seed 38038): editing/recall, interruption, custom stty, no command-stdin read-ahead, editor terminal restoration, setup-error recovery, and terminal/non-terminal ignoreeof.
+- Removed the initial non-terminal ignoreeof exception after checking set's requirement: interactive EOF now waits without printing prompts repeatedly, polls signals, and accepts an explicit exit trap. Non-interactive script EOF remains unchanged.
+- Review added forked-history ownership and FCEDIT non-evaluation regressions. A new byte-preservation regression initially failed with JSON::GeneratorError for a C-locale non-UTF-8 command; history now round-trips those bytes losslessly without weakening private-file checks. Final history suite: **9 runs, 46 assertions**, passing (seed 47246). Fresh private editor files are explicitly mode 0600 even under a restrictive inherited umask.
+- The first combined vi suite exposed a real hosted ENOEXEC regression: TerminalSequences eagerly required bundled-gem base64 under `--disable=gems`. Its two encoding sites now use Ruby's equivalent `pack("m0")`, preserving outputs without that loading dependency. A standalone no-gems regression and the existing hosted executable-text ownership tests pass. No sandbox or process-group boundary was relaxed. PTY fixture synchronization was corrected for the renderer's explicit carriage return; assertions still require real command output and restored terminal behavior. The existing trace-copy assertion was preserved while adding PS4 guidance.
+- RPC initialization explicitly reports history, lineEditing, and mailNotifications as unsupported. RPC server suite: **30 runs, 558 assertions**, passing (`/tmp/kward-step10-rpc.log`). Native standalone programs remain ordinary external commands under existing tool permissions; no terminal/history API was added to RPC.
+- Final related shell suite: **383 runs, 2,606 assertions, no failures/errors/skips**, seed 23672, `/tmp/kward-step10-shell-final.log`.
+- Final full repository suite: **2,649 runs, 14,028 assertions, 1 failure, 0 errors, 2 skips**, seed 5404, `/tmp/kward-step10-full-final.log`. The only failure remains `TestEditorPrompt#test_editor_stays_visible_and_shows_spinner_while_agent_runs`, `test/test_editor_prompt.rb:109`, expected `· ·` versus `⠋`. The existing Bubblewrap integration skips remain. No unrelated tests were changed.
+- `git diff --check` passed. Verification is on macOS arm64 / Ruby 4.0.3. Docker still cannot reach `/Users/kwood/.docker/run/docker.sock`; Linux was not run. The vi macro safety policies (100 nested expansions, 1 MiB replacement bytes per edit line) remain disclosed UP restrictions, not OS limits. All requested implementation checkboxes are checked, but the UP profile completion gate remains open; neither UP nor full POSIX certification is claimed.
+- Profile audit correction: Issue 8 marks `type` as XSI, not UP. Its remaining utility audit moved to XSI-3 for step 11/12; UP-10 now tracks prompt defaults. References: https://pubs.opengroup.org/onlinepubs/9799919799/utilities/sh.html (complete vi command list), https://pubs.opengroup.org/onlinepubs/9799919799/utilities/fc.html, https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html (2.5.3 and set), and https://pubs.opengroup.org/onlinepubs/9799919799/utilities/type.html .
+- Earlier step-10 commits: `8fd561df` (history/fc) and `b0d3950e` (prompts, mail, EOF options). Final review found no abandoned debug instrumentation or unrelated edits to retain.

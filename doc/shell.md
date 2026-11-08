@@ -159,7 +159,7 @@ ENV="$HOME/.kwsh-env" kwsh -i
 kwsh -ec 'printf "%s\n" "$1"' example argument
 ```
 
-Interactive startup parameter-expands `ENV` and executes the named native file when it exists. Non-interactive invocations ignore `ENV`; startup loading is also disabled when real and effective user or group IDs differ. This executable startup file is separate from declarative `kwshrc`. `PS1` and `PS2` support parameter expansion; `PS1` then replaces `!` with the next history number and `!!` with a literal `!`. Trace prefixes parameter-expand `PS4` (default `+ `); command substitutions in startup path or prompt text are rejected. Errors leave the prompt usable, and input is read without consuming a following command's stdin. Shell options may be grouped and may follow `-c` or `-s`. Standalone command history and `fc` are available; vi/emacs line-editing modes remain separate milestones.
+Interactive startup parameter-expands `ENV` and executes the named native file when it exists. Non-interactive invocations ignore `ENV`; startup loading is also disabled when real and effective user or group IDs differ. This executable startup file is separate from declarative `kwshrc`. `PS1` and `PS2` support parameter expansion; `PS1` then replaces `!` with the next history number and `!!` with a literal `!`. Trace prefixes parameter-expand `PS4` (default `+ `); command substitutions in startup path or prompt text are rejected. Errors leave the prompt usable, and input is read without consuming a following command's stdin. Shell options may be grouped and may follow `-c` or `-s`. Standalone command history, `fc`, and `set -o vi` line editing are available. Emacs editing is not implemented.
 
 Executable text files without a shebang also run natively when invoked from kwsh:
 
@@ -438,6 +438,7 @@ The classification distinguishes **permitted choices** from **system constraints
 | Regex condition (`native_condition.rb`) | 0.1-second Ruby regexp timeout for `[[ … =~ … ]]` | Extension policy. This is not a timeout on POSIX `case` patterns. |
 | Executable-text detection (`native_process.rb`) | Inspect at most 4,096 bytes for binary-looking content before native ENOEXEC fallback | Permitted heuristic under SCL 2.9.1.6; **not** a script/line-length limit. |
 | Physical directory reporting (`native_directory.rb`) | macOS F_GETPATH's 1,024-byte buffer; Linux procfs name discovery | System/API constraints; the retained directory descriptor is separate from successful pathname reporting. |
+| Standalone vi alias macros (`native_vi.rb`) | 100 nested replacements and 1 MiB cumulative replacement bytes per edit line | Additional UP safety policy, not an OS limit. Does not impose a typed-line length ceiling; profile closure must account for this retained restriction. |
 | Native process and file resources | OS argument/environment size, descriptor/process limits, filesystem limits, available memory/storage, Ruby stack/runtime constraints | Underlying system constraints, not promises that every source fitting a kwsh quota can execute. No Ruby/system-shell eval fallback is introduced. |
 | Hosted capture (`kwsh.rb`, `persistent_session.rb`) | Defaults: 1 MiB output and 300-second captured-command timeout; configurable through the existing shell configuration | Host policy only, unchanged. User-owned interactive commands do not get these capture/time limits. Normal model/RPC shell tools keep their own existing sandbox and cancellation policies. |
 | Hosted context/preparation/history (`kwsh.rb`, `prompt_session.rb`) | 32,000-byte last-output context and prepared-command bound; default 1,000 history entries | Host/UI policies, not standalone shell-language limits. History remains configurable as documented below. |
@@ -449,7 +450,7 @@ Authority: [POSIX shell language](https://pubs.opengroup.org/onlinepubs/97999197
 
 ### Remaining compatibility limits
 
-This is **not yet a fully POSIX- or Bash-conforming shell**. Additional builtin options, arithmetic array references, advanced array forms, and exact Bash/POSIX regular-expression semantics remain outside the implemented subset. `wait -n`, Bash pseudo-traps (`DEBUG`, `ERR`, `RETURN`), XSI `ulimit`, and standalone vi/emacs editing are not implemented.
+This is **not yet a fully POSIX- or Bash-conforming shell**. Additional builtin options, arithmetic array references, advanced array forms, and exact Bash/POSIX regular-expression semantics remain outside the implemented subset. `wait -n`, Bash pseudo-traps (`DEBUG`, `ERR`, `RETURN`), XSI `ulimit`, and emacs editing are not implemented.
 
 `capture`, `pty`, `clear`, declarative `source`, and `kward edit` remain prompt conveniences rather than scripting builtins. Native aliases use read-time token expansion; the separate one-off `!` path retains its existing single command-prefix replacement. `kwshrc` stays non-executing.
 
@@ -479,7 +480,7 @@ Native scripting is being extended in tested stages, targeting POSIX.1-2024 plus
 The remaining tracks are separate:
 
 - **POSIX verification:** broader independent clause-by-clause audits and platform/locale matrices. The tests below are regression coverage, not certification of every POSIX requirement.
-- **Optional utility/editing profiles:** XSI `ulimit` and vi/emacs editing.
+- **Optional utility/editing profiles:** XSI `ulimit`. Emacs editing is neither implemented nor required for the UP milestone.
 - **Bash extensions:** remaining array/conditional forms, arithmetic array references, `wait -n`, pseudo-traps, and exact Bash regex/machine-integer behavior.
 - **Remaining shared safety policies:** the resource inventory above includes limits that also affect standalone POSIX behavior; these are open conformance gaps, not just hosted differences.
 - **Intentional hosted differences:** reserved shutdown signals, supervised `exec`, tab-owned descendants, and host capture/time limits. Standalone interactive execution does not adopt hosted cleanup or reserve its shutdown signal.
@@ -506,9 +507,24 @@ Language and state transitions remain native; implementing these features must n
 
 References: [POSIX Shell Command Language](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html), [POSIX read](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/read.html), [Bash parameter expansion](https://www.gnu.org/software/bash/manual/html_node/Shell-Parameter-Expansion.html), and [Bash arrays](https://www.gnu.org/software/bash/manual/html_node/Arrays.html), [POSIX wait](https://pubs.opengroup.org/onlinepubs/9799919799.2024edition/utilities/wait.html), and [POSIX job control](https://pubs.opengroup.org/onlinepubs/9799919799.2024edition/utilities/fg.html), and [Apple newlocale](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/newlocale.3.html).
 
+### Edit a standalone command line with vi keys
+
+Start `kwsh -i -o vi`, or enter `set -o vi` at an existing standalone prompt. Each new line starts in insert mode. Press **Escape** for command mode, **i** to insert again, and **Enter** to execute. `set +o vi` returns to plain terminal input. This editor requires an ANSI-compatible terminal (`TERM=dumb` is rejected); non-terminal input remains line-oriented. Kward's hosted `/shell` composer has separate ownership and rejects native vi activation.
+
+- Move with `h`, `l`, `0`, `^`, `$`, `|`, word motions `w/W`, `b/B`, `e/E`, and character searches `f/F`, `t/T`, `;`, `,`.
+- Change with `a/A`, `i/I`, `R`, `c` plus a motion, `C`, `S`, `r`, or `~`. Delete with `d` plus a motion, `D`, `x`, or `X`; yank with `y` plus a motion or `Y`; put with `p/P`. Counts apply to the commands that accept them.
+- `u` undoes the last change, `U` restores the edit line, and `.` repeats a change, including across submissions. A recalled history entry is copied before editing; the stored entry is not modified.
+- `k`/`-` and `j`/`+` browse history; `[number]G` selects an entry. `/pattern` searches backward and `?pattern` forward using shell patterns; leading `^` anchors the pattern. Use `n/N` to repeat/reverse a search. `_` inserts the previous command's last bigword; a count selects another bigword.
+- `\` completes the current bigword to its common pathname prefix, `*` inserts all pathname matches, and `=` lists shell-word expansions. Inserted pathnames are shell-escaped. **`=` is an explicit expansion action and can run command substitutions in the selected word**; ordinary redraw and pathname completion do not evaluate commands.
+- `@a` plays editing keystrokes from alias `_a`. `#` comments and accepts the line. `v` edits the current line in external `vi`; `[number]v` selects a history entry. The same private temporary-file and failed-editor rules as `fc` apply.
+
+Insert mode honors the terminal's configured erase, kill, interrupt, and EOF characters. Ctrl+W erases a word; Ctrl+V quotes the next character. Ctrl+C abandons the draft without adding it to history. Ctrl+L redraws in command mode. Long lines scroll horizontally rather than being truncated; control characters are displayed safely rather than emitted as terminal instructions. Raw mode is restored before execution, external editing, and cancellation, and input is not read ahead of the submitted command. Locale selection controls characters, case changes, and terminal cell widths. If editor setup fails (for example, an unavailable locale), kwsh reports the error and returns to plain input.
+
+This is the native shell's vi command subset, not the full-screen Kward editor, an emacs mode, or a promise of every Vim/readline extension. Remaining resource policies and Linux verification are still tracked separately from POSIX conformance.
+
 ### Prompt options and mail
 
-`set -o ignoreeof` prevents accidental terminal Ctrl+D exits; use `exit` explicitly, or disable it with `set +o ignoreeof`. Permanent EOF on a non-terminal still ends input instead of spinning. `set -o nolog` is accepted and listed but intentionally has no effect, as permitted for this obsolete option.
+`set -o ignoreeof` prevents accidental terminal Ctrl+D exits; use `exit` explicitly, or disable it with `set +o ignoreeof`. With `-i` and `ignoreeof`, non-terminal EOF also waits for more input or an explicit exit (including an exit trap), without repeatedly printing prompts. Disable the option or issue `exit` when feeding a finite script to an interactive shell. `set -o nolog` is accepted and listed but intentionally has no effect, as permitted for this obsolete option.
 
 Set `MAIL` to a mailbox pathname, or `MAILPATH` to colon-separated `path%message` entries. `MAILPATH` takes precedence even when empty; `\%` represents a literal percent in a pathname. Before primary prompts, kwsh checks for creation or modification since the previous check. `MAILCHECK` defaults to 600 seconds; `0` checks at every primary prompt. Invalid intervals use the default. The first check establishes a baseline. Optional messages are parameter-expanded, never evaluated as commands; the default is `you have mail`. These notifications belong to standalone prompts, not the hosted composer.
 
@@ -518,7 +534,7 @@ In `kwsh -i`, use `fc -l` to list recent commands, `fc -s old=new` to run the pr
 
 History defaults to **512 entries in memory**. For persistence, set `HISTFILE` to a private file before the first prompt (for example in your `ENV` startup file). `HISTSIZE` is a decimal entry count. Both are read once when history is first used; later changes do not reconfigure it. No file is created implicitly under `HOME`. History can contain secrets: do not enable persistence for sensitive sessions.
 
-History files use private JSONL records with stable, increasing numbers. New files are mode 0600; existing files must be regular, owned by the current user, mode 0600, and have one hard link. Symlinks and unsafe/inaccessible files fall back to memory without modifying their permissions. Updates are locked, but simultaneous shells can overwrite each other's snapshots; use separate files for independent terminals. Forked environments do not write their parent's history.
+History files use private JSONL records with stable, increasing numbers and lossless storage of non-UTF-8 command bytes. The byte encoding is not encryption. New files are mode 0600; existing files must be regular, owned by the current user, mode 0600, and have one hard link. Symlinks and unsafe/inaccessible files fall back to memory without modifying their permissions. Updates are locked, but simultaneous shells can overwrite each other's snapshots; use separate files for independent terminals. Forked environments do not write their parent's history.
 
 `FCEDIT` is parameter-expanded and names one executable (default `ed`), not shell source or a command plus arguments. Explicit `fc -e editor` overrides it. Edited commands live in a mode-0600 file inside a private temporary directory, removed on completion, failure, or cancellation. A failed/cancelled editor never executes its buffer or adds it to history. As with other temporary files, an uncatchable process kill can leave a private directory behind.
 

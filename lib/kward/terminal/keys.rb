@@ -2,6 +2,7 @@
 module Kward
   # Terminal input key byte sequences grouped by semantic key.
   module TerminalKeys
+    ESCAPE = "\e".freeze
     CTRL_SPACE = "\x00".freeze
     CTRL_A = "\x01".freeze
     CTRL_B = "\x02".freeze

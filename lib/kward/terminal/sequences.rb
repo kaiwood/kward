@@ -1,9 +1,10 @@
-require "base64"
-
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # Terminal control escape sequence builders.
   module TerminalSequences
+    ALERT = "\a".freeze
+    CARRIAGE_RETURN = "\r".freeze
+    ERASE_LINE_END = "\e[K".freeze
     KEYBOARD_PROTOCOL_ENABLE = "\e[>25u".freeze
     KEYBOARD_PROTOCOL_RESTORE = "\e[<u".freeze
     KEYBOARD_PROTOCOL_SET = "\e[=25u".freeze
@@ -62,7 +63,7 @@ module Kward
     end
 
     def osc52(text)
-      "\e]52;c;#{Base64.strict_encode64(text.to_s)}\a"
+      "\e]52;c;#{[text.to_s].pack("m0")}\a"
     end
 
     def kitty_graphics(data, image_id:, columns: nil, rows: nil, move_cursor: true)
@@ -99,7 +100,7 @@ module Kward
       params = ["inline=1", "preserveAspectRatio=1"]
       params << "width=#{width}" if width
       params << "height=#{height}" if height
-      params << "name=#{Base64.strict_encode64(File.basename(name))}" if name
+      params << "name=#{[File.basename(name)].pack("m0")}" if name
       "\e]1337;File=#{params.join(";")}:#{data}\a"
     end
   end

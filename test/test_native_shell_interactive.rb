@@ -28,12 +28,26 @@ class TestNativeShellInteractive < KwardTestCase
     end
   end
 
-  def test_nolog_round_trips_and_nonterminal_ignoreeof_does_not_spin
+  def test_nolog_and_ignoreeof_round_trip
     out, err, status = Open3.capture3({ "ENV" => nil, "HISTFILE" => "", "PS1" => "" }, RbConfig.ruby, EXECUTABLE, "-i",
-      stdin_data: "set -o nolog -o ignoreeof\nset +o\nset +o nolog\n")
+      stdin_data: "set -o nolog -o ignoreeof\nset +o\nset +o nolog +o ignoreeof\n")
     assert status.success?, err
     assert_includes out, "set -o nolog\n"
     assert_includes out, "set -o ignoreeof\n"
+  end
+
+  def test_nonterminal_ignoreeof_waits_for_an_explicit_exit_trap_without_spinning
+    Open3.popen3({ "ENV" => nil, "HISTFILE" => "", "PS1" => "" }, RbConfig.ruby, EXECUTABLE, "-i", pgroup: true) do |input, output, error, waiter|
+      input.write("trap 'exit 7' USR1\nset -o ignoreeof\nprintf 'ready\\n'\n")
+      input.close
+      assert_equal "ready\n", Timeout.timeout(5) { output.gets }
+      assert_nil waiter.join(0.25), "ignoreeof exited at a nonterminal EOF"
+      Process.kill("USR1", waiter.pid)
+      assert_equal 7, Timeout.timeout(5) { waiter.value }.exitstatus
+      assert_empty error.read
+    ensure
+      Process.kill("KILL", -waiter.pid) rescue nil
+    end
   end
 
   def test_terminal_eof_is_ignored_until_explicit_exit
@@ -77,10 +91,73 @@ class TestNativeShellInteractive < KwardTestCase
     end
   end
 
+  def test_vi_terminal_editing_history_and_interrupt_recovery
+    with_terminal do |reader, writer, pid|
+      read_until(reader, "ready> ")
+      writer.write("set -o vi\n")
+      read_until(reader, "ready> ")
+      writer.write("xprintf 'edited\\n'\e0x\n")
+      assert_includes read_until(reader, "\r\nedited\r\n"), "edited"
+      read_until(reader, "ready> ")
+      writer.write("\ek\n")
+      assert_includes read_until(reader, "\r\nedited\r\n"), "edited"
+      read_until(reader, "ready> ")
+      writer.write("unfinished\x03")
+      read_until(reader, "\r\n\rready> ")
+      writer.write("printf 'status:%s\\n' \"$?\"\n")
+      assert_includes read_until(reader, "\r\nstatus:130\r\n"), "status:130"
+      writer.write("set +o vi\nexit\n")
+      assert_equal 0, Process.waitpid2(pid)[1].exitstatus
+    end
+  end
+
+  def test_vi_preserves_command_stdin_and_custom_terminal_controls
+    with_terminal do |reader, writer, pid|
+      read_until(reader, "ready> ")
+      writer.write("stty erase '^H' kill '^X' eof '^E'; set -o vi\n")
+      read_until(reader, "ready> ")
+      writer.write("ignored\x18read valx\x08ue\npayload\n")
+      read_until(reader, "\r\n\rready> ")
+      writer.write("printf '<%s>\\n' \"$value\"\n")
+      assert_includes read_until(reader, "\r\n<payload>\r\n"), "<payload>"
+      read_until(reader, "ready> ")
+      writer.write("\x05")
+      assert_equal 0, Process.waitpid2(pid)[1].exitstatus
+    end
+  end
+
+  def test_vi_setup_failure_returns_to_plain_input
+    with_terminal("LC_ALL" => "kward_nonexistent_locale") do |reader, writer, pid|
+      read_until(reader, "ready> ")
+      writer.write("set -o vi\n")
+      assert_includes read_until(reader, "vi disabled:"), "vi disabled:"
+      read_until(reader, "ready> ")
+      writer.write("printf 'recovered\\n'\nexit\n")
+      assert_includes read_until(reader, "\r\nrecovered\r\n"), "recovered"
+      assert_equal 0, Process.waitpid2(pid)[1].exitstatus
+    end
+  end
+
+  def test_vi_external_editor_runs_after_terminal_restoration
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "vi"), "#!/usr/bin/env ruby\nrequire 'io/console'\nabort 'terminal not restored' unless STDIN.echo?\nFile.write(ARGV.fetch(0), \"printf 'from-editor\\\\n'\\n\")\n")
+      File.chmod(0700, File.join(dir, "vi"))
+      with_terminal("PATH" => "#{dir}:#{ENV.fetch('PATH')}") do |reader, writer, pid|
+        read_until(reader, "ready> ")
+        writer.write("set -o vi\n")
+        read_until(reader, "ready> ")
+        writer.write("old draft\ev")
+        assert_includes read_until(reader, "\r\nfrom-editor\r\n"), "from-editor"
+        writer.write("exit\n")
+        assert_equal 0, Process.waitpid2(pid)[1].exitstatus
+      end
+    end
+  end
+
   private
 
-  def with_terminal
-    PTY.spawn({ "ENV" => nil, "HISTFILE" => "", "PS1" => "ready> ", "TERM" => "xterm" }, RbConfig.ruby, EXECUTABLE) do |reader, writer, pid|
+  def with_terminal(env = {})
+    PTY.spawn({ "ENV" => nil, "HISTFILE" => "", "PS1" => "ready> ", "TERM" => "xterm" }.merge(env), RbConfig.ruby, EXECUTABLE) do |reader, writer, pid|
       yield reader, writer, pid
     ensure
       Process.kill("KILL", -pid) rescue nil
@@ -92,5 +169,7 @@ class TestNativeShellInteractive < KwardTestCase
     result = +""
     Timeout.timeout(5) { result << reader.readpartial(1) until result.include?(text) }
     result
+  rescue Timeout::Error
+    flunk "terminal did not produce #{text.inspect}: #{(result[-3000..] || result).inspect}"
   end
 end

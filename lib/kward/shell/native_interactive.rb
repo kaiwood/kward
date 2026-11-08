@@ -6,6 +6,43 @@ module Kward
         @options.include?(name)
       end
 
+      def vi_expansions(text, full:)
+        previous_streams, previous_substitutions = @streams, @process_substitutions
+        previous_status = @status
+        @process_substitutions = []
+        pattern = text.match?(/[*?\[]/) ? text : text + "*"
+        @streams = @base_streams || { 0 => $stdin, 1 => $stdout, 2 => $stderr }
+        matches = if full
+          tokens = Lexer.new(pattern).tokens
+          raise ExecutionError, "vi expansion requires one shell word" unless tokens.one? && tokens.first.value.is_a?(Word)
+          expand(tokens.first.value)
+        else
+          Locale.with(@variables) { |locale| Glob.new(pattern, cwd: @directory, locale: locale, globstar: @globstar).matches }
+        end
+        matches.map { |path| File.directory?(@directory.resolve(path)) && !path.end_with?("/") ? path + "/" : path }
+      ensure
+        resources = @process_substitutions
+        @streams, @process_substitutions = previous_streams, previous_substitutions
+        @status = previous_status
+        finish_substitutions(resources) if resources
+      end
+
+      def vi_input_error(exception, error:)
+        @options.delete("vi")
+        @status = 2
+        error.puts("kwsh: vi disabled: #{exception.message}")
+      end
+
+      def vi_edit(source, input:, output:, error:)
+        result, text = edit_history(source, "vi", { 0 => input, 1 => output, 2 => error }.merge(@persistent_descriptors))
+        @status = result
+        text if result.zero?
+      rescue ExecutionError, SystemCallError, IOError, ArgumentError => e
+        error.puts("kwsh: vi: #{e.message}")
+        @status = 2
+        nil
+      end
+
       def prompt_text(name, error:)
         default = { "PS1" => "$ ", "PS2" => "> ", "PS4" => "+ " }.fetch(name)
         value = expand_parameters(@variables.fetch(name, default))
