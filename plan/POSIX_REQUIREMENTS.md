@@ -95,7 +95,7 @@ Each name is an independent audit target, even in grouped rows. Audit required o
 
 | ID | Requirement / POSIX reference | Profile | Owner | Coverage / remaining audit | Status |
 | --- | --- | --- | --- | --- | --- |
-| UTIL-1 | SCL 2.15: `break`, `:`, `continue`, `.`, `eval`, `exit`, `return`, `shift`, `times` | Base | `native_runtime.rb`, `native_builtins.rb` | N loops/source/eval; I times; R exit; audit every contract individually | not yet audited |
+| UTIL-1 | SCL 2.15: `break`, `:`, `continue`, `.`, `eval`, `exit`, `return`, `shift`, `times` | Base | `native_runtime.rb`, `native_builtins.rb` | N loops/source/eval; I times; R exit; dot search now skips unopenable PATH candidates (`test_native_shell_directory.rb`); audit every contract individually | not yet audited |
 | UTIL-2 | SCL 2.15: `export`, `readonly`, `unset`, `set` | Base (UP options below) | `native_runtime.rb`, `native_builtins.rb` | N/I/P attributes, declarations, options; all option and error combinations | not yet audited |
 | UTIL-3 | SCL 2.15: `exec`, `trap` | Base | `native_builtins.rb`, `native_traps.rb` | N/R; EXEC-1, SIG-2/3/4 | not yet audited |
 | UTIL-4 | [alias](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/alias.html), [unalias](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/unalias.html), [command](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/command.html), [hash](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/hash.html) | Base | `native_runtime.rb`, `native_builtins.rb` | N/I command/path/cache tests; ALIAS gaps and full description formats | not yet audited |

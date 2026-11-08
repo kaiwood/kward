@@ -57,6 +57,27 @@ class TestNativeShellDirectory < KwardTestCase
     end
   end
 
+  def test_dot_search_skips_unreadable_path_candidates
+    Dir.mktmpdir("native-dot-path") do |dir|
+      first = File.join(dir, "first")
+      second = File.join(dir, "second")
+      Dir.mkdir(first)
+      Dir.mkdir(second)
+      blocked = File.join(first, "library")
+      File.write(blocked, "VALUE=wrong\n")
+      File.chmod(0, blocked)
+      File.write(File.join(second, "library"), "VALUE=loaded\n")
+
+      output, error, status = invoke("PATH=first:second:/usr/bin:/bin; . library; printf '%s' \"$VALUE\"", chdir: dir)
+
+      assert status.success?, error
+      assert_empty error
+      assert_equal "loaded", output
+    ensure
+      File.chmod(0o600, blocked) if blocked && File.exist?(blocked)
+    end
+  end
+
   def test_relative_lookup_and_exec_use_the_renamed_directory
     Dir.mktmpdir("native-cwd-exec") do |dir|
       Dir.mkdir(File.join(dir, "old"))

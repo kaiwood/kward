@@ -289,24 +289,36 @@ module Kward
         raise ExecutionError, ".: expected a file" if args.empty?
         raise ExecutionError, "source nesting exceeds 100 levels" if @source_depth >= 100
         name = args.first
-        path = if name.include?("/")
-          name
-        else
-          @variables.fetch("PATH", "/usr/bin:/bin").split(":", -1).map { |directory| @directory.resolve(File.join(directory.empty? ? "." : directory, name)) }.find { |candidate| File.file?(candidate) }
-        end
-        raise ExecutionError, ".: file not found: #{name}" unless path
+        input = open_source_file(name)
+        raise ExecutionError, ".: file not found: #{name}" unless input
         previous = @arguments
         @arguments = args.drop(1) if args.length > 1
         @source_depth += 1
         begin
-          @directory.open_file(path) { |input| evaluate_program(input, streams) }
+          evaluate_program(input, streams)
         rescue Flow => flow
           raise unless flow.kind == :return
           flow.status
         ensure
+          input.close
           @source_depth -= 1
           @arguments = previous
         end
+      end
+
+      def open_source_file(name)
+        return @directory.open_file(name) if name.include?("/")
+
+        @variables.fetch("PATH", "/usr/bin:/bin").split(":", -1).each do |directory|
+          candidate = @directory.resolve(File.join(directory.empty? ? "." : directory, name))
+          next unless File.file?(candidate)
+          begin
+            return @directory.open_file(candidate)
+          rescue Errno::EACCES, Errno::ENOENT, Errno::ENOTDIR, Errno::ELOOP
+            next
+          end
+        end
+        nil
       end
 
       def readonly(args, streams)

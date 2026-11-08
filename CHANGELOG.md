@@ -48,6 +48,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Native dot-sourcing now continues searching `PATH` when a matching file cannot be opened, selecting the first readable candidate as required.
 - Native `getopts` error diagnostics now identify the invoking shell, including for unknown options and missing option arguments.
 - Standalone `read` now displays the parameter-expanded `PS2` prompt on interactive backslash-newline continuations.
 - Native `type` now rejects a missing operand, and `kill -s name` / `kill -name` accept case-independent signal names as required by POSIX.
