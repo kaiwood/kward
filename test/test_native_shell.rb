@@ -1115,6 +1115,25 @@ class TestNativeShell < KwardTestCase
     assert_includes error, "mutually exclusive"
   end
 
+  def test_variable_attribute_utilities_reject_invalid_names_and_options
+    {
+      "export -z value" => "export",
+      "readonly -z value" => "readonly",
+      "unset -z value" => "unset",
+      "set -z" => "set"
+    }.each do |source, utility|
+      status, _, error = execute(source)
+      assert_equal 2, status, source
+      assert_includes error, utility, source
+    end
+
+    ["export 1bad=value", "readonly 1bad", "unset 1bad"].each do |source|
+      status, _, error = execute(source)
+      assert_equal 2, status, source
+      assert_includes error, "invalid variable name", source
+    end
+  end
+
   def test_readonly_command_lookup_and_getopts_keep_interpreter_state
     assert_output("external:pwd\navalue:3", <<~'SHELL')
       printf() { command printf '%s' external; }
