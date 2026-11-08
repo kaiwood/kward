@@ -444,6 +444,10 @@ class TestNativeShell < KwardTestCase
     assert_output("ab:1:b:ten", 'set -- a b; for item; do printf "%s" "$item"; done; shift; printf ":%s:%s" "$#" "$1"; set -- 1 2 3 4 5 6 7 8 9 ten; printf ":%s" "${10}"')
   end
 
+  def test_shift_zero_exact_count_and_count_larger_than_parameters
+    assert_output("1:2:a:0:0", 'set -- a b; shift 3; printf "%s:%s:%s:" "$?" "$#" "$1"; shift 0; shift 2; printf "%s:%s" "$?" "$#"')
+  end
+
   def test_pipeline_runs_concurrently_and_isolates_builtin_state
     assert_output("AB:original", "value=original; printf ab | tr a-z A-Z; printf x | value=child; printf ':%s' \"$value\"")
     status, output, error = execute("yes x | head -n 20000 | wc -l")
