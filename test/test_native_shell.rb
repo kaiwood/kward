@@ -1072,6 +1072,13 @@ class TestNativeShell < KwardTestCase
     refute @runtime.exited
   end
 
+  def test_unset_function_option_validates_names_and_preserves_variables
+    assert_output("unset:function", 'f=variable; f() { printf function; }; unset -f missing; unset -v f; printf "%s:" "${f-unset}"; f')
+    status, _, error = execute('unset -f 1bad')
+    assert_equal 2, status
+    assert_includes error, "invalid variable name"
+  end
+
   def test_readonly_command_lookup_and_getopts_keep_interpreter_state
     assert_output("external:pwd\navalue:3", <<~'SHELL')
       printf() { command printf '%s' external; }
