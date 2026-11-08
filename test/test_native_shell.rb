@@ -405,6 +405,11 @@ class TestNativeShell < KwardTestCase
     assert_output("first\nsecond", "export VALUE='first\nsecond'; saved=$(export -p); unset VALUE; eval \"$saved\"; printf '%s' \"$VALUE\"")
   end
 
+  def test_export_p_restores_the_attribute_of_an_unset_variable
+    ruby = Shellwords.escape(RbConfig.ruby)
+    assert_output("restored", "export pending; saved=$(export -p); unset -v pending; eval \"$saved\"; pending=restored; #{ruby} -e 'print ENV.fetch(\"pending\")'")
+  end
+
   def test_sequences_boolean_lists_negation_and_status
     assert_output("fallback:1:0", 'false && printf no; false || printf fallback; ! true; printf ":%s" "$?"; ! false; printf ":%s" "$?"')
   end
