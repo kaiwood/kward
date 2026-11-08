@@ -401,6 +401,10 @@ class TestNativeShell < KwardTestCase
     assert_equal "one two *", @runtime.environment["RESULT"]
   end
 
+  def test_export_p_output_can_restore_a_multiline_value
+    assert_output("first\nsecond", "export VALUE='first\nsecond'; saved=$(export -p); unset VALUE; eval \"$saved\"; printf '%s' \"$VALUE\"")
+  end
+
   def test_sequences_boolean_lists_negation_and_status
     assert_output("fallback:1:0", 'false && printf no; false || printf fallback; ! true; printf ":%s" "$?"; ! false; printf ":%s" "$?"')
   end
