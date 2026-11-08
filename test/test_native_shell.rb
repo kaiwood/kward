@@ -1179,6 +1179,10 @@ class TestNativeShell < KwardTestCase
     assert @runtime.exited
   end
 
+  def test_set_plus_o_output_restores_option_state
+    assert_output("restored", 'set -euf; saved=$(set +o); set +euf; eval "$saved"; case $- in *e*f*u*) printf restored;; esac')
+  end
+
   def test_nounset_noglob_noclobber_and_allexport_are_explicit_options
     File.write(File.join(@directory, "one.rb"), "original")
     assert_output("*.rb:default", 'set -fu; printf "%s:%s" *.rb "${unset:-default}"')
