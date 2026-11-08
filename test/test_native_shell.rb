@@ -1096,6 +1096,25 @@ class TestNativeShell < KwardTestCase
     fresh&.close
   end
 
+  def test_readonly_p_preserves_unset_variable_state
+    _, declarations, = execute("readonly AUDIT_UNSET; readonly -p")
+    fresh = Kward::NativeShell::Runtime.new(cwd: @directory, env: {})
+    status, _, = execute(declarations, runtime: fresh)
+
+    assert_equal 0, status
+    refute fresh.variables.key?("AUDIT_UNSET")
+    assert_equal 2, execute("AUDIT_UNSET=value", runtime: fresh).first
+  ensure
+    fresh&.close
+  end
+
+  def test_unset_rejects_mutually_exclusive_options
+    status, _, error = execute("unset -fv value")
+
+    assert_equal 2, status
+    assert_includes error, "mutually exclusive"
+  end
+
   def test_readonly_command_lookup_and_getopts_keep_interpreter_state
     assert_output("external:pwd\navalue:3", <<~'SHELL')
       printf() { command printf '%s' external; }
