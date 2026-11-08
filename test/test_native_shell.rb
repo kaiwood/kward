@@ -1202,6 +1202,17 @@ class TestNativeShell < KwardTestCase
     assert_output("restored", 'set -euf; saved=$(set +o); set +euf; eval "$saved"; case $- in *e*f*u*) printf restored;; esac')
   end
 
+  def test_set_o_lists_and_round_trips_standard_shell_options
+    status, listing, error = execute("set -o")
+    assert_equal 0, status, error
+
+    %w[allexport errexit ignoreeof monitor noclobber noglob noexec nolog notify nounset verbose vi xtrace].each do |option|
+      assert_match(/\Aset [+-]o #{option}\n/, listing.lines.grep(/ #{option}\n/).first || "", option)
+    end
+
+    assert_equal 0, execute(listing).first
+  end
+
   def test_nounset_noglob_noclobber_and_allexport_are_explicit_options
     File.write(File.join(@directory, "one.rb"), "original")
     assert_output("*.rb:default", 'set -fu; printf "%s:%s" *.rb "${unset:-default}"')
