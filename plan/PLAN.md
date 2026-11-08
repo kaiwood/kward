@@ -205,11 +205,19 @@ Emacs editing and command substitution in prompt strings are not required for th
 - [ ] Test supported locales and encodings on macOS and Linux. Distinguish deterministic matcher coverage from tests requiring installed locale data.
 - [ ] Check every implementation-defined choice has documentation and coverage where practical.
 - [ ] Use independent conformance tests where available, reviewing their assumptions against POSIX.1-2024 before adopting expectations.
-- [ ] Turn newly discovered gaps into additional implementation steps. Do not close the plan merely because the original gap list is exhausted.
+- [x] Turn newly discovered gaps into additional implementation steps. Do not close the plan merely because the original gap list is exhausted. Audit found and fixed missing `PS2` continuation prompting for interactive `read`; tracked in `UTIL-6` and covered by `test_native_shell_interactive.rb`.
 - [ ] Run the focused and full suites, review skips and baseline failures, and verify there are no unrelated changes.
 - [ ] Publish an accurate support statement distinguishing base shell behavior, optional profiles, hosted exceptions, and remaining limitations.
 
 **Complete when:** no required item in the claimed scope remains a known gap or an unaudited assumption. Formal certification, if desired, is a separate process from completing this engineering checklist.
+
+### Step 12 audit record — in progress
+
+- Read POSIX.1-2024 `read` DESCRIPTION/STDERR: a backslash-newline continuation on a terminal in an interactive shell must prompt using `PS2`. The native `read` implementation consumed the continuation without prompting. Added a PTY regression that failed before the fix, then implemented parameter-expanded `PS2` output to stderr for interactive terminal input. This closes only that narrow item; `UTIL-6` remains unaudited.
+- Authority: https://pubs.opengroup.org/onlinepubs/9799919799/utilities/read.html .
+- Focused shell suite: **404 runs, 2,947 assertions, 0 failures/errors/skips** (seed 16692).
+- Full repository suite: **2,670 runs, 14,369 assertions, 1 failure, 0 errors, 2 skips** (seed 27346). The existing editor spinner failure remains (`test/test_editor_prompt.rb:109`, expected `· ·`, rendered `⠋`); Bubblewrap integration tests remain disabled by their existing environment gate. No unrelated changes were made.
+- Audit is not complete: matrix rows remain unaudited; documented quota-policy nonconformance, Ruby-reserved trap limitations, XSI message-catalog/echo gaps, and missing Linux verification remain open. Do not claim Base, UP, or XSI conformance.
 
 ## Verification commands
 

@@ -50,6 +50,19 @@ class TestNativeShellInteractive < KwardTestCase
     end
   end
 
+  def test_read_prompts_with_ps2_for_backslash_newline_continuation
+    with_terminal("PS2" => "continuation> ") do |reader, writer, pid|
+      read_until(reader, "ready> ")
+      writer.write("read value\nfirst\\\n")
+      output = read_until(reader, "continuation> ")
+      refute_includes output, "value=firstsecond"
+      writer.write("second\nprintf '<%s>' \"$value\"\nexit\n")
+      output << read_until(reader, "<firstsecond>")
+      assert_includes output, "<firstsecond>"
+      assert_equal 0, Process.waitpid2(pid)[1].exitstatus
+    end
+  end
+
   def test_terminal_eof_is_ignored_until_explicit_exit
     with_terminal do |reader, writer, pid|
       read_until(reader, "ready> ")

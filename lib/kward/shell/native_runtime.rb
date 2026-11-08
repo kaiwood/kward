@@ -789,7 +789,10 @@ module Kward
           elsif byte == "\\" && !raw
             escaped = read_byte(input)
             break unless escaped
-            next if escaped == "\n"
+            if escaped == "\n"
+              streams[2]&.write(prompt_text("PS2", error: streams[2])) if input.tty? && interactive_scope?
+              next
+            end
             text << byte << escaped
           else
             text << byte

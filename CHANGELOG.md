@@ -48,6 +48,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Standalone `read` now displays the parameter-expanded `PS2` prompt on interactive backslash-newline continuations.
 - Native `type` now rejects a missing operand, and `kill -s name` / `kill -name` accept case-independent signal names as required by POSIX.
 
 - Removed native arithmetic's 4,096-byte expression ceiling and recursive evaluation of flat binary chains. Long non-overflowing expressions and zero-padded integers now work; precision, nesting, and other safety policies remain explicit in the resource-limit inventory.
