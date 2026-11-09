@@ -51,8 +51,8 @@ kward login                    # sign in or save provider credentials
 kward                          # start an interactive chat
 kward help                     # show available commands and examples
 kward hooks doctor             # inspect lifecycle hook setup
-kward "Explain this project"   # run one prompt and exit
-kward --working-directory ~/code/project "Explain this project"
+kward prompt "Explain this project"   # run one prompt and exit
+kward --working-directory ~/code/project prompt "Explain this project"
 ```
 
 From inside Kward, `/login` lets you choose API-key or subscription authentication across supported providers. `/model` then switches providers, refreshes model catalogs, or accepts a manual model/deployment ID. Direct OpenAI API credentials and ChatGPT/Codex OAuth can coexist.

@@ -33,7 +33,7 @@ Summarize the test strategy.
 ### Review changes before committing
 
 ```bash
-git diff | kward "Review this diff for bugs, missing tests, and confusing naming"
+git diff | kward prompt "Review this diff for bugs, missing tests, and confusing naming"
 ```
 
 For larger reviews, use interactive mode so Kward can inspect related files:
@@ -86,7 +86,7 @@ Useful shell commands:
 
 ```bash
 kward                          # start interactive chat
-kward "Explain this project"   # ask one question and exit
+kward prompt "Explain this project"   # ask one question and exit
 kward help                     # show commands and examples
 kward version                  # show the installed version
 kward doctor                   # check local setup
@@ -101,7 +101,7 @@ Use another workspace without changing directories:
 
 ```bash
 kward --working-directory ~/code/project
-kward --working-directory ~/code/project "Summarize this repository"
+kward --working-directory ~/code/project prompt "Summarize this repository"
 ```
 
 If your main config file is broken and prevents startup, use `--skip-config` to ignore it for one run:
@@ -215,23 +215,25 @@ For the full guide to context management, cloning, forking, rewinding, `/tree`, 
 One-shot prompts are best for short tasks that do not need session history:
 
 ```bash
-kward "What does this repository do?"
-cat error.log | kward
+kward prompt "What does this repository do?"
+cat error.log | kward prompt "Explain the errors in this log"
 ```
 
-When stdin and a prompt are both present, Kward runs in filter mode: stdin is the input, the prompt is the instruction, and stdout contains only the transformed result. You can also force this with `--filter` or `--mode filter`.
+When stdin and a prompt are both present, Kward runs in filter mode: stdin is the input, the prompt is the instruction, and stdout contains only the transformed result. Use the explicit `filter` command to make that intent clear; unknown commands are never treated as prompts.
 
 ```bash
-git diff | kward "Review this diff"
-echo "Hello" | kward --filter "Translate to German"
-kward --mode filter "Indent this JSON" < unindented.json
+git diff | kward prompt "Review this diff"
+echo "Hello" | kward filter "Translate to German"
+kward filter "Indent this JSON" < unindented.json
 ```
 
-Use `--mode chat`, `--mode oneshot`, or `--mode filter` to override automatic mode detection. Use `--` when your prompt starts with something that could be parsed as a command or option:
+Use `--mode chat` or `--mode oneshot` to override execution mode. Put `--` after `prompt` or `filter` when the text begins with an option-like value:
 
 ```bash
-kward -- explain --working-directory
+kward prompt -- --working-directory is part of the prompt
 ```
+
+Unknown command-line arguments are reported as errors rather than sent to the model. Start interactive chat with `kward` and no command.
 
 One-shot prompts do not use Kward memory.
 

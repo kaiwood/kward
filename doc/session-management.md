@@ -49,7 +49,7 @@ Interactive sessions are saved under:
 
 Sessions are scoped to the workspace. If you run Kward in two different projects, each project has its own recent sessions.
 
-One-shot prompts such as `kward "Explain this project"` do not use session history. Start interactive Kward when you want ongoing context:
+One-shot prompts such as `kward prompt "Explain this project"` do not use session history. Start interactive Kward when you want ongoing context:
 
 ```bash
 cd ~/code/project

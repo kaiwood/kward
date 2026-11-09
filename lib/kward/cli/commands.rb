@@ -19,7 +19,7 @@ module Kward
       end
 
       def one_shot_prompt_argument
-        prompt = @argv.join(" ").strip
+        prompt = (@argv.first == "prompt" ? @argv[1..] : []).join(" ").strip
         prompt.empty? ? nil : prompt
       end
 
@@ -53,7 +53,7 @@ module Kward
         lines << heading.call("Examples")
         lines.concat help_examples.map { |example| "  #{colored(example, :green, :bold)}" }
         lines << ""
-        lines << "Command names take precedence. Anything else is sent as a one-shot prompt."
+        lines << "Use `kward prompt <text>` to run a one-shot prompt. Unknown commands are not sent to the model."
         @prompt.say lines.join("\n")
       end
 
@@ -66,8 +66,8 @@ module Kward
             ["kward init", "Install starter prompts and PRINCIPLES.md"]
           ],
           "Work" => [
-            ["kward \"PROMPT\"", "Run a one-shot prompt"],
-            ["kward --filter \"INSTRUCTION\"", "Filter standard input"],
+            ["kward prompt \"PROMPT\"", "Run a one-shot prompt"],
+            ["kward filter \"INSTRUCTION\"", "Filter standard input"],
             ["kward edit <filename>", "Open a file in the integrated editor"],
             ["kward sysprompt [--raw]", "Inspect the effective system prompt"]
           ],
@@ -94,7 +94,6 @@ module Kward
         [
           ["--working-directory=PATH", "Run Kward from PATH"],
           ["--mode=MODE", "Execution mode: auto, chat, oneshot, filter"],
-          ["--filter", "Shortcut for --mode filter"],
           ["--skip-config", "Ignore the main config file for this run"],
           ["--ignore-local-instructions", "Ignore workspace AGENTS.md files and project skills for this run"],
           ["--help, -h", "Show help"],
@@ -105,9 +104,9 @@ module Kward
       def help_examples
         [
           "kward",
-          "kward \"Explain this project\"",
-          "git diff | kward \"Summarize the main changes\"",
-          "echo Hello | kward --filter \"Translate to German\"",
+          "kward prompt \"Explain this project\"",
+          "git diff | kward prompt \"Summarize the main changes\"",
+          "echo Hello | kward filter \"Translate to German\"",
           "kward login openrouter",
           "kward edit lib/main.rb",
           "kward stats tokens today --bucket hour"
@@ -144,6 +143,16 @@ module Kward
             usage: "kward auth status [--all]|logout",
             description: "Show or clear saved provider credentials without printing secrets.",
             examples: ["kward auth status", "kward auth status --all", "kward auth logout"]
+          },
+          "filter" => {
+            usage: "kward filter <instruction>",
+            description: "Filter standard input according to an instruction.",
+            examples: ["echo Hello | kward filter \"Translate to German\""]
+          },
+          "prompt" => {
+            usage: "kward prompt <text>",
+            description: "Run a one-shot prompt.",
+            examples: ["kward prompt \"Explain this project\"", "git diff | kward prompt \"Review this diff\""]
           },
           "init" => {
             usage: "kward init",
@@ -260,8 +269,6 @@ module Kward
             @skip_config = true
           when "--ignore-local-instructions"
             @ignore_local_instructions = true
-          when "--filter"
-            @requested_mode = "filter"
           when "--mode"
             index += 1
             raise ArgumentError, "Missing value for --mode" if index >= arguments.length

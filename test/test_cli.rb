@@ -497,16 +497,20 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_install_starter_pack_flag_is_treated_as_prompt
+  def test_unrecognized_option_is_not_treated_as_a_prompt
     Dir.mktmpdir do |config_dir|
       client = RecordingClient.new(["reply"])
 
       with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
-        capture_io do
-          Kward::CLI.new(argv: ["--install-starter-pack"], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: client).run
+        _stdout, stderr = capture_io do
+          error = assert_raises(SystemExit) do
+            Kward::CLI.new(argv: ["--install-starter-pack"], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: client).run
+          end
+          assert_equal 1, error.status
         end
 
-        assert_equal "--install-starter-pack", client.seen_messages.first.last[:content]
+        assert_includes stderr, "Unknown command: --install-starter-pack"
+        assert_empty client.seen_messages
       end
     end
   end
@@ -895,6 +899,18 @@ class TestCLI < KwardTestCase
     assert_includes output, "\e[2m│ puts :ok\e[0m"
   end
 
+  def test_unknown_cli_arguments_are_not_sent_as_prompts
+    client = FakeClient.new([])
+    calls = 0
+    client.define_singleton_method(:chat) { |*_arguments, **_options| calls += 1 }
+    cli = Kward::CLI.new(argv: ["promt", "Explain this project"], prompt: FakePrompt.new([]), client: client)
+
+    error = assert_raises(ArgumentError) { cli.dispatch }
+
+    assert_equal "Unknown command: promt", error.message
+    assert_equal 0, calls
+  end
+
   def test_run_reports_config_errors_without_backtrace
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")
@@ -903,7 +919,7 @@ class TestCLI < KwardTestCase
       with_env("KWARD_CONFIG_PATH" => config_path) do
         stdout, stderr = capture_io do
           error = assert_raises(SystemExit) do
-            Kward::CLI.new(argv: ["hello"], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([])).run
+            Kward::CLI.new(argv: ["prompt", "hello"], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([])).run
           end
           assert_equal 1, error.status
         end
@@ -928,7 +944,7 @@ class TestCLI < KwardTestCase
 
     stdout, stderr = capture_io do
       error = assert_raises(SystemExit) do
-        Kward::CLI.new(argv: ["hello"], stdin: FakeInput.new("", tty: false), prompt: FakePrompt.new([]), client: client).run
+        Kward::CLI.new(argv: ["prompt", "hello"], stdin: FakeInput.new("", tty: false), prompt: FakePrompt.new([]), client: client).run
       end
       assert_equal 1, error.status
     end
@@ -948,7 +964,7 @@ class TestCLI < KwardTestCase
 
     stdout, stderr = capture_io do
       error = assert_raises(SystemExit) do
-        Kward::CLI.new(argv: ["hello"], stdin: FakeInput.new("", tty: false), prompt: FakePrompt.new([]), client: client).run
+        Kward::CLI.new(argv: ["prompt", "hello"], stdin: FakeInput.new("", tty: false), prompt: FakePrompt.new([]), client: client).run
       end
       assert_equal 1, error.status
     end
@@ -968,7 +984,7 @@ class TestCLI < KwardTestCase
 
     error = with_env("KWARD_DEBUG" => "1") do
       assert_raises(RuntimeError) do
-        Kward::CLI.new(argv: ["hello"], stdin: FakeInput.new("", tty: false), prompt: FakePrompt.new([]), client: client).run
+        Kward::CLI.new(argv: ["prompt", "hello"], stdin: FakeInput.new("", tty: false), prompt: FakePrompt.new([]), client: client).run
       end
     end
 

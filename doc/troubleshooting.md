@@ -23,7 +23,7 @@ Use `kward auth status --all` when you also want to see every unconfigured provi
 Kward keeps normal command failures concise. To include a Ruby backtrace while diagnosing an unexpected failure, rerun the command with debug errors enabled:
 
 ```bash
-KWARD_DEBUG=1 kward "Repeat the failing task"
+KWARD_DEBUG=1 kward prompt "Repeat the failing task"
 ```
 
 Backtraces can include local paths and implementation details. Review them before sharing them publicly.

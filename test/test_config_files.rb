@@ -455,7 +455,7 @@ class TestConfigFiles < KwardTestCase
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")
       client = RecordingClient.new(["reply"])
-      cli = Kward::CLI.new(argv: ["hello"], stdin: FakeInput.new("", tty: true), client: client)
+      cli = Kward::CLI.new(argv: ["prompt", "hello"], stdin: FakeInput.new("", tty: true), client: client)
 
       out, err = with_env("KWARD_CONFIG_PATH" => config_path) do
         capture_io { cli.run }

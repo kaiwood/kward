@@ -101,16 +101,16 @@ The composer footer highlights the two main discovery shortcuts: type `/` to bro
 
 ## Ask one question and exit
 
-For quick tasks, pass the prompt directly:
+For quick tasks, use the explicit `prompt` command. This keeps a misspelled command from being sent to the model by accident:
 
 ```bash
-kward "Explain this project"
+kward prompt "Explain this project"
 ```
 
 Review a diff:
 
 ```bash
-git diff | kward "Review this diff for bugs"
+git diff | kward prompt "Review this diff for bugs"
 ```
 
 One-shot prompts do not use Kward memory.

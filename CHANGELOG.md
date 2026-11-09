@@ -4,6 +4,11 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Require `kward prompt <text>` for one-shot model prompts and add `kward filter <instruction>` for explicit stdin filtering; unknown CLI arguments now fail instead of being sent to the model.
+- Initialize the model client before launching interactive chat so the configured model catalog and picker are available at startup.
+
 ### Added
 
 - Added native POSIX.1-2024 `ulimit` queries and settings for file/core size, data, descriptors, stack, CPU time, and address space, with soft/hard selection and owned-process isolation from the Kward host and other sessions.

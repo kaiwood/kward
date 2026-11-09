@@ -127,5 +127,5 @@ Selecting `origin` does not add a separate approval prompt; the normal configure
 For AI-assisted review without committing, you can still pipe a diff into a one-shot prompt:
 
 ```bash
-git diff | kward "Review this diff"
+git diff | kward prompt "Review this diff"
 ```

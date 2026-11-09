@@ -231,12 +231,6 @@ module Kward
         return
       end
 
-      if @prompt_delimited
-        ConfigFiles.ensure_default_config!
-        run_prompt_or_interactive
-        return
-      end
-
       if help_command?
         print_command_help(@argv[1])
         return
@@ -250,6 +244,30 @@ module Kward
       raise ArgumentError, command_usage("version") if ["version", "--version", "-v"].include?(@argv.first)
 
       ConfigFiles.ensure_default_config!
+
+      if @argv.first == "filter"
+        if help_option_arguments?(@argv[1..] || [])
+          print_command_help("filter")
+          return
+        end
+        raise ArgumentError, command_usage("filter") if @argv.length < 2
+
+        @requested_mode = "filter"
+        @argv = ["prompt", *(@argv[1..] || [])]
+        run_prompt_or_interactive
+        return
+      end
+
+      if @argv.first == "prompt"
+        if help_option_arguments?(@argv[1..] || [])
+          print_command_help("prompt")
+          return
+        end
+        raise ArgumentError, command_usage("prompt") if @argv.length < 2
+
+        run_prompt_or_interactive
+        return
+      end
 
       if @argv.first == "init"
         if help_option_arguments?(@argv[1..] || [])
@@ -388,7 +406,10 @@ module Kward
         return
       end
 
-      run_prompt_or_interactive
+      raise ArgumentError, "Unknown command: #{@argv.first}" unless @argv.empty?
+
+      ensure_client!
+      interactive_loop
     end
 
     def edit_file_command(path)

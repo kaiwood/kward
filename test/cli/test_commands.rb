@@ -2,7 +2,7 @@ require_relative "../test_helper"
 
 class TestCLICommands < KwardTestCase
   def test_module_split_keeps_one_shot_mode_working
-    cli = Kward::CLI.new(argv: ["hello"], stdin: FakeInput.new("", tty: true), client: FakeClient.new([{ "role" => "assistant", "content" => "hi" }]))
+    cli = Kward::CLI.new(argv: ["prompt", "hello"], stdin: FakeInput.new("", tty: true), client: FakeClient.new([{ "role" => "assistant", "content" => "hi" }]))
 
     assert_match(/\Ahi\n\nCompleted · \d+\.\ds · tokens unavailable · 0 tool calls\z/, cli.one_shot("hello"))
   end
@@ -23,12 +23,13 @@ class TestCLICommands < KwardTestCase
     assert_includes output, "kward login [PROVIDER]"
     assert_includes output, "kward init"
     assert_includes output, "kward pan"
-    assert_includes output, "kward \"Explain this project\""
-    assert_includes output, "git diff | kward \"Summarize the main changes\""
+    assert_includes output, "kward prompt \"Explain this project\""
+    assert_includes output, "git diff | kward prompt \"Summarize the main changes\""
+    assert_includes output, "kward filter \"INSTRUCTION\""
     refute_includes output, "\e[34;1mCommands\e[0m"
     refute_includes output, "--install-starter-pack"
     refute_includes output, "--pan-mode"
-    assert_includes output, "Command names take precedence. Anything else is sent as a one-shot prompt."
+    assert_includes output, "Unknown commands are not sent to the model."
   end
 
   def test_version_command_prints_version
@@ -266,24 +267,27 @@ class TestCLICommands < KwardTestCase
     assert_empty prompt.output
   end
 
-  def test_removed_count_tests_command_runs_as_prompt_instead_of_crashing
+  def test_unknown_command_does_not_run_as_prompt
     Dir.mktmpdir do |config_dir|
-      client = RecordingClient.new(["treated as prompt"])
+      client = RecordingClient.new(["should not run"])
       cli = Kward::CLI.new(argv: ["count-tests"], stdin: FakeInput.new("", tty: true), client: client)
 
-      stdout = with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
-        capture_io { cli.run }.first
+      stderr = with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        capture_io do
+          error = assert_raises(SystemExit) { cli.run }
+          assert_equal 1, error.status
+        end.last
       end
 
-      assert_includes stdout, "treated as prompt"
-      assert_equal "count-tests", client.seen_messages.first.last[:content]
+      assert_includes stderr, "Unknown command: count-tests"
+      assert_empty client.seen_messages
     end
   end
 
   def test_multi_argument_input_runs_as_one_shot_prompt
     Dir.mktmpdir do |config_dir|
       client = RecordingClient.new(["summary"])
-      cli = Kward::CLI.new(argv: ["Explain", "this", "project"], stdin: FakeInput.new("", tty: true), client: client)
+      cli = Kward::CLI.new(argv: ["prompt", "Explain", "this", "project"], stdin: FakeInput.new("", tty: true), client: client)
 
       stdout = with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
         capture_io { cli.run }.first
@@ -296,7 +300,7 @@ class TestCLICommands < KwardTestCase
 
   def test_single_argument_prompt_still_runs_one_shot
     Dir.mktmpdir do |config_dir|
-      cli = Kward::CLI.new(argv: ["Explain this project"], stdin: FakeInput.new("", tty: true), client: FakeClient.new([{ "role" => "assistant", "content" => "summary" }]))
+      cli = Kward::CLI.new(argv: ["prompt", "Explain this project"], stdin: FakeInput.new("", tty: true), client: FakeClient.new([{ "role" => "assistant", "content" => "summary" }]))
 
       stdout = with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
         capture_io { cli.run }.first
@@ -306,24 +310,35 @@ class TestCLICommands < KwardTestCase
     end
   end
 
-  def test_stdin_without_prompt_runs_as_one_shot_prompt
+  def test_dispatch_initializes_client_before_starting_interactive_chat
+    Dir.mktmpdir do |config_dir|
+      cli = Kward::CLI.new(argv: [], prompt: FakePrompt.new([]))
+      cli.define_singleton_method(:interactive_loop) { @client }
+
+      client = with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) { cli.dispatch }
+
+      assert_instance_of Kward::Client, client
+    end
+  end
+
+  def test_stdin_without_prompt_starts_interactive_chat
     Dir.mktmpdir do |config_dir|
       client = RecordingClient.new(["explained"])
-      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("Explain Ruby\n", tty: false), client: client)
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: client)
 
       stdout = with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
         capture_io { cli.run }.first
       end
 
-      assert_includes stdout, "explained"
-      assert_equal "Explain Ruby", client.seen_messages.first.last[:content]
+      assert_empty stdout
+      assert_empty client.seen_messages
     end
   end
 
   def test_stdin_with_prompt_runs_filter_mode
     Dir.mktmpdir do |config_dir|
       client = RecordingClient.new(["Hallo"])
-      cli = Kward::CLI.new(argv: ["Translate to German"], stdin: FakeInput.new("Hello\n", tty: false), client: client)
+      cli = Kward::CLI.new(argv: ["prompt", "Translate to German"], stdin: FakeInput.new("Hello\n", tty: false), client: client)
 
       stdout = with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
         capture_io { cli.run }.first
@@ -337,10 +352,10 @@ class TestCLICommands < KwardTestCase
     end
   end
 
-  def test_filter_flag_forces_filter_mode
+  def test_filter_command_forces_filter_mode
     Dir.mktmpdir do |config_dir|
       client = RecordingClient.new(["Hallo"])
-      cli = Kward::CLI.new(argv: ["--filter", "Translate to German"], stdin: FakeInput.new("Hello\n", tty: false), client: client)
+      cli = Kward::CLI.new(argv: ["filter", "Translate to German"], stdin: FakeInput.new("Hello\n", tty: false), client: client)
 
       stdout = with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
         capture_io { cli.run }.first
@@ -354,7 +369,7 @@ class TestCLICommands < KwardTestCase
   def test_mode_oneshot_treats_stdin_and_arguments_as_prompt_mode
     Dir.mktmpdir do |config_dir|
       client = RecordingClient.new(["ok"])
-      cli = Kward::CLI.new(argv: ["--mode", "oneshot", "Translate to German"], stdin: FakeInput.new("Hello\n", tty: false), client: client)
+      cli = Kward::CLI.new(argv: ["--mode", "oneshot", "prompt", "Translate to German"], stdin: FakeInput.new("Hello\n", tty: false), client: client)
 
       with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
         capture_io { cli.run }
@@ -385,7 +400,7 @@ class TestCLICommands < KwardTestCase
     Dir.mktmpdir do |config_dir|
       client = Object.new
       client.define_singleton_method(:chat) { |_messages, **_opts| raise "model should not be called" }
-      cli = Kward::CLI.new(argv: ["--filter", "Translate to German"], stdin: FakeInput.new("", tty: true), client: client)
+      cli = Kward::CLI.new(argv: ["filter", "Translate to German"], stdin: FakeInput.new("", tty: true), client: client)
 
       stderr = with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
         capture_io do
@@ -402,7 +417,7 @@ class TestCLICommands < KwardTestCase
       Dir.mktmpdir do |workspace_dir|
         File.write(File.join(workspace_dir, "AGENTS.md"), "Workspace marker from option")
         client = RecordingClient.new(["ok"])
-        cli = Kward::CLI.new(argv: ["--working-directory", workspace_dir, "hello"], stdin: FakeInput.new("", tty: true), client: client)
+        cli = Kward::CLI.new(argv: ["--working-directory", workspace_dir, "prompt", "hello"], stdin: FakeInput.new("", tty: true), client: client)
 
         with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
           capture_io { cli.run }
@@ -420,7 +435,7 @@ class TestCLICommands < KwardTestCase
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace_dir|
         client = RecordingClient.new(["ok"])
-        cli = Kward::CLI.new(argv: ["Explain", "this", "--working-directory=#{workspace_dir}", "project"], stdin: FakeInput.new("", tty: true), client: client)
+        cli = Kward::CLI.new(argv: ["prompt", "Explain", "this", "--working-directory=#{workspace_dir}", "project"], stdin: FakeInput.new("", tty: true), client: client)
 
         with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
           capture_io { cli.run }
@@ -434,7 +449,7 @@ class TestCLICommands < KwardTestCase
   def test_prompt_delimiter_preserves_option_like_prompt_text
     Dir.mktmpdir do |config_dir|
       client = RecordingClient.new(["ok"])
-      cli = Kward::CLI.new(argv: ["--", "explain", "--working-directory", "option"], stdin: FakeInput.new("", tty: true), client: client)
+      cli = Kward::CLI.new(argv: ["prompt", "--", "explain", "--working-directory", "option"], stdin: FakeInput.new("", tty: true), client: client)
 
       with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
         capture_io { cli.run }
@@ -447,7 +462,7 @@ class TestCLICommands < KwardTestCase
   def test_prompt_delimiter_preserves_command_like_prompt_text
     Dir.mktmpdir do |config_dir|
       client = RecordingClient.new(["ok"])
-      cli = Kward::CLI.new(argv: ["--", "pan", "extra"], stdin: FakeInput.new("", tty: true), client: client)
+      cli = Kward::CLI.new(argv: ["prompt", "--", "pan", "extra"], stdin: FakeInput.new("", tty: true), client: client)
 
       with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
         capture_io { cli.run }
@@ -495,17 +510,20 @@ class TestCLICommands < KwardTestCase
     end
   end
 
-  def test_removed_pan_mode_flag_is_treated_as_prompt
+  def test_removed_pan_mode_flag_is_not_treated_as_a_prompt
     Dir.mktmpdir do |config_dir|
-      client = RecordingClient.new(["reply"])
+      client = RecordingClient.new(["should not run"])
       cli = Kward::CLI.new(argv: ["--pan-mode"], stdin: FakeInput.new("", tty: true), client: client)
 
-      with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
-        output = capture_io { cli.run }.first
-
-        assert_includes output, "reply"
-        assert_equal "--pan-mode", client.seen_messages.first.last[:content]
+      stderr = with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        capture_io do
+          error = assert_raises(SystemExit) { cli.run }
+          assert_equal 1, error.status
+        end.last
       end
+
+      assert_includes stderr, "Unknown command: --pan-mode"
+      assert_empty client.seen_messages
     end
   end
 

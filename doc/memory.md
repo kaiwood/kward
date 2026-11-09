@@ -11,7 +11,7 @@ Use memory when you keep telling Kward the same things:
 
 Leave memory off when every session should start clean.
 
-Memory is not used for one-shot prompts such as `kward "..."`.
+Memory is not used for one-shot prompts such as `kward prompt "..."`.
 
 ## Enable memory
 
