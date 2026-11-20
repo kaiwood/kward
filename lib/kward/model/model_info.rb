@@ -11,6 +11,11 @@ module Kward
     DEFAULT_REASONING_EFFORT = "medium"
     OPENAI_MODEL_CHOICES = %w[gpt-6.2-astra gpt-6.2-sol gpt-6.1-terra gpt-6-astra gpt-6.1-sol gpt-6-luna gpt-5.6-sol gpt-5.6-terra gpt-5.6-luna gpt-5.5 gpt-5.4 gpt-5.4-mini gpt-5.3-codex-spark].freeze
     ANTHROPIC_MODEL_CHOICES = %w[
+      claude-fable-5-2
+      claude-mythos-5-2
+      claude-opus-5-5
+      claude-sonnet-5-5
+      claude-haiku-5-5
       claude-fable-5
       claude-opus-5
       claude-opus-4-8
@@ -125,7 +130,7 @@ module Kward
       [/\Agpt-3\.5-turbo/, 16_385]
     ].freeze
     ANTHROPIC_CONTEXT_WINDOWS = [
-      [/\Aclaude-(?:fable|mythos|opus|sonnet)-5(?:\z|-)/, 1_000_000],
+      [/\Aclaude-(?:fable|mythos|opus|sonnet|haiku)-5(?:\z|-)/, 1_000_000],
       [/\Aclaude-opus-4-(?:6|7|8)(?:\z|-)/, 1_000_000],
       [/\Aclaude-sonnet-4-6(?:\z|-)/, 1_000_000],
       [/\Aclaude-(?:haiku|opus|sonnet)-4-5(?:\z|-)/, 200_000],
@@ -473,7 +478,7 @@ module Kward
 
     def anthropic_reasoning_effort_choices(id)
       text = normalize_anthropic_model(id)
-      return ANTHROPIC_HIGH_REASONING_EFFORT_CHOICES if text.match?(/\Aclaude-(?:fable|mythos|opus|sonnet)-5(?:\z|-)|\Aclaude-opus-4-(?:7|8)(?:\z|-)/)
+      return ANTHROPIC_HIGH_REASONING_EFFORT_CHOICES if text.match?(/\Aclaude-(?:fable|mythos|opus|sonnet|haiku)-5(?:\z|-)|\Aclaude-opus-4-(?:7|8)(?:\z|-)/)
       return ANTHROPIC_STANDARD_REASONING_EFFORT_CHOICES if text.match?(/\Aclaude-(?:opus-4-6|sonnet-4-6)(?:\z|-)/)
       return ANTHROPIC_OPUS_4_5_REASONING_EFFORT_CHOICES if text.match?(/\Aclaude-opus-4-5(?:\z|-)/)
 

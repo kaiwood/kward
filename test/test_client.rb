@@ -552,6 +552,11 @@ class TestClient < KwardTestCase
     refute models.any? { |model| model[:provider] == "OpenRouter" }
     assert_includes_model models, { provider: "Copilot", id: "gpt-5-mini", current: false, contextWindow: 400_000 }
     assert_includes_model models, { provider: "Copilot", id: "gpt-6-astra", current: false, contextWindow: 1_050_000 }
+    assert_includes_model models, { provider: "Anthropic", id: "claude-fable-5-2", current: false, contextWindow: 1_000_000 }
+    assert_includes_model models, { provider: "Anthropic", id: "claude-mythos-5-2", current: false, contextWindow: 1_000_000 }
+    assert_includes_model models, { provider: "Anthropic", id: "claude-opus-5-5", current: false, contextWindow: 1_000_000 }
+    assert_includes_model models, { provider: "Anthropic", id: "claude-sonnet-5-5", current: false, contextWindow: 1_000_000 }
+    assert_includes_model models, { provider: "Anthropic", id: "claude-haiku-5-5", current: false, contextWindow: 1_000_000 }
     assert_includes_model models, { provider: "Anthropic", id: "claude-fable-5", current: false, contextWindow: 1_000_000 }
     assert_includes_model models, { provider: "Anthropic", id: "claude-opus-5", current: false, contextWindow: 1_000_000 }
     assert_includes_model models, { provider: "Anthropic", id: "claude-sonnet-5", current: false, contextWindow: 1_000_000 }

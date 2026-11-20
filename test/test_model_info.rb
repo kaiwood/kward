@@ -143,6 +143,22 @@ class TestModelInfo < KwardTestCase
     assert Kward::ModelInfo.reasoning_supported?("Anthropic", "claude-sonnet-4-6")
   end
 
+  def test_latest_anthropic_models_are_available_with_capability_metadata
+    models = %w[
+      claude-fable-5-2
+      claude-mythos-5-2
+      claude-opus-5-5
+      claude-sonnet-5-5
+      claude-haiku-5-5
+    ]
+
+    models.each do |model|
+      assert_includes Kward::ModelInfo::ANTHROPIC_MODEL_CHOICES, model
+      assert_equal 1_000_000, Kward::ModelInfo.context_window("Anthropic", model)
+      assert Kward::ModelInfo.reasoning_supported?("Anthropic", model)
+    end
+  end
+
   def test_reasoning_effort_choices_are_model_specific
     assert_equal %w[low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("Codex", "gpt-6-astra").map(&:first)
     assert_equal %w[low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("OpenAI", "gpt-6-astra").map(&:first)
