@@ -3,6 +3,9 @@ require_relative "test_helper"
 class TestModelInfo < KwardTestCase
   def test_context_window_uses_known_codex_model_patterns
     cases = {
+      "gpt-6.2-astra" => 1_050_000,
+      "gpt-6.2-sol" => 1_050_000,
+      "gpt-6.1-terra" => 1_050_000,
       "gpt-6-astra" => 1_050_000,
       "gpt-6.1-sol" => 1_050_000,
       "gpt-6-luna" => 1_050_000,
@@ -35,6 +38,9 @@ class TestModelInfo < KwardTestCase
   def test_context_window_uses_provider_model_patterns
     assert_equal 1_050_000, Kward::ModelInfo.context_window("OpenRouter", "openai/gpt-6-astra")
     assert_equal 1_050_000, Kward::ModelInfo.context_window("OpenAI", "gpt-6-astra")
+    assert_equal 1_050_000, Kward::ModelInfo.context_window("OpenAI", "gpt-6.2-astra")
+    assert_equal 1_050_000, Kward::ModelInfo.context_window("OpenAI", "gpt-6.2-sol")
+    assert_equal 1_050_000, Kward::ModelInfo.context_window("OpenAI", "gpt-6.1-terra")
     assert_equal 1_050_000, Kward::ModelInfo.context_window("Copilot", "gpt-6-astra")
     assert_equal 1_050_000, Kward::ModelInfo.context_window("OpenRouter", "openai/gpt-5.6-sol")
     assert_equal 1_050_000, Kward::ModelInfo.context_window("OpenRouter", "openai/gpt-5.5")
@@ -141,6 +147,11 @@ class TestModelInfo < KwardTestCase
     assert_equal %w[low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("Codex", "gpt-6-astra").map(&:first)
     assert_equal %w[low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("OpenAI", "gpt-6-astra").map(&:first)
     assert_equal %w[low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("OpenAI", "gpt-6.1-sol").map(&:first)
+    assert_equal %w[low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("OpenAI", "gpt-6.2-astra").map(&:first)
+    assert_equal %w[low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("OpenAI", "gpt-6.2-sol").map(&:first)
+    assert_equal %w[none low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("OpenAI", "gpt-6.1-terra").map(&:first)
+    assert_equal %w[low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("Codex", "gpt-6.2-astra").map(&:first)
+    assert_equal %w[none low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("Codex", "gpt-6.1-terra").map(&:first)
     assert_equal %w[none low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("OpenAI", "gpt-6-luna").map(&:first)
     assert_equal %w[low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("Copilot", "gpt-6-astra").map(&:first)
     assert_equal %w[none low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("Codex", "gpt-5.6-sol").map(&:first)
@@ -155,6 +166,10 @@ class TestModelInfo < KwardTestCase
     assert_empty Kward::ModelInfo.reasoning_effort_choices("Anthropic", "claude-haiku-4-5")
     assert_equal %w[none low medium high xhigh], Kward::ModelInfo.reasoning_effort_choices("Copilot", "gpt-5-mini").map(&:first)
     assert Kward::ModelInfo.reasoning_supported?("OpenAI", "gpt-6-astra")
+    %w[gpt-6.2-astra gpt-6.2-sol gpt-6.1-terra].each do |model|
+      assert_includes Kward::ModelInfo::OPENAI_MODEL_CHOICES, model
+      assert Kward::ModelInfo.reasoning_supported?("OpenAI", model)
+    end
   end
 
   def test_copilot_reasoning_effort_uses_copilot_config_and_env

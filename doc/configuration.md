@@ -296,7 +296,7 @@ Defaults:
 - Copilot: `gpt-5-mini`
 - Reasoning effort: `medium`
 
-The OpenAI/Codex and Copilot model choices include `gpt-6-astra`. GPT-6 Astra has a 1,050,000-token context window and supports `low`, `medium`, `high`, `xhigh`, and `max` reasoning effort; it does not support `none`.
+The Codex model choices include `gpt-6.2-astra`, `gpt-6.2-sol`, and `gpt-6.1-terra`. These models have a 1,050,000-token context window. GPT-6.2 Astra and Sol support `low`, `medium`, `high`, `xhigh`, and `max` reasoning effort; they do not support `none`. GPT-6.1 Terra also supports `none`. Model availability depends on account access.
 
 The Anthropic model choices include `claude-fable-5`, `claude-opus-5`, and `claude-sonnet-5`. Fable and Opus availability depends on the logged-in account and organization. Selecting a model without access returns an Anthropic provider error. Kward keeps Sonnet 5 as its default because it supports both Pro and Max subscriptions; select Opus 5 explicitly when it is available on the account.
 
