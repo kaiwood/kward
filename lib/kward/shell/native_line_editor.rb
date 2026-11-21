@@ -21,6 +21,7 @@ module Kward
           @position = 0
           @entries = @runtime.history.entries
           @index = @entries.length
+          @last_tab = false
           loop do
             changed.call(@line, @position)
             key = get.call
@@ -29,7 +30,9 @@ module Kward
             return @line + "\n" if TerminalKeys::RETURN.include?(key)
             return nil if key == eof && @line.empty?
 
+            @last_tab = false unless TerminalKeys::TAB.include?(key)
             case key
+            when *TerminalKeys::TAB then complete(changed, alert)
             when *TerminalKeys::UP, TerminalKeys::CTRL_P then recall(-1)
             when *TerminalKeys::DOWN, TerminalKeys::CTRL_N then recall(1)
             when *TerminalKeys::LEFT, TerminalKeys::CTRL_B then @position = [@position - 1, 0].max
@@ -58,6 +61,21 @@ module Kward
       end
 
       private
+
+      def complete(changed, alert)
+        completion = @runtime.complete_line(@line, @position)
+        return alert.call unless completion
+
+        if @line[completion.range] != completion.replacement
+          @line[completion.range] = @locale.text(completion.replacement)
+          @position = completion.range.begin + completion.replacement.length
+        elsif @last_tab && completion.candidates.length > 1
+          changed.call(completion.candidates.join("\n"), nil)
+        else
+          alert.call
+        end
+        @last_tab = true
+      end
 
       def insert(text)
         text = @locale.text(text)

@@ -1,9 +1,18 @@
+require_relative "native_completion"
+
 module Kward
   module NativeShell
     # Prompt-time state only. Hosted shells keep their composer and notifications.
     module Interactive
       def option_enabled?(name)
         @options.include?(name)
+      end
+
+      def complete_line(text, cursor)
+        return if @hosted
+
+        commands = self.class::BUILTINS + @aliases.keys + @functions.keys
+        Completion.new(directory: @directory, variables: @variables, commands: commands).complete(text, cursor)
       end
 
       def vi_expansions(text, full:)

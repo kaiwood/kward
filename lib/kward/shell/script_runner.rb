@@ -1,6 +1,7 @@
 require_relative "native_runtime"
 require_relative "native_vi_terminal"
 require_relative "native_line_editor"
+require_relative "kwshrc"
 
 module Kward
   module NativeShell
@@ -8,7 +9,7 @@ module Kward
     module ScriptRunner
       module_function
 
-      def run(arguments, input: $stdin, output: $stdout, error: $stderr, name: nil, descriptors: {}, own_descriptors: false, hosted: false, process_owned: false, program: "kwsh", edit_lines: false)
+      def run(arguments, input: $stdin, output: $stdout, error: $stderr, name: nil, descriptors: {}, own_descriptors: false, hosted: false, process_owned: false, program: "kwsh", edit_lines: false, load_rc: false)
         args = arguments.dup
         options = []
         mode = nil
@@ -41,15 +42,18 @@ module Kward
         command_name = args.shift if mode == "c"
         name ||= command_name || file || $0
         interactive ||= !hosted && !command && !file && input.tty? && error.tty?
+        env = ENV.to_h
+        config = load_rc && interactive && !hosted ? read_rc(env, error: error) : {}
         runtime = Runtime.new(arguments: args, name: name, replace_process: !hosted,
+                              env: env.merge(config.fetch(:env, {})), aliases: config.fetch(:aliases, {}),
                               interactive: interactive || hosted, hosted: hosted, descriptors: descriptors, own_descriptors: own_descriptors, process_owned: process_owned)
         runtime.send(:reset_child_state, job_group: Process.getpgrp) if hosted
         runtime.with_signals do
           unless options.empty?
-            status = runtime.run("set #{Shellwords.join(options)}", input: input, output: output, error: error)
+            status = runtime.run("\\set #{Shellwords.join(options)}", input: input, output: output, error: error)
             return status unless status.zero?
           end
-          load_startup(runtime, input: input, output: output, error: error) if interactive
+          load_startup(runtime, input: input, output: output, error: error, value: env.fetch("ENV", "")) if interactive
           unless runtime.exited
             if command
               runtime.run(command, input: input, output: output, error: error)
@@ -78,9 +82,23 @@ module Kward
         descriptors.values.compact.uniq.each { |io| io.close unless io.closed? } if own_descriptors
       end
 
-      def load_startup(runtime, input:, output:, error:)
-        return unless Process.uid == Process.euid && Process.gid == Process.egid
-        path = runtime.expand_parameters(runtime.variables.fetch("ENV", ""))
+      def read_rc(env, error:)
+        return {} unless matching_identity?
+
+        Kwshrc.read(Kwshrc.paths, env: env)
+      rescue Kwshrc::ParseError, ArgumentError, SystemCallError
+        # Parser diagnostics may contain the original line, including secrets.
+        error.puts("kwsh: could not read kwshrc; check its aliases, exports, and source directives")
+        {}
+      end
+
+      def matching_identity?
+        Process.uid == Process.euid && Process.gid == Process.egid
+      end
+
+      def load_startup(runtime, input:, output:, error:, value: runtime.variables.fetch("ENV", ""))
+        return unless matching_identity?
+        path = runtime.expand_parameters(value)
         return if path.empty? || !File.file?(File.expand_path(path, runtime.cwd))
         runtime.run(". #{Shellwords.escape(path)}", input: input, output: output, error: error)
       rescue ExpansionError, ExecutionError => e

@@ -1,4 +1,6 @@
 # Core configuration paths, persistence, and shared configuration values.
+require_relative "paths"
+
 module Kward
   module ConfigFiles
     class ConfigError < StandardError
@@ -72,10 +74,7 @@ module Kward
       #
       # @return [String] expanded config directory path
       def config_dir
-        config_path = ENV["KWARD_CONFIG_PATH"]
-        return File.expand_path(File.dirname(config_path)) if config_path && !config_path.empty?
-
-        File.expand_path("~/.kward")
+        ConfigPaths.config_dir
       end
 
       # @return [String] expanded JSON config file path
@@ -95,7 +94,7 @@ module Kward
 
       # @return [Array<String>] embedded-shell rc config paths in load order
       def kwshrc_paths
-        [kwshrc_path, File.expand_path("~/.kwshrc")].uniq
+        Kwshrc.paths(kwshrc_path)
       end
 
       def workspace_hooks_path(root = Dir.pwd)

@@ -17,7 +17,7 @@ Run this from the directory you want to work in. No Kward login or agent configu
 kward shell
 ```
 
-Output scrolls normally, and foreground programs such as `less` and Vim get the terminal directly. After a program exits, the shell prints its next prompt. Use **Up/Down** to recall history, **Left/Right** or **Home/End** to move, and **Backspace/Delete** to edit. In a terminal that supports bracketed paste, pasted commands stay in the draft until you press **Enter**, even if they span several lines. **Ctrl+C** cancels the draft, and **Ctrl+D** on an empty prompt (or `exit`) leaves the shell.
+Output scrolls normally, and foreground programs such as `less` and Vim get the terminal directly. After a program exits, the shell prints its next prompt. Use **Up/Down** to recall history, **Left/Right** or **Home/End** to move, and **Backspace/Delete** to edit. Press **Tab** to complete a command, alias, function, or path. Tab extends a common prefix; press it again to list choices when there’s no more text to insert. After `cd`, it suggests directories only. In a terminal that supports bracketed paste, pasted commands stay in the draft until you press **Enter**, even if they span several lines. **Ctrl+C** cancels the draft, and **Ctrl+D** on an empty prompt (or `exit`) leaves the shell.
 
 Use `kward shell -o vi` or `set -o vi` to switch to native vi editing. `set +o vi` returns to the default editor. `TERM=dumb` falls back to plain input. Piping input runs the shell non-interactively unless you pass `-i`. History is in memory by default; see [standalone history](#standalone-command-history) for persistence and replay.
 
@@ -29,7 +29,9 @@ kward shell scripts/check.kwsh README.md
 printf 'printf "hello\\n"\n' | kward shell
 ```
 
-From a checkout, use `ruby exe/kward shell`. This is a traditional terminal frontend for **kwsh**, not Bash or Zsh; their startup files, completion, and language extensions don’t carry over. The hosted composer, shell assistant, and `/shell` shortcuts are not part of this mode. It isn’t an RPC or Pan session capability: it needs a local terminal for interactive editing and job control.
+Interactive `kward shell` reads the same [declarative kwshrc files](#configure-kwsh) as `/shell`. Use them for aliases and exported variables; non-interactive commands, scripts, and pipelines do not read them.
+
+From a checkout, use `ruby exe/kward shell`. This is a traditional terminal frontend for **kwsh**, not Bash or Zsh; their startup files, programmable completions, and language extensions don’t carry over. The hosted composer, shell assistant, and `/shell` shortcuts are not part of this mode. It isn’t an RPC or Pan session capability: it needs a local terminal for interactive editing and job control.
 
 ## Run a one-off command
 
@@ -739,14 +741,14 @@ Native aliases expand before builtin lookup. Prompt-only conveniences remain hos
 
 ## Configure kwsh
 
-Global shell configuration lives in these optional rc files, loaded in order:
+The hosted `/shell` and interactive `kward shell` load these optional rc files in order:
 
 ```text
 ~/.kward/kwshrc
 ~/.kwshrc
 ```
 
-When `KWARD_CONFIG_PATH` selects another main config file, Kward reads the first file beside that config file instead. The later file overrides earlier aliases and exported variables with the same names. The rc format currently supports declarative `alias`, `export`, and `source` directives:
+When `KWARD_CONFIG_PATH` selects another main config file, Kward reads the first file beside that config file instead. The later file overrides earlier aliases and exported variables with the same names. The rc format supports declarative `alias`, `export`, and `source` directives. Interactive `kward shell` reads them without loading Kward’s JSON config. The separate `kwsh` executable does not automatically load them. An `ENV` assignment in `kwshrc` is exported but does not select an executable startup file for that session; set `ENV` in the parent environment for that.
 
 ```sh
 alias ll='ls -la'

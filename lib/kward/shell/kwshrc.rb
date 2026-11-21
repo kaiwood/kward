@@ -1,5 +1,5 @@
 require "shellwords"
-require_relative "kwsh"
+require_relative "../config/paths"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -8,10 +8,19 @@ module Kward
   # Only aliases, exports, and source directives are handled. Other shell
   # syntax is intentionally ignored until kwsh supports scripting.
   class Kwshrc
+    PROMPT_BUILTINS = %w[alias capture cd pwd export source unset unalias clear exit logout pty].freeze
     VARIABLE_NAME = /\A[A-Za-z_][A-Za-z0-9_]*\z/
     VARIABLE_PATTERN = /[A-Za-z_][A-Za-z0-9_]*/
 
     class ParseError < StandardError
+    end
+
+    def self.paths(primary = File.join(ConfigPaths.config_dir, "kwshrc"))
+      [primary, File.expand_path("~/.kwshrc")].uniq
+    end
+
+    def self.valid_alias_name?(name)
+      name.to_s.match?(/\A[A-Za-z_][A-Za-z0-9_-]*\z/) && !PROMPT_BUILTINS.include?(name.to_s)
     end
 
     def self.read(paths, env: ENV.to_h)
@@ -92,7 +101,7 @@ module Kward
     def parse_aliases(words)
       words.each do |assignment|
         name, command = assignment.split("=", 2)
-        next unless command && Kwsh.valid_alias_name?(name)
+        next unless command && self.class.valid_alias_name?(name)
         next if command.empty?
 
         @aliases[name] = command

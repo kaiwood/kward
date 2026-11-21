@@ -1,4 +1,5 @@
 require "shellwords"
+require_relative "kwshrc"
 require_relative "../terminal/ansi"
 require_relative "../pty/local_command_runner"
 begin
@@ -13,7 +14,7 @@ module Kward
   class Kwsh
     Result = Struct.new(:output, :exit_status, :exit_shell, :clear, :open_editor_path, :interactive_command, :streamed, keyword_init: true)
     Completion = Struct.new(:range, :replacement, :candidates, keyword_init: true)
-    BUILTINS = %w[alias capture cd pwd export source unset unalias clear exit logout pty].freeze
+    BUILTINS = Kwshrc::PROMPT_BUILTINS
     DEFAULT_SHELL = "/bin/sh"
     DEFAULT_TIMEOUT_SECONDS = 300
     DEFAULT_MAX_OUTPUT_BYTES = 1_048_576
@@ -449,7 +450,7 @@ module Kward
     end
 
     def self.valid_alias_name?(name)
-      name.to_s.match?(/\A[A-Za-z_][A-Za-z0-9_-]*\z/) && !BUILTINS.include?(name.to_s)
+      Kwshrc.valid_alias_name?(name)
     end
 
     def run_expanded_command(command, cancellation: nil, &block)
@@ -559,7 +560,6 @@ module Kward
         return Result.new(output: "#{command_echo(command)}Usage: source <file>\n", exit_status: 2)
       end
 
-      require_relative "kwshrc"
       path = Kwshrc.resolve_path(words[1], cwd: @cwd, env: @env)
       config = Kwshrc.read_file(path, env: @env)
       path_changed = config[:env].key?("PATH")

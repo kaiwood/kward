@@ -11,7 +11,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
-- Added `kward shell` to run native kwsh directly in your terminal without starting the agent or composer. The standalone prompt has arrow-key history and editing, bracketed paste, and native job control.
+- Added `kward shell` to run native kwsh directly in your terminal without starting the agent or composer. Interactive sessions load `kwshrc` aliases and exports. The standalone prompt has Tab completion, arrow-key history and editing, bracketed paste, and native job control.
 
 - Generate images by asking in a Codex chat. Kward previews the result and can save it to Downloads or a project directory chosen with Tab completion. RPC clients can fetch, save, and discard previews.
 

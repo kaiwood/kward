@@ -40,6 +40,112 @@ class TestCLIShell < KwardTestCase
     assert_includes output, "Usage: kward shell"
   end
 
+  def test_interactive_kwshrc_applies_aliases_exports_and_relative_sources_in_order
+    Dir.mktmpdir do |home|
+      config = File.join(home, "settings")
+      Dir.mkdir(config)
+      File.write(File.join(config, "config.json"), "not JSON")
+      File.write(File.join(config, "kwshrc"), "export SHELL_TEST_COLOR=first\nsource extra.rc\n")
+      File.write(File.join(config, "extra.rc"), "alias report_config='printf \"rc:%s:%s\\n\" \"$SHELL_TEST_COLOR\"'\n")
+      File.write(File.join(home, ".kwshrc"), <<~KWSHRC)
+        export SHELL_TEST_COLOR=override
+        export ENV=#{home}/startup
+        touch #{home}/unwanted
+      KWSHRC
+      File.write(File.join(home, "startup"), "touch #{home}/unwanted\n")
+      env = { "HOME" => home, "KWARD_CONFIG_PATH" => File.join(config, "config.json"), "ENV" => nil, "SHELL_TEST_COLOR" => nil }
+
+      with_terminal(env) do |reader, writer, pid|
+        read_until(reader, PROMPT)
+        writer.write("report_con\tworks\n")
+        read_until(reader, "\r\nrc:override:works\r\n")
+        read_until(reader, PROMPT)
+        writer.write("exit\n")
+        assert_equal 0, wait_for_exit(pid).exitstatus
+      end
+      refute File.exist?(File.join(home, "unwanted"))
+
+      output, error, status = Open3.capture3(env, RbConfig.ruby, EXECUTABLE, "shell", "-c", 'printf "%s" "${SHELL_TEST_COLOR-unset}"')
+      assert status.success?, error
+      assert_equal "unset", output
+      assert_empty error
+    end
+  end
+
+  def test_malformed_kwshrc_is_reported_without_exposing_its_contents
+    Dir.mktmpdir do |home|
+      File.write(File.join(home, ".kwshrc"), "export PRIVATE='fixture-secret\n")
+      with_terminal("HOME" => home, "KWARD_CONFIG_PATH" => nil) do |reader, writer, pid|
+        startup = read_until(reader, PROMPT)
+        assert_includes startup, "could not read kwshrc"
+        refute_includes startup, "fixture-secret"
+        writer.write("exit\n")
+        assert_equal 0, wait_for_exit(pid).exitstatus
+      end
+    end
+  end
+
+  def test_tab_completes_live_functions_executables_builtins_and_paths
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "name with $cash.txt"), "from-file\n")
+      File.write(File.join(dir, "project-file"), "")
+      Dir.mkdir(File.join(dir, "project space"))
+      File.write(File.join(dir, "test-command"), "#!/bin/sh\nprintf 'from-executable\\n'\n", perm: 0o700)
+      with_terminal do |reader, writer, _pid|
+        read_until(reader, PROMPT)
+        writer.write("cd #{Shellwords.escape(dir)}; PATH=.; test_function() { /usr/bin/printf 'from-function\\n'; }\n")
+        read_until(reader, PROMPT)
+        writer.write(":; test_func\t\n")
+        read_until(reader, "\r\nfrom-function\r\n")
+        read_until(reader, PROMPT)
+        writer.write("TESTRUN=yes test-com\t\n")
+        read_until(reader, "\r\nfrom-executable\r\n")
+        read_until(reader, PROMPT)
+        writer.write("/bin/cat \"name wZZ\"\e[D\e[D\e[D\t\n")
+        read_until(reader, "\r\nfrom-file\r\n")
+        read_until(reader, PROMPT)
+        writer.write("cd proj\t\n")
+        read_until(reader, PROMPT)
+        writer.write("pw\t\n")
+        assert_includes read_until(reader, "/project space\r\n"), "/project space\r\n"
+      end
+    end
+  end
+
+  def test_tab_does_not_evaluate_command_substitutions_in_the_draft
+    Dir.mktmpdir do |dir|
+      marker = File.join(dir, "not-executed")
+      with_terminal do |reader, writer, pid|
+        read_until(reader, PROMPT)
+        writer.write("printf '%s' \"$(touch #{Shellwords.escape(marker)})\"\t\x03")
+        read_until(reader, PASTE_OFF)
+        read_until(reader, PASTE_ON + "\r" + PROMPT)
+        refute File.exist?(marker)
+        writer.write("exit 0\n")
+        assert_equal 0, wait_for_exit(pid).exitstatus
+      end
+    end
+  end
+
+  def test_second_tab_lists_ambiguous_matches_and_keeps_the_draft
+    Dir.mktmpdir do |dir|
+      %w[match-left match-right].each { |name| File.write(File.join(dir, name), "") }
+      with_terminal do |reader, writer, pid|
+        read_until(reader, PROMPT)
+        writer.write("cd #{Shellwords.escape(dir)}\n")
+        read_until(reader, PROMPT)
+        writer.write("printf '<%s>\\n' mat\t\t")
+        read_until(reader, "\r\nmatch-left\r\nmatch-right\r\n")
+        read_until(reader, "printf '<%s>\\n' match-")
+        writer.write("left\n")
+        read_until(reader, "\r\n<match-left>\r\n")
+        read_until(reader, PROMPT)
+        writer.write("exit\n")
+        assert_equal 0, wait_for_exit(pid).exitstatus
+      end
+    end
+  end
+
   def test_cursor_editing_and_history_restore_a_draft
     with_terminal do |reader, writer, pid|
       read_until(reader, PASTE_ON + "\r" + PROMPT)
@@ -169,6 +275,9 @@ class TestCLIShell < KwardTestCase
     PTY.spawn(defaults.merge(env), RbConfig.ruby, EXECUTABLE, "shell") do |reader, writer, pid|
       yield reader, writer, pid
     ensure
+      # Close the PTY before reaping to release the terminal on macOS.
+      reader.close unless reader.closed?
+      writer.close unless writer.closed?
       Process.kill("KILL", pid) rescue nil
       Process.waitpid(pid) rescue nil
     end
