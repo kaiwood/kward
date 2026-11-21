@@ -188,9 +188,9 @@ Use `failure_policy` (`allow`, `warn`, `deny`, or `ask`) to decide what happens 
 
 Project-local hooks can also live in `.kward/hooks.json`, but Kward loads them only after you explicitly run `/hooks trust` in that workspace. Trust is tied to the file digest, so changes require re-trusting. See [Lifecycle hooks](lifecycle-hooks.md) for events, decisions, selectors, plugin hooks, command-hook protocol, workspace trust, and security notes.
 
-## Embedded shell config
+## Shell configuration
 
-The embedded Kward shell (`/shell`, internally `kwsh`) reads the shell-style rc files `~/.kward/kwshrc` and `~/.kwshrc`, in that order. When `KWARD_CONFIG_PATH` is set, the first path is beside that config file instead. Later rc entries override earlier aliases and exported variables.
+Interactive `kward shell` and the hosted `/shell` both read `~/.kward/kwshrc` and then `~/.kwshrc`. When `KWARD_CONFIG_PATH` selects a different config file, Kward looks for the first `kwshrc` beside that file instead. Later entries override earlier aliases and exports. The separate `kwsh` executable and non-interactive `kward shell` invocations do not load these files automatically. See the [Shell guide](shell.md) for editing, history, and prompt customization.
 
 Example rc file:
 
@@ -206,7 +206,7 @@ Only declarative `alias`, `export`, and `source` (or `.`) directives are handled
 
 ### Shell-agent model
 
-The transient shell assistant normally follows the active conversation's model and reasoning effort. Override those defaults in the main JSON configuration:
+By default, the hosted `/shell` agent uses the active conversation's provider, model, and reasoning effort. The standalone `kward shell` agent starts from Kward's configured selection. Override either default in the main JSON configuration:
 
 ```json
 {
@@ -220,9 +220,9 @@ The transient shell assistant normally follows the active conversation's model a
 }
 ```
 
-The optional `provider` selects a different backend for the transient shell assistant. Use the lowercase configuration IDs listed in [Model providers](providers.md). When it is omitted, the shell assistant follows the active conversation's provider, model, and reasoning effort. If a provider is explicitly configured without a model or reasoning effort, Kward uses that provider's defaults rather than inheriting values from the active conversation.
+The optional `provider` selects a different backend for the shell agent. Use the lowercase configuration IDs listed in [Model providers](providers.md). If you set an explicit provider but omit the model or reasoning effort, Kward uses that provider's defaults for the omitted settings.
 
-Environment variables take precedence over the JSON settings:
+Environment variables exported before launching Kward take precedence over the JSON settings:
 
 ```sh
 export KWSH_PROVIDER="openrouter"
@@ -232,9 +232,9 @@ export KWSH_REASONING="none"
 
 `KWSH_PROVIDER` selects the shell-agent provider, `KWSH_MODE` selects its model, and `KWSH_REASONING` selects its reasoning effort. Empty values are ignored.
 
-`export` values are applied when shell mode starts, after Kward's conservative color defaults, and are also available to leading-`!` commands. Keys must be valid environment-variable names; invalid keys are ignored. Values support shell quoting and simple `$VAR`/`${VAR}` expansion. `/shell` keeps one persistent local interactive shell process per tab.
+Values exported in `kwshrc` are applied when either shell starts and are also available to leading-`!` commands. For the hosted shell, they are applied after Kward's conservative color defaults. Keys must be valid environment-variable names; invalid keys are ignored. Values support shell quoting and simple `$VAR`/`${VAR}` expansion. `/shell` keeps one persistent local interactive shell process per tab.
 
-`alias` entries expand the first word of a command once. For example, `alias ll='ls -la'` makes `ll lib` run `ls -la lib`. Configured aliases are available both inside `/shell` and after the normal composer's `!` prefix, including command-name Tab completion. Built-in shell commands such as `cd`, `pwd`, `export`, `unset`, `alias`, `capture`, `clear`, `pty`, and `exit` take precedence over aliases inside `/shell`. External commands receive an interactive PTY by default. Prefix a submitted line with `?` inside `/shell` to ask the transient shell assistant about the current command output or state. An alias value can begin with `capture` when its `/shell` output should use the configured timeout, output limit, and transcript sanitization. Leading-`!` alias invocations are always interactive, so Kward removes a leading `capture` or legacy `pty` mode marker from the expanded alias before execution. Run `alias` inside `kwsh` to list configured aliases. Aliases created at runtime with that built-in belong only to the current `/shell` session and are not available to `!command` input.
+`alias` entries expand the first word of a command once. For example, `alias ll='ls -la'` makes `ll lib` run `ls -la lib`. Configured aliases are available in `kward shell`, inside `/shell`, and after the normal composer's `!` prefix, including command-name Tab completion. Built-in shell commands such as `cd`, `pwd`, `export`, `unset`, `alias`, `capture`, `clear`, `pty`, and `exit` take precedence over aliases inside `/shell`. External commands receive an interactive PTY by default. Prefix a submitted line with `?` inside `/shell` to ask the transient shell assistant about the current command output or state. An alias value can begin with `capture` when its `/shell` output should use the configured timeout, output limit, and transcript sanitization. Leading-`!` alias invocations are always interactive, so Kward removes a leading `capture` or legacy `pty` mode marker from the expanded alias before execution. Run `alias` inside `kwsh` to list configured aliases. Aliases created at runtime with that built-in belong only to the current shell session and are not available to `!command` input.
 
 ## Provider and model settings
 

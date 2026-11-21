@@ -41,7 +41,7 @@ In the default editor, use **Option+Left/Right** (**Alt+Left/Right** on other ke
 
 Type a prefix and press **Up/Down** to browse matching commands. With an empty draft, the arrows browse all commands; **Ctrl+P/N** always browse without a prefix.
 
-While you type at the end of a fresh, single-line draft, the shell can show a matching history suffix in dim text. Press **Right Arrow** to insert it. **Enter** submits only the actual draft. Suggestions run locally, require terminal styling, and can be disabled with `export KWSH_AUTOSUGGEST=0` in `~/.kwshrc`.
+While you type at the end of a fresh, single-line draft, the shell can suggest the rest of a command from history in dim text. For example, if you previously ran `brew outdated`, typing `brew` followed by a space may show `outdated` in grey. Press **Right Arrow** to insert it. If you press **Enter** without accepting it, the shell runs only `brew`. Suggestions run locally, require terminal styling, and can be disabled with `export KWSH_AUTOSUGGEST=0` in `~/.kwshrc`.
 
 Press **Ctrl+R** and type part of a command to find it in history. Press **Ctrl+R** again for older matches, or **Ctrl+S** to move toward newer matches. **Enter** runs a match, **Left/Right** returns to editing it, and **Ctrl+G** or **Esc** restores your original draft. If the search fails, use **Backspace** to shorten the query; Enter won’t run an earlier match by mistake.
 
@@ -74,7 +74,7 @@ The prompt shows your current directory in cyan, the last exit status in yellow,
 
 This is a single-line subset of Zsh’s prompt syntax, not a shell expression. The shell does not expand variables or run commands when drawing it. `unset PROMPT` returns to `PS1`; `PROMPT=''` requests a blank prompt. Continuation lines still use `PS2`. The separate `kwsh` executable and hosted `/shell` keep their existing prompts; RPC and Pan do not render this prompt.
 
-### Ask the shell agent
+### Ask the standalone shell agent
 
 At an interactive `kward shell` prompt, ask about the last command just as you would in `/shell`:
 
@@ -626,7 +626,7 @@ References: [POSIX Shell Command Language](https://pubs.opengroup.org/onlinepubs
 
 ### Edit a standalone command line with vi keys
 
-Start `kwsh -i -o vi`, or enter `set -o vi` at an existing standalone prompt. Each new line starts in insert mode. Press **Escape** for command mode, **i** to insert again, and **Enter** to execute. `set +o vi` returns to plain terminal input. This editor requires an ANSI-compatible terminal (`TERM=dumb` is rejected); non-terminal input remains line-oriented. Kward's hosted `/shell` composer has separate ownership and rejects native vi activation.
+Start `kward shell -o vi` or `kwsh -i -o vi`, or enter `set -o vi` at an existing standalone prompt. Each new line starts in insert mode. Press **Escape** for command mode, **i** to insert again, and **Enter** to execute. `set +o vi` returns to the default editor in `kward shell` and to plain terminal input in `kwsh`. The vi editor requires an ANSI-compatible terminal (`TERM=dumb` is rejected); non-terminal input remains line-oriented. Kward's hosted `/shell` composer has separate ownership and rejects native vi activation.
 
 - Move with `h`, `l`, `0`, `^`, `$`, `|`, word motions `w/W`, `b/B`, `e/E`, and character searches `f/F`, `t/T`, `;`, `,`.
 - Change with `a/A`, `i/I`, `R`, `c` plus a motion, `C`, `S`, `r`, or `~`. Delete with `d` plus a motion, `D`, `x`, or `X`; yank with `y` plus a motion or `Y`; put with `p/P`. Counts apply to the commands that accept them.
@@ -657,7 +657,7 @@ History files use private JSONL records with stable, increasing numbers and loss
 
 Native `fc` is standalone-only. Kward's hosted `/shell` retains its existing workspace history and composer ownership; RPC does not acquire a terminal editor or history-file API.
 
-## Ask the shell agent
+## Ask the hosted shell agent
 
 While `/shell` is active, start a submitted line with `?` to ask the transient shell assistant:
 
@@ -819,7 +819,7 @@ source ~/.kward/kwsh-aliases
 
 `source` reads another rc file without executing it; relative paths in rc-file directives are resolved from the file containing the directive. When entered as a `/shell` builtin, the path is resolved from the current shell directory and its aliases and exports are applied immediately, without restarting Kward. Unsupported shell scripting is ignored for now.
 
-The transient shell assistant normally follows the active conversation's model and reasoning effort. Configure it in the main JSON file:
+By default, the hosted `/shell` agent uses the active conversation's provider, model, and reasoning effort. The standalone `kward shell` agent starts from Kward's configured selection. To override either default, set `shell.agent` in the main JSON file:
 
 ```json
 {
@@ -833,9 +833,9 @@ The transient shell assistant normally follows the active conversation's model a
 }
 ```
 
-The optional `provider` uses the lowercase configuration IDs listed in [Model providers](providers.md). When omitted, the shell assistant follows the active conversation. If a provider is explicitly configured without a model or reasoning effort, Kward uses that provider's defaults instead of inheriting the active conversation's values.
+The optional `provider` uses the lowercase configuration IDs listed in [Model providers](providers.md). If you set an explicit provider but omit the model or reasoning effort, Kward uses that provider's defaults for the omitted settings.
 
-Override those settings with environment variables:
+To override those settings, export the following variables before launching Kward:
 
 ```sh
 export KWSH_PROVIDER="openrouter"
@@ -847,7 +847,7 @@ Environment variables take precedence over the JSON settings, and empty values a
 
 ### Runtime defaults
 
-These runtime settings are built into kwsh and are not configurable through rc files:
+These defaults apply to the hosted shell and its one-off command path. They are built into kwsh and are not configurable through rc files:
 
 | Setting | Default | What it does |
 | --- | --- | --- |
@@ -856,7 +856,9 @@ These runtime settings are built into kwsh and are not configurable through rc f
 | `max_output_bytes` | `1048576` | Maximum output retained for one captured or shell-agent command. |
 | `history_limit` | `1000` | Maximum shell-history entries per workspace. |
 
-Invalid or relative `shell` paths fall back to `/bin/sh`. These timeout and output limits apply to `capture` inside `/shell` and shell-agent commands, not user-owned interactive commands or the separate `/capture` slash command.
+Invalid or relative `shell` paths fall back to `/bin/sh`. The hosted timeout and output limit apply to `capture` inside `/shell` and commands run by the hosted shell agent, not user-owned interactive commands or the separate `/capture` slash command.
+
+In standalone `kward shell`, agent-run commands also default to a 300-second timeout. Their live terminal output has no byte cap; only the separate, filtered copy sent to the model is capped at 32,000 bytes.
 
 ### Environment
 
