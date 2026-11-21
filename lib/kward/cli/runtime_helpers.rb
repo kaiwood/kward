@@ -467,7 +467,7 @@ module Kward
         end
         return unless transcript_output
 
-        unless complete
+        if state[:output_kind] == :pty && !complete
           # Transcript entries finish on a new line; keep a partial PTY row buffered.
           newline = transcript_output.rindex("\n")
           transcript_output = newline ? transcript_output[0..newline] : ""
