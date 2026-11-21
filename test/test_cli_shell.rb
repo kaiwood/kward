@@ -591,6 +591,29 @@ class TestCLIShell < KwardTestCase
     end
   end
 
+  def test_nested_composer_leaves_the_shell_prompt_below_its_transcript
+    with_terminal do |reader, writer, pid|
+      read_until(reader, PROMPT)
+      lib = File.expand_path("../lib", __dir__)
+      program = 'prompt = Kward::PromptInterface.new; prompt.start; prompt.say("nested transcript"); prompt.close'
+      command = Shellwords.join([RbConfig.ruby, "-I", lib, "-rkward", "-rkward/prompt_interface", "-e", program])
+      writer.write("\e[200~#{command}\e[201~\n")
+      read_until(reader, PASTE_OFF)
+      output = read_until(reader, PASTE_ON + "\r" + PROMPT)
+
+      assert_includes output, "nested transcript"
+      before_reset, reset, handback = output.rpartition("\e[r")
+      refute_empty reset
+      bottom = before_reset.scan(/\e\[1;(\d+)r/).last&.first
+      refute_nil bottom
+      # DECSTBM resets the cursor to the top; move it back to the transcript
+      # before yielding a line to the next native shell prompt.
+      assert_match(/\e\[#{bottom};1H[^\r\n]*\r?\n/, handback)
+      writer.write("exit\n")
+      assert_equal 0, wait_for_exit(pid).exitstatus
+    end
+  end
+
   def test_fullscreen_child_owns_the_terminal_and_can_be_suspended_and_resumed
     with_terminal do |reader, writer, pid|
       read_until(reader, PROMPT)

@@ -364,7 +364,10 @@ module Kward
 
         clear_image_viewer_output_locked if image_viewer_active?
         clear_prompt_for_output_locked
+        last_transcript_row = transcript_bottom_row
         restore_scroll_region_locked
+        # Resetting the scroll region homes the cursor on VT terminals.
+        move_to_screen(last_transcript_row, 1)
         disable_editor_mouse_reporting(force: true)
         print_output_locked(BRACKETED_PASTE_RESTORE)
         print_output_locked(KEYBOARD_PROTOCOL_RESTORE)

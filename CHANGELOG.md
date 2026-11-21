@@ -81,6 +81,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Return to the shell prompt below the Kward transcript on exit, rather than jumping to the top of the screen.
 - Keep interactive plugin games open when pressing Command or Shift. Only plain Esc exits by default; plugins can define additional quit keys.
 - Keep inline Kitty graphics and capability-probe output visible when the shell prompt returns.
 - Forward lone Escape and legacy Alt keys to shell PTYs without collapsing combined modifiers into control signals.
