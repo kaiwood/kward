@@ -57,6 +57,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Preserve wide characters, combining accents, and backspace redraws in shell transcript replay.
+
 - Bound the size of shell transcript replay when a command uses cursor movement.
 
 - Keep busy composer headers on one line in narrow panes, dropping the cancel hint before clipping the activity text.

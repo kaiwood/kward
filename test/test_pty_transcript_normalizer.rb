@@ -29,6 +29,22 @@ class TestPtyTranscriptNormalizer < KwardTestCase
     assert_nil Kward::PtyTranscriptNormalizer.normalize(output, max_bytes: 100)
   end
 
+  def test_backspace_redraws_without_other_cursor_controls
+    assert_equal "abX", Kward::PtyTranscriptNormalizer.normalize("abc\bX")
+  end
+
+  def test_wide_and_combining_graphemes_use_terminal_cells
+    assert_equal "好Y", Kward::PtyTranscriptNormalizer.normalize("好X\e[3GY")
+    assert_equal "e\u0301Y", Kward::PtyTranscriptNormalizer.normalize("e\u0301X\e[2GY")
+    assert_equal "e\u0301Y", Kward::PtyTranscriptNormalizer.normalize("e\e[31m\u0301X\e[2GY")
+  end
+
+  def test_overwriting_or_erasing_one_half_of_a_wide_grapheme_clears_both
+    assert_equal " YX", Kward::PtyTranscriptNormalizer.normalize("好X\e[2GY")
+    assert_equal "", Kward::PtyTranscriptNormalizer.normalize("好X\e[2G\e[K")
+    assert_equal "  X", Kward::PtyTranscriptNormalizer.normalize("好X\e[1G\e[1K")
+  end
+
   def test_static_lines_preserve_sgr_and_remove_terminal_modes
     output = "\e[?2026h\e[32mdone\e[0m\e[?2026l"
 
