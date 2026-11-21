@@ -117,12 +117,12 @@ module Kward
         readers << input if input_open
         readable = IO.select(readers, nil, nil, 0.02)&.first || []
         forward_pty_output(reader, sink) if readable.include?(reader)
-        if input_open && readable.include?(input)
-          input_open, forwarded, tab_action = forward_input(input, writer, sink, tab_action_handler: tab_action_handler)
-          input_forwarded ||= forwarded
-          return [nil, input_forwarded, tab_action] if tab_action && on_detach
-          return [terminate_and_reap(pid), input_forwarded, tab_action] if tab_action
-        end
+        input_open, forwarded, tab_action = forward_input(
+          input, writer, sink, input_open: input_open, readable: readable.include?(input), tab_action_handler: tab_action_handler
+        )
+        input_forwarded ||= forwarded
+        return [nil, input_forwarded, tab_action] if tab_action && on_detach
+        return [terminate_and_reap(pid), input_forwarded, tab_action] if tab_action
 
         status = finished_status(pid)
         next unless status
@@ -183,31 +183,23 @@ module Kward
       nil
     end
 
-    def forward_input(input, writer, sink, tab_action_handler: nil)
-      chunk = input.read_nonblock(READ_SIZE, exception: false)
-      return [false, false, nil] if chunk.nil?
-      return [true, false, nil] if chunk == :wait_readable
-
-      filtered = tab_action_handler&.call(chunk)
-      if filtered
-        tab_action = filtered[:tab_action]
-        chunk = filtered[:input].to_s
-        if tab_action
-          unless chunk.empty?
-            sink.input_forwarded if sink.respond_to?(:input_forwarded)
-            writer.write(chunk)
-            writer.flush
-            return [true, true, tab_action]
-          end
-          return [true, false, tab_action]
-        end
+    def forward_input(input, writer, sink, input_open:, readable:, tab_action_handler:)
+      chunk = readable ? input.read_nonblock(READ_SIZE, exception: false) : :wait_readable
+      input_open = false if chunk.nil?
+      if chunk.nil? || chunk == :wait_readable
+        chunk = tab_action_handler.flush_pending_escape if tab_action_handler.respond_to?(:flush_pending_escape)
+        return [input_open, false, nil] unless chunk.is_a?(String)
+      else
+        filtered = tab_action_handler&.call(chunk)
+        chunk = filtered[:input].to_s if filtered
       end
-      return [true, false, nil] if chunk.empty?
+      tab_action = filtered&.fetch(:tab_action, nil)
+      return [input_open, false, tab_action] if chunk.empty?
 
       sink.input_forwarded if sink.respond_to?(:input_forwarded)
       writer.write(chunk)
       writer.flush
-      [true, true, nil]
+      [input_open, true, tab_action]
     rescue Errno::EIO, Errno::EPIPE, IOError
       [false, false, nil]
     end

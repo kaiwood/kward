@@ -57,6 +57,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Forward lone Escape and legacy Alt keys to shell PTYs without collapsing combined modifiers into control signals.
 - Keep detached shell output on the same line across PTY reads.
 - Restore the current terminal size on new shell PTYs, including after a `/shell` worker restarts.
 - Preserve wide characters, combining accents, and backspace redraws in shell transcript replay.

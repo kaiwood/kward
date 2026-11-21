@@ -90,6 +90,10 @@ module Kward
     CSI_SEQUENCE_PATTERN = /\A\e\[[0-?]*[ -\/]*[@-~]/.freeze
     CSI_PREFIX_PATTERN = /\A\e\[[0-?]*[ -\/]*\z/.freeze
     MODIFY_OTHER_KEYS_PATTERN = /\A\e\[27;(\d+);(\d+)~\z/.freeze
+    HANDOFF_ESCAPE_DELAY = 0.03
+    LEGACY_CTRL_CODES = { 32 => 0, 50 => 0, 51 => 27, 52 => 28, 53 => 29, 54 => 30, 55 => 31,
+                          56 => 127, 47 => 31, 63 => 127, 64 => 0, 91 => 27, 92 => 28, 93 => 29,
+                          94 => 30, 95 => 31, 126 => 30 }.freeze
     MAX_HANDOFF_SEQUENCE_BYTES = 4096
     MODIFIED_CURSOR_PATTERN = /\A\e\[(\d+);(\d+)([CDFH])\z/.freeze
     MODIFIED_DELETE_PATTERN = /\A\e\[3;(\d+)~\z/.freeze

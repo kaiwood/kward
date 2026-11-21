@@ -441,51 +441,54 @@ module Kward
           end
         end
 
+        input_chunk = :wait_readable
         if input && readable.include?(input)
           input_chunk = input.read_nonblock(READ_SIZE, exception: false)
-          if input_chunk.nil?
-            input = nil
-          elsif input_chunk != :wait_readable
-            filtered = tab_action_handler&.call(input_chunk)
-            input_chunk = filtered[:input].to_s if filtered
-            unless input_chunk.empty?
-              notify_input_forwarded(sink)
-              write_raw(input_chunk)
-              input_forwarded = true
-            end
-            if filtered && filtered[:tab_action]
-              if on_detach
-                detached_sink = on_detach.call
-                detached = detach_protocol(
-                  marker,
-                  sink: detached_sink,
-                  timeout_seconds: timeout_seconds,
-                  max_output_bytes: max_output_bytes,
-                  initial_buffer: buffer,
-                  input_forwarded: input_forwarded
-                )
-                raise CommandInterrupted.new(
-                  output: captured,
-                  status: 0,
-                  cwd: @cwd,
-                  input_forwarded: input_forwarded,
-                  tab_action: filtered[:tab_action],
-                  truncated: truncated,
-                  background: detached
-                )
-              end
-
-              interrupt_process
-              raise CommandInterrupted.new(
-                output: captured,
-                status: 130,
-                cwd: @cwd,
-                input_forwarded: input_forwarded,
-                tab_action: filtered[:tab_action],
-                truncated: truncated
-              )
-            end
+          input = nil if input_chunk.nil?
+        end
+        filtered = nil
+        if input_chunk.nil? || input_chunk == :wait_readable
+          input_chunk = tab_action_handler.flush_pending_escape if tab_action_handler.respond_to?(:flush_pending_escape)
+        else
+          filtered = tab_action_handler&.call(input_chunk)
+          input_chunk = filtered[:input].to_s if filtered
+        end
+        if input_chunk.is_a?(String) && !input_chunk.empty?
+          notify_input_forwarded(sink)
+          write_raw(input_chunk)
+          input_forwarded = true
+        end
+        if filtered && filtered[:tab_action]
+          if on_detach
+            detached_sink = on_detach.call
+            detached = detach_protocol(
+              marker,
+              sink: detached_sink,
+              timeout_seconds: timeout_seconds,
+              max_output_bytes: max_output_bytes,
+              initial_buffer: buffer,
+              input_forwarded: input_forwarded
+            )
+            raise CommandInterrupted.new(
+              output: captured,
+              status: 0,
+              cwd: @cwd,
+              input_forwarded: input_forwarded,
+              tab_action: filtered[:tab_action],
+              truncated: truncated,
+              background: detached
+            )
           end
+
+          interrupt_process
+          raise CommandInterrupted.new(
+            output: captured,
+            status: 130,
+            cwd: @cwd,
+            input_forwarded: input_forwarded,
+            tab_action: filtered[:tab_action],
+            truncated: truncated
+          )
         end
         update_window_size
       end

@@ -7,6 +7,19 @@ module Kward
       MAX_TRANSIENT_TERMINAL_OUTPUT_BYTES = 1_048_576
       UNSAFE_TRANSCRIPT_CONTROL_PATTERN = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.freeze
 
+      # Lets the PTY pumps resolve an ambiguous legacy Escape without reading ahead.
+      TerminalHandoffInput = Struct.new(:prompt, :on_tab_action) do
+        def call(chunk)
+          filtered = prompt.filter_terminal_handoff_input(chunk)
+          on_tab_action.call(filtered[:tab_action]) if filtered[:tab_action]
+          filtered
+        end
+
+        def flush_pending_escape
+          prompt.flush_terminal_handoff_escape if prompt.respond_to?(:flush_terminal_handoff_escape)
+        end
+      end
+
       private
 
       def new_conversation(workspace_root: current_workspace_root)
@@ -413,12 +426,7 @@ module Kward
         return unless @prompt.respond_to?(:filter_terminal_handoff_input)
         return unless respond_to?(:handle_tab_action, true)
 
-        lambda do |chunk|
-          filtered = @prompt.filter_terminal_handoff_input(chunk)
-          action = filtered[:tab_action]
-          handle_tab_action(action, @session_store) if action
-          filtered
-        end
+        TerminalHandoffInput.new(@prompt, ->(action) { handle_tab_action(action, @session_store) })
       end
 
       def record_completed_pty_output(sink, result, tab: nil, background_state: nil)

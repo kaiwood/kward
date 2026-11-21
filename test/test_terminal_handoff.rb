@@ -99,6 +99,63 @@ class TestTerminalHandoff < KwardTestCase
     end
   end
 
+  def test_alt_text_and_control_chords_retain_their_meaning
+    prompt = build_prompt
+    assert_equal "\ex", prompt.filter_terminal_handoff_input("\e[120;3u")[:input]
+    assert_equal "\eX", prompt.filter_terminal_handoff_input("\e[120;4u")[:input]
+    assert_equal "\e!", prompt.filter_terminal_handoff_input("\e[49:33;4u")[:input]
+    assert_equal "\e[99;7u", prompt.filter_terminal_handoff_input("\e[99;7u")[:input]
+    assert_equal "\e[99;13u", prompt.filter_terminal_handoff_input("\e[99;13u")[:input]
+    assert_equal "\x03", prompt.filter_terminal_handoff_input("\e[99;5u")[:input]
+  end
+
+  def test_lone_escape_expires_but_a_split_csi_completes_normally
+    clock = 0.0
+    prompt = build_prompt
+    prompt.define_singleton_method(:monotonic_now) { clock }
+    assert_empty prompt.filter_terminal_handoff_input("\e")[:input]
+    assert_nil prompt.flush_terminal_handoff_escape
+
+    clock = Kward::TerminalKeys::HANDOFF_ESCAPE_DELAY * 2
+    assert_equal "\e", prompt.flush_terminal_handoff_escape
+    assert_nil prompt.flush_terminal_handoff_escape
+
+    assert_empty prompt.filter_terminal_handoff_input("\e")[:input]
+    assert_equal "\e[A", prompt.filter_terminal_handoff_input("[A")[:input]
+    assert_nil prompt.flush_terminal_handoff_escape
+  end
+
+  def test_both_pty_pumps_deliver_a_lone_escape_without_more_input
+    session = Kward::PersistentShellSession.new
+    command = [RbConfig.ruby, "-rio/console", "-e", 'STDIN.raw { puts "ready"; puts STDIN.read(1).unpack1("H*") }']
+    [Kward::InteractivePtyRunner.new, session].each do |runner|
+      input, keys = IO.pipe
+      output = StringIO.new
+      handler = Kward::CLI::RuntimeHelpers::TerminalHandoffInput.new(build_prompt, ->(_) {})
+      result = nil
+      worker = Thread.new do
+        result = if runner == session
+          runner.run_interactive(Shellwords.join(command), input: input, sink: output, tab_action_handler: handler)
+        else
+          runner.run(*command, input: input, sink: output, tab_action_handler: handler)
+        end
+      end
+      wait_until(timeout: 2) { output.string.include?("ready") }
+      keys.write("\e")
+      assert worker.join(2), "the child did not receive Escape"
+      assert_equal 0, result.exit_status
+      assert result.input_forwarded
+      assert_includes output.string, "1b"
+    ensure
+      worker&.kill if worker&.alive?
+      worker&.join
+      input&.close
+      keys&.close
+    end
+  ensure
+    session&.close
+  end
+
   def test_standalone_modifier_reports_do_not_reach_child_input
     keys = ["\e[57441;2u", "\e[57444;9u", "\e[57444;10u", "\e[57450;9:2u"]
     keys.each do |key|

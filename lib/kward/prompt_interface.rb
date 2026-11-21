@@ -798,6 +798,7 @@ module Kward
         print_output_locked(BRACKETED_PASTE_RESTORE)
         print_output_locked(KEYBOARD_PROTOCOL_RESTORE) unless preserve_tab_keybindings
         @handoff_input_buffer.clear
+        @handoff_escape_deadline = nil
         @handoff_bracketed_paste = false
         restore_editor_cursor_shape_locked
         set_cursor_visible_locked(true, force: true)
@@ -827,6 +828,7 @@ module Kward
         print_output_locked(preserve_tab_keybindings ? TerminalSequences::KEYBOARD_PROTOCOL_SET : KEYBOARD_PROTOCOL_ENABLE)
         print_output_locked(BRACKETED_PASTE_ENABLE)
         @handoff_input_buffer.clear
+        @handoff_escape_deadline = nil
         @handoff_bracketed_paste = false
         disable_editor_mouse_reporting(force: true)
         restore_editor_cursor_shape_locked(force: true)
@@ -1052,6 +1054,10 @@ module Kward
 
     def filter_terminal_handoff_input(chunk)
       @mutex.synchronize { filter_terminal_handoff_input_locked(chunk) }
+    end
+
+    def flush_terminal_handoff_escape
+      @mutex.synchronize { flush_terminal_handoff_escape_locked }
     end
 
     def poll_input

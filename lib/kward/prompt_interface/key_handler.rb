@@ -7,6 +7,7 @@ module Kward
       private
 
       def filter_terminal_handoff_input_locked(chunk)
+        @handoff_escape_deadline = nil
         @handoff_input_buffer << chunk.to_s.b
         forwarded = +"".b
         tab_action = nil
@@ -64,24 +65,51 @@ module Kward
           forwarded << @handoff_input_buffer.slice!(0)
         end
 
+        if !@handoff_bracketed_paste && @handoff_input_buffer == TerminalKeys::ESCAPE
+          @handoff_escape_deadline = monotonic_now + TerminalKeys::HANDOFF_ESCAPE_DELAY
+        end
         { input: forwarded, tab_action: tab_action }
+      end
+
+      def flush_terminal_handoff_escape_locked
+        return unless @handoff_escape_deadline && monotonic_now >= @handoff_escape_deadline
+
+        @handoff_escape_deadline = nil
+        @handoff_input_buffer.clear
+        TerminalKeys::ESCAPE
       end
 
       def legacy_handoff_key(sequence)
         return "" if sequence[:event_type] == 3
         return "" if TerminalKeys::CSI_U_MODIFIER_KEY_CODES.cover?(sequence[:code])
 
+        modifier = sequence[:modifier]
+        alt = alt_modifier?(modifier)
+        ctrl = ctrl_modifier?(modifier)
+        # Preserve chords without a safe legacy equivalent. An ESC prefix does
+        # not stop a cooked PTY from treating a following Ctrl+C as SIGINT.
+        return if (alt && ctrl) || ((modifier - 1) & 0b111000).positive?
+
         event = csi_u_key_event(sequence)
         return event[:text] if event[:type] == :printable
-        return "\r" if event[:type] == :enter
-        return "\b" if event[:type] == :backspace
-        return "\t" if event[:type] == :tab
-        return "\e" if event[:type] == :escape
+        return "\r" if event[:type] == :enter && !alt
+        return "\b" if event[:type] == :backspace && !alt
+        return "\t" if event[:type] == :tab && !alt
+        return "\e" if event[:type] == :escape && !alt
+        return unless event[:type] == :modified && event[:code].between?(32, 126)
 
-        return unless event[:type] == :modified && ctrl_modifier?(event[:modifier])
-        return unless event[:code].between?(32, 126)
+        code = event[:code]
+        if ctrl
+          return (code & 0x1f).chr if (65..90).cover?(code) || (97..122).cover?(code)
 
-        (event[:code] & 0x1f).chr
+          return TerminalKeys::LEGACY_CTRL_CODES[code]&.chr
+        end
+        return unless alt
+
+        shifted = sequence[:shifted_code] || ((97..122).cover?(code) ? code - 32 : code)
+        code = shifted if shift_modifier?(modifier)
+        text = csi_u_codepoint_character(code) if code >= 32 && !(127..159).cover?(code)
+        "\e#{text}" if text
       end
 
       def read_key(nonblock: false)
@@ -477,6 +505,7 @@ module Kward
         {
           sequence: match[0],
           code: match[1].to_i,
+          shifted_code: match[0][/\A\e\[\d+:(\d+)/, 1]&.to_i,
           modifiers: modifiers,
           modifier: modifier,
           event_type: (modifiers.split(":", 2)[1] || "1").to_i,
