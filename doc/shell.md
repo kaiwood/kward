@@ -1,6 +1,6 @@
-# Embedded shell
+# Standalone and embedded shell
 
-Kward lets you run your own shell commands without leaving the interactive TUI. Choose the workflow that matches what you are doing:
+Use `kward shell` to run Kward’s native shell directly in your terminal, without starting the coding agent. If you’re already in Kward’s interactive TUI, choose the workflow that matches what you are doing:
 
 - **For one quick command, use `!command`.** It runs from the active workspace and returns you to the normal composer when it finishes.
 - **For a longer stretch of shell work, use `/shell`.** It keeps its directory, environment, aliases, and history between commands.
@@ -8,6 +8,28 @@ Kward lets you run your own shell commands without leaving the interactive TUI. 
 - **For bounded output in the transcript view, use `/capture <command>`.** Inside `/shell`, use `capture <command>` for the same kind of readable output while keeping the shell's current state.
 
 Ordinary `!command` input and external commands inside `/shell` receive an interactive PTY. Pagers, Vim, SSH, REPLs, password prompts, and other interactive tools therefore work without a `pty` prefix.
+
+## Start a standalone shell
+
+Run this from the directory you want to work in. No Kward login or agent configuration is needed:
+
+```sh
+kward shell
+```
+
+Output scrolls normally, and foreground programs such as `less` and Vim get the terminal directly. After a program exits, the shell prints its next prompt. Use **Up/Down** to recall history, **Left/Right** or **Home/End** to move, and **Backspace/Delete** to edit. In a terminal that supports bracketed paste, pasted commands stay in the draft until you press **Enter**, even if they span several lines. **Ctrl+C** cancels the draft, and **Ctrl+D** on an empty prompt (or `exit`) leaves the shell.
+
+Use `kward shell -o vi` or `set -o vi` to switch to native vi editing. `set +o vi` returns to the default editor. `TERM=dumb` falls back to plain input. Piping input runs the shell non-interactively unless you pass `-i`. History is in memory by default; see [standalone history](#standalone-command-history) for persistence and replay.
+
+You can also run the same native language non-interactively:
+
+```sh
+kward shell -c 'printf "%s\n" "$PWD"'
+kward shell scripts/check.kwsh README.md
+printf 'printf "hello\\n"\n' | kward shell
+```
+
+From a checkout, use `ruby exe/kward shell`. This is a traditional terminal frontend for **kwsh**, not Bash or Zsh; their startup files, completion, and language extensions don’t carry over. The hosted composer, shell assistant, and `/shell` shortcuts are not part of this mode. It isn’t an RPC or Pan session capability: it needs a local terminal for interactive editing and job control.
 
 ## Run a one-off command
 
@@ -137,7 +159,7 @@ kwsh -c 'cat <&3; printf "done\n" >&9' 3<input.txt 9>status.txt
 
 Inherited descriptors support duplication, persistent `exec` redirection, and explicit closing. They reach child commands, native scripts, and executable-text fallback. The maximum supported shell redirection descriptor is 9. Discovery happens only at the standalone executable boundary; embedded runtimes and hosted `/shell` never discover Kward's private sockets or other open handles. Caller-supplied runtime descriptors remain borrowed unless ownership is explicitly transferred. This does not change RPC/Pan shell capabilities or sandbox policy.
 
-From a checkout, use `ruby exe/kwsh`. Standalone stdin processing leaves each command's input available to `read` and external programs; it does not read the entire input stream ahead of execution. The rich interactive composer remains a Kward `/shell` feature. Standalone `kwsh -i` provides a plain line-oriented prompt, also selected automatically when reading commands from stdin with stdin and stderr attached to a terminal.
+From a checkout, use `ruby exe/kwsh`. Standalone stdin processing leaves each command's input available to `read` and external programs; it does not read the entire input stream ahead of execution. The rich interactive composer remains a Kward `/shell` feature. The `kwsh` executable keeps its plain line-oriented prompt by default (`-i`, or automatically when reading from a terminal with stderr also attached). Use `kward shell` for the default non-modal editor.
 
 Startup sets `PPID` to the shell's parent process ID and `OPTIND` to `1`, even if those variables were inherited with different values. Subshells and command substitutions retain the current values instead of reinitializing them. `OPTIND` is not exported by default.
 
@@ -360,7 +382,7 @@ printf 'Last status: %s\n' "$?"
 
 `jobs` accepts `-l`, `-p`, `-r`, and `-s`. Job selectors include `%1`, `%+` / `%%` (current), `%-` (previous), `%prefix`, and `%?substring`; ambiguous selectors error. `kill [-s signal | -SIGNAL] pid-or-job...` signals a process or an entire job group. Signal names are case-independent; numeric short forms such as `-15` are also accepted. `kill -l` lists signal names and translates numbers.
 
-Job control is on by default in `/shell`; standalone scripts can enable it with `set -m`. Ctrl-Z stops a foreground job and returns terminal ownership to kwsh. Terminal modes are saved with the stopped job and restored on `fg`, including for programs that suspend themselves after entering raw mode. Use `bg %1` to continue it in the background, or `fg %1` to return it to the terminal. Without job control, asynchronous input defaults to `/dev/null` unless explicitly redirected.
+Job control is on by default in interactive sessions (`/shell`, `kward shell`, and `kwsh -i`); standalone scripts can enable it with `set -m`. Ctrl-Z stops a foreground job and returns terminal ownership to kwsh. Terminal modes are saved with the stopped job and restored on `fg`, including for programs that suspend themselves after entering raw mode. Use `bg %1` to continue it in the background, or `fg %1` to return it to the terminal. Without job control, asynchronous input defaults to `/dev/null` unless explicitly redirected.
 
 Hosted jobs remain tab-owned: closing the shell kills its owned groups, including stopped jobs. A forked hosted scope waits for its own background work before reporting completion, keeping descendants owned; standalone scripts do not impose that host-lifecycle rule. In `/shell`, background terminal output is drained and discarded while the prompt is idle so logging cannot block a server after `bg`. Output written during another command can still mix with that command's output. Redirect long-running jobs to files when you need to retain logs, for example `rake docs:serve >docs-server.log 2>&1 &`. Script jobs are separate from Kward's tab-detached foreground-command feature.
 
@@ -470,6 +492,7 @@ The classification distinguishes **permitted choices** from **system constraints
 | Regex condition (`native_condition.rb`) | 0.1-second Ruby regexp timeout for `[[ … =~ … ]]` | Extension policy. This is not a timeout on POSIX `case` patterns. |
 | Executable-text detection (`native_process.rb`) | Inspect at most 4,096 bytes for binary-looking content before native ENOEXEC fallback | Permitted heuristic under SCL 2.9.1.6; **not** a script/line-length limit. |
 | Physical directory reporting (`native_directory.rb`) | macOS F_GETPATH's 1,024-byte buffer; Linux procfs name discovery | System/API constraints; the retained directory descriptor is separate from successful pathname reporting. |
+| Standalone prompt paste (`native_line_terminal.rb`) | 1 MiB per bracketed paste | Oversized pastes are discarded in full. This does not limit scripts or ordinary typed input. |
 | Standalone vi alias macros (`native_vi.rb`) | 100 nested replacements and 1 MiB cumulative replacement bytes per edit line | Additional UP safety policy, not an OS limit. Does not impose a typed-line length ceiling; profile closure must account for this retained restriction. |
 | Native process and file resources (`ulimit` in `native_builtins.rb`) | Inherited or explicitly set OS resource limits, argument/environment size, filesystem limits, available memory/storage, Ruby stack/runtime constraints | Underlying system constraints, not promises that every source fitting a kwsh quota can execute. No Ruby/system-shell eval fallback is introduced. |
 | Hosted capture (`kwsh.rb`, `persistent_session.rb`) | Defaults: 1 MiB output and 300-second captured-command timeout; configurable through the existing shell configuration | Host policy only, unchanged. User-owned interactive commands do not get these capture/time limits. Normal model/RPC shell tools keep their own existing sandbox and cancellation policies. |

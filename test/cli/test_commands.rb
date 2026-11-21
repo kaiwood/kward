@@ -22,6 +22,7 @@ class TestCLICommands < KwardTestCase
     assert_includes output, "\e[34;1mIntegrate\e[0m"
     assert_includes output, "kward login [PROVIDER]"
     assert_includes output, "kward init"
+    assert_includes output, "kward shell"
     assert_includes output, "kward pan"
     assert_includes output, "kward prompt \"Explain this project\""
     assert_includes output, "git diff | kward prompt \"Summarize the main changes\""
@@ -53,6 +54,17 @@ class TestCLICommands < KwardTestCase
     assert_includes output, "\e[34;1mUsage\e[0m"
     assert_includes output, "\e[32;1mkward pan\e[0m"
     assert_includes output, "\e[32;1mkward --working-directory ~/code/project pan\e[0m"
+  end
+
+  def test_shell_help_describes_the_standalone_mode
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: ["help", "shell"], stdin: FakeInput.new("", tty: true), prompt: prompt)
+
+    cli.run
+
+    output = prompt.output.join("\n")
+    assert_includes output, "Usage\n  kward shell"
+    assert_includes output, "Does not start the agent or composer."
   end
 
   def test_command_help_option_prints_command_help

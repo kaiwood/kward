@@ -1,5 +1,6 @@
 require_relative "native_runtime"
 require_relative "native_vi_terminal"
+require_relative "native_line_editor"
 
 module Kward
   module NativeShell
@@ -7,7 +8,7 @@ module Kward
     module ScriptRunner
       module_function
 
-      def run(arguments, input: $stdin, output: $stdout, error: $stderr, name: nil, descriptors: {}, own_descriptors: false, hosted: false, process_owned: false)
+      def run(arguments, input: $stdin, output: $stdout, error: $stderr, name: nil, descriptors: {}, own_descriptors: false, hosted: false, process_owned: false, program: "kwsh", edit_lines: false)
         args = arguments.dup
         options = []
         mode = nil
@@ -16,7 +17,7 @@ module Kward
           option = args.shift
           break if option == "--"
           if option == "--help"
-            output.puts("Usage: kwsh [-i] [shell-options] [-c command [name [args...]] | -s [args...] | file [args...]]")
+            output.puts("Usage: #{program} [-i] [shell-options] [-c command [name [args...]] | -s [args...] | file [args...]]")
             return 0
           end
           option[1..].each_char do |flag|
@@ -55,13 +56,13 @@ module Kward
             elsif file
               File.open(file) do |source|
                 if interactive
-                  run_interactive(runtime, source, input: input, output: output, error: error)
+                  run_interactive(runtime, source, input: input, output: output, error: error, edit_lines: edit_lines && !hosted)
                 else
                   runtime.run_input(source, input: input, output: output, error: error)
                 end
               end
             elsif interactive
-              run_interactive(runtime, input, input: input, output: output, error: error)
+              run_interactive(runtime, input, input: input, output: output, error: error, edit_lines: edit_lines && !hosted)
             else
               runtime.run_input(input, input: input, output: output, error: error)
             end
@@ -86,8 +87,10 @@ module Kward
         error.puts("kwsh: ENV: #{e.message}")
       end
 
-      def run_interactive(runtime, source_input, input:, output:, error:)
+      def run_interactive(runtime, source_input, input:, output:, error:, edit_lines:)
         source = +"".b
+        terminals = { vi: ViTerminal.new(runtime) }
+        terminals[:line] = LineTerminal.new(runtime, LineEditor.new(runtime), bracketed_paste: true) if edit_lines
         runtime.with_signals do
           until runtime.exited
             begin
@@ -96,14 +99,7 @@ module Kward
                 prompt = source.empty? ? "PS1" : "PS2"
                 runtime.check_mail(error) if source.empty?
                 text = runtime.prompt_text(prompt, error: error)
-                if source_input.tty? && error.tty? && runtime.option_enabled?("vi")
-                  editor ||= ViTerminal.new(runtime)
-                  editor.read(source_input, prompt: text, input: input, output: output, error: error)
-                else
-                  error.write(text)
-                  error.flush
-                  read_line(source_input, runtime, input: input, output: output, error: error)
-                end
+                read_prompt_line(runtime, source_input, terminals, prompt: text, input: input, output: output, error: error)
               end
               edited = false
               if line.is_a?(ViEditor::Result)
@@ -147,6 +143,23 @@ module Kward
             end
           end
         end
+      end
+
+      def read_prompt_line(runtime, source, terminals, prompt:, input:, output:, error:)
+        if source.tty? && error.tty? && runtime.variables["TERM"] != "dumb"
+          style = runtime.option_enabled?("vi") ? :vi : :line
+          if (terminal = terminals[style])
+            begin
+              return terminal.read(source, prompt: prompt, input: input, output: output, error: error)
+            rescue ExecutionError, SystemCallError, IOError => e
+              terminals.delete(style)
+              error.puts("kwsh: line editing disabled: #{e.message}")
+            end
+          end
+        end
+        error.write(prompt)
+        error.flush
+        read_line(source, runtime, input: input, output: output, error: error)
       end
 
       def read_line(source, runtime, input:, output:, error:)

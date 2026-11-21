@@ -69,6 +69,7 @@ module Kward
             ["kward prompt \"PROMPT\"", "Run a one-shot prompt"],
             ["kward filter \"INSTRUCTION\"", "Filter standard input"],
             ["kward edit <filename>", "Open a file in the integrated editor"],
+            ["kward shell", "Start a standalone shell without the agent"],
             ["kward sysprompt [--raw]", "Inspect the effective system prompt"]
           ],
           "Manage" => [
@@ -178,6 +179,11 @@ module Kward
             usage: "kward edit <filename>",
             description: "Open a file in the integrated editor.",
             examples: ["kward edit lib/main.rb", "kward edit ~/notes/todo.md"]
+          },
+          "shell" => {
+            usage: "kward shell [-i] [shell-options] [-c command [name [args...]] | -s [args...] | file [args...]]",
+            description: "Run native kwsh directly in your terminal or read commands from a file or standard input. Does not start the agent or composer.",
+            examples: ["kward shell", "kward shell -o vi", "kward shell -c 'printf \"%s\\n\" \"$PWD\"'"]
           },
           "sysprompt" => {
             usage: "kward sysprompt [--raw]",

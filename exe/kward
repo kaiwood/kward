@@ -2,6 +2,6 @@
 
 $LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
 
-require "kward"
+require "kward/entrypoint"
 
-Kward::CLI.new.run
+Kward::Entrypoint.run

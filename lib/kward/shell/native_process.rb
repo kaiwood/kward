@@ -47,7 +47,7 @@ module Kward
         end
       end
 
-      def self.standalone(arguments, name:)
+      def self.standalone(arguments, name:, program: "kwsh", edit_lines: false)
         inherited = inherited_descriptors
         # Ruby owns private wake-up descriptors before this script starts.
         # Re-exec the trusted VM with 3–9 occupied so its new private handles
@@ -71,7 +71,8 @@ module Kward
             end
           end
           $0 = ARGV.shift
-          exit Kward::NativeShell::ScriptRunner.run(ARGV, descriptors: descriptors, own_descriptors: true, process_owned: true)
+          exit Kward::NativeShell::ScriptRunner.run(ARGV, descriptors: descriptors, own_descriptors: true, process_owned: true,
+                                                   program: #{program.inspect}, edit_lines: #{edit_lines.inspect})
         RUBY
         mappings = (3..9).to_h { |fd| [fd, inherited.fetch(fd) { [File::NULL, File::RDWR] }] }
         # Only the trusted Ruby executable uses Ruby's exec API; user programs
