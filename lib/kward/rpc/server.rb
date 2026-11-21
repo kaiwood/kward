@@ -60,6 +60,7 @@ module Kward
         "sessions/export", "sessions/delete", "sessions/close", "sessions/transcript", "sessions/active"
       ].freeze
       TURN_METHODS = ["turns/start", "turns/cancel", "turns/status", "turns/events", "turns/list", "turns/listActive"].freeze
+      IMAGE_METHODS = ["images/fetch", "images/saveToProject", "images/discard"].freeze
       PLUGIN_CHAT_METHODS = ["pluginChats/list", "pluginChats/open", "pluginChats/transcript", "pluginChats/subscribe", "pluginChats/unsubscribe", "pluginChats/turns/start", "pluginChats/turns/cancel", "pluginChats/turns/status", "pluginChats/turns/events", "pluginChats/turns/list", "pluginChats/turns/listActive"].freeze
       MODEL_METHODS = ["models/list", "models/current", "models/set", "reasoning/set", "models/refresh"].freeze
       RUNTIME_METHODS = ["runtime/state", "runtime/stats"].freeze
@@ -102,6 +103,7 @@ module Kward
         prompts: PROMPT_METHODS,
         sessions: SESSION_METHODS,
         turns: TURN_METHODS,
+        images: IMAGE_METHODS,
         plugin_chats: PLUGIN_CHAT_METHODS,
         models: MODEL_METHODS,
         runtime: RUNTIME_METHODS,
@@ -388,6 +390,12 @@ module Kward
           @session_manager.transcript(session_id: params.fetch("sessionId"))
         when SESSION_METHODS[15]
           @session_manager.active_sessions
+        when IMAGE_METHODS[0]
+          @session_manager.fetch_generated_image(session_id: params.fetch("sessionId"), image_id: params.fetch("imageId"), offset: params.fetch("offset", 0))
+        when IMAGE_METHODS[1]
+          @session_manager.save_generated_image(session_id: params.fetch("sessionId"), image_id: params.fetch("imageId"), directory: params.fetch("directory", "."))
+        when IMAGE_METHODS[2]
+          @session_manager.discard_generated_image(session_id: params.fetch("sessionId"), image_id: params.fetch("imageId"))
         when TURN_METHODS[0]
           @session_manager.start_turn(
             session_id: params.fetch("sessionId"),
@@ -503,6 +511,11 @@ module Kward
             subscriptions: { supported: true, methods: PLUGIN_CHAT_METHODS.values_at(3, 4), requiredForLiveEvents: true },
             attachments: { supported: true, method: PLUGIN_CHAT_METHODS[5], encoding: "base64", mimeTypes: SessionManager::RPC_IMAGE_MIME_TYPES, maxBytes: SessionManager::RPC_ATTACHMENT_MAX_BYTES },
             types: @plugin_chat_manager.type_entries
+          },
+          generatedImages: {
+            supported: true, provider: "Codex", tool: "generate_image", readyEvent: "imageReady",
+            progress: "toolCall", methods: IMAGE_METHODS, fetchChunkBytes: GeneratedImages::FETCH_CHUNK_BYTES,
+            downloads: "clientLocal", persistence: "temporary"
           },
           turns: {
             mode: "async",

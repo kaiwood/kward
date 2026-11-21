@@ -357,7 +357,10 @@ module Kward
       end
 
       def footer_tool_schemas
-        @footer_tool_registry&.schemas || []
+        return [] unless @footer_tool_registry
+        return @footer_tool_registry.schemas unless @footer_tool_registry.respond_to?(:schemas_for)
+
+        @footer_tool_registry.schemas_for(current_footer_conversation.provider)
       end
 
       def current_footer_conversation

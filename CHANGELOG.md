@@ -11,6 +11,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Generate images by asking in a Codex chat. Kward previews the result and can save it to Downloads or a project directory chosen with Tab completion. RPC clients can fetch, save, and discard previews.
+
 - Added Claude Fable 5.2, Mythos 5.2, Opus 5.5, Sonnet 5.5, and Haiku 5.5 to the Anthropic model picker.
 - Added GPT-6.2 Astra, GPT-6.2 Sol, and GPT-6.1 Terra to the Codex model picker, with model-specific reasoning controls and context-window metadata.
 - Added native POSIX.1-2024 `ulimit` queries and settings for file/core size, data, descriptors, stack, CPU time, and address space, with soft/hard selection and owned-process isolation from the Kward host and other sessions.

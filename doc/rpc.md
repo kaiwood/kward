@@ -530,6 +530,18 @@ Examples:
 - `write_file`: `toolName: "write"`, `args: { "path": "...", "content": "..." }`.
 - `run_shell_command`: `toolName: "bash"`, `args: { "command": "...", "timeout": 30 }`.
 
+## Generated image previews
+
+`initialize` advertises `capabilities.generatedImages`. In a Codex turn, the model can call `generate_image` when the user asks for an image. Show indeterminate progress after its `toolCall` event, and clear progress at `toolResult` or when the turn ends. When a PNG is ready, `turn/event` emits `imageReady` with `id`, `toolCallId`, `filename`, `mimeType`, and `size` in its payload. Failed or cancelled generation does not produce a preview.
+
+| Method | Parameters | Result |
+| --- | --- | --- |
+| `images/fetch` | `sessionId`, `imageId`, optional `offset` (default `0`) | Up to 256 KiB of image bytes, encoded as base64 in `data`, with `offset`, `nextOffset`, and image metadata. Follow `nextOffset` until it is `null`, decoding each chunk separately. |
+| `images/saveToProject` | `sessionId`, `imageId`, optional `directory` (default `.`) | `path` of the saved file. The directory must exist inside the originating project. Files are never overwritten. |
+| `images/discard` | `sessionId`, `imageId` | `{ "discarded": true }`. Saved copies are not affected. |
+
+For **Save to Downloads**, fetch the image and write it to the **client's** Downloads folder. Keep a preview available after a failed save. Explicitly discard it when the user dismisses it; closing its session also removes it. Preview IDs are scoped to the live session and do not survive a server restart. Image bytes are not included in event replay or transcript history.
+
 ## Tool approval bridge
 
 When `turns/start` is called with `options.approvalMode: "ask"`, Kward emits `tool/approvalRequested` before executing each tool.

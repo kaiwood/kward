@@ -111,6 +111,15 @@ module Kward
       Completion.new(range: token[:range], replacement: replacement, candidates: candidates)
     end
 
+    # Directory field completion uses shell matching but no shell quoting or expansion.
+    def complete_directory(input, cursor, root: @cwd)
+      prefix = input[0...cursor]
+      candidates = path_candidates(prefix, directories_only: true, literal: true, root: root)
+      return if candidates.empty?
+
+      Completion.new(range: 0...input.length, replacement: completion_replacement(prefix, candidates), candidates: candidates)
+    end
+
     def expand_alias(command, interactive: false)
       words = shell_words(command)
       return command if words.empty? || BUILTINS.include?(words.first)
@@ -246,24 +255,35 @@ module Kward
       @path_executables_cache = nil
     end
 
-    def path_candidates(prefix, directories_only: false, quote: nil)
+    def path_candidates(prefix, directories_only: false, quote: nil, literal: false, root: nil)
       raw_dir, raw_base = split_path_prefix(prefix)
-      dir = File.expand_path(unescape_path(raw_dir.empty? ? "." : raw_dir), @cwd)
+      base = raw_dir.empty? ? "." : raw_dir
+      dir = File.expand_path(literal ? base : unescape_path(base), @cwd)
       return [] unless File.directory?(dir)
+      return [] if root && !directory_under_root?(dir, root)
 
       Dir.children(dir).filter_map do |entry|
-        next unless entry.start_with?(unescape_path(raw_base))
+        next unless entry.start_with?(literal ? raw_base : unescape_path(raw_base))
+        next if literal && entry.match?(/[[:cntrl:]]/)
 
         path = File.join(dir, entry)
         directory = File.directory?(path)
         next if directories_only && !directory
+        next if root && !directory_under_root?(path, root)
 
-        completed = path_completion_candidate(raw_dir, entry, quote: quote)
+        completed = literal ? "#{raw_dir}#{entry}" : path_completion_candidate(raw_dir, entry, quote: quote)
         completed = "#{completed}/" if directory
         completed
       end.sort
     rescue SystemCallError
       []
+    end
+
+    def directory_under_root?(path, root)
+      resolved = File.realpath(path)
+      resolved == root || resolved.start_with?(root.end_with?("/") ? root : "#{root}/")
+    rescue SystemCallError
+      false
     end
 
     def path_completion_candidate(raw_dir, entry, quote: nil)

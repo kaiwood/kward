@@ -91,7 +91,14 @@ module Kward
 
       def composer_title
         label = composer_title_label
-        if @busy && @busy_activity_visible && @queued_count.positive?
+        if @busy && @busy_activity_visible && @busy_activity == "Generating image…"
+          track = Array.new(7, "░")
+          position = @spinner_frame_index % track.length
+          track[position] = "█"
+          elapsed = formatted_elapsed(monotonic_now - (@image_generation_started_at || @busy_started_at || monotonic_now))
+          text = "#{label} · #{colored(track.join, :activity)} #{@busy_activity} · #{colored(elapsed, :metadata)}"
+          status_composer_text(@busy_help ? "#{text} · #{BUSY_HELP_TEXT}" : text)
+        elsif @busy && @busy_activity_visible && @queued_count.positive?
           status_composer_text(busy_title("#{label} · #{colored("#{@queued_count} queued", :metadata)}"))
         elsif @busy && @busy_activity_visible && @steered_count.to_i.positive?
           status_composer_text(busy_title("#{label} · #{colored(spinner_frame, :activity, :bold)} steering"))
@@ -318,13 +325,22 @@ module Kward
         content_width = [width - 4, 1].max
         preview_rows = image_viewer_preview_rows(height, width: width)
         title = visible_truncate(" Image: #{@image_viewer_state[:display_path]} ", content_width)
-        rows = [
-          colored("╭", :primary_green) + title + colored("─" * [width - TerminalText.width(ANSI.strip(title)) - 2, 0].max, :primary_green) + colored("╮", :primary_green),
-          image_viewer_graphic_row(width, image_viewer_sequence(width, height))
-        ]
-        rows.concat(Array.new(preview_rows - 1) { box_content_row("", content_width) })
-        zoom = (image_viewer_zoom * 100).round
-        rows << footer_row(content_width, "Read-only image preview · #{zoom}% · +/- zoom · Esc/Q close")
+        state = @image_viewer_state
+        rows = [colored("╭", :primary_green) + title + colored("─" * [width - TerminalText.width(ANSI.strip(title)) - 2, 0].max, :primary_green) + colored("╮", :primary_green)]
+        if state[:directory_picker]
+          # The picker owns the overlay while active; don't draw under its input.
+        elsif state[:preview_error]
+          rows << box_content_row("Preview unavailable: #{state[:preview_error]}", content_width)
+        else
+          rows << image_viewer_graphic_row(width, image_viewer_sequence(width, height))
+          rows.concat(Array.new([preview_rows - 1, 0].max) { box_content_row("", content_width) })
+        end
+        if state[:generated]
+          rows.concat(generated_image_footer_rows(content_width))
+        else
+          zoom = (image_viewer_zoom * 100).round
+          rows << footer_row(content_width, "Read-only image preview · #{zoom}% · +/- zoom · Esc/Q close")
+        end
         rows << bottom_border(width)
         rows
       end

@@ -61,6 +61,7 @@ module Kward
           reasoning_effort: current_reasoning_effort
         )
         agent = build_tab_agent(conversation, session, worktree: worktree)
+        discard_tab_images(tab)
         tab.session = track_session(session)
         tab.agent = agent
         tab.driver = SessionTabDriver.new(session: tab.session, agent: agent, worktree: worktree)

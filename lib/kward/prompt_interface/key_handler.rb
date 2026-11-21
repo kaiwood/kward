@@ -115,15 +115,25 @@ module Kward
       def handle_image_viewer_key(key)
         return true if handle_bundled_key(key) { |token| handle_image_viewer_key(token) }
 
+        if @image_viewer_state[:generated]
+          tab_result = handle_tab_key_binding(key)
+          return tab_result unless tab_result == false
+        end
         sequence = parse_csi_u_key(key)
         if sequence
           queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
-          return close_image_viewer if sequence[:code] == 27
-
-          text = csi_u_printable_text(sequence)
-          return zoom_image_viewer(:in) if text == "+"
-          return zoom_image_viewer(:out) if text == "-"
-          return true
+          key = case sequence[:code]
+                when 27 then "\e"
+                when 9 then "\t"
+                when 13 then "\r"
+                when 127 then "\x7f"
+                else csi_u_printable_text(sequence)
+                end
+        end
+        return true if key.nil?
+        if @image_viewer_state[:generated]
+          return CANCEL_INPUT if key == TerminalKeys::CTRL_C && @busy
+          return true if handle_generated_image_key(key)
         end
 
         return zoom_image_viewer(:in) if key == "+"

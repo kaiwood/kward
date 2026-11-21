@@ -1,3 +1,4 @@
+require "base64"
 require "securerandom"
 require "thread"
 require "time"
@@ -82,6 +83,7 @@ module Kward
       )
         @server = server
         @client = client
+        @generated_images = GeneratedImages.new
         @config_dir = config_dir
         @config_manager = config_manager
         @context_usage = context_usage
@@ -194,12 +196,34 @@ module Kward
       end
 
       def tool_schemas(session_id: nil)
-        registry = if session_id
-                     fetch_session(session_id).tool_registry
-                   else
-                     build_tool_registry(Dir.pwd, nil)
-                   end
-        { tools: registry.schemas }
+        session = fetch_session(session_id) if session_id
+        registry = session ? session.tool_registry : build_tool_registry(Dir.pwd, nil)
+        provider = session&.conversation&.provider || (@client.current_provider if @client.respond_to?(:current_provider))
+        { tools: registry.schemas_for(provider) }
+      end
+
+      def fetch_generated_image(session_id:, image_id:, offset: 0)
+        owner = fetch_session(session_id).conversation
+        image, bytes = @generated_images.fetch(owner, image_id, offset: offset)
+        next_offset = offset + bytes.bytesize
+        { id: image.id, filename: image.filename, mimeType: "image/png", size: image.size,
+          offset: offset, data: Base64.strict_encode64(bytes), nextOffset: (next_offset if next_offset < image.size) }
+      rescue GeneratedImages::Error => e
+        raise ArgumentError, e.message
+      end
+
+      def save_generated_image(session_id:, image_id:, directory: ".")
+        owner = fetch_session(session_id).conversation
+        { path: @generated_images.save_to_project(owner, image_id, directory) }
+      rescue GeneratedImages::Error => e
+        raise ArgumentError, e.message
+      end
+
+      def discard_generated_image(session_id:, image_id:)
+        owner = fetch_session(session_id).conversation
+        { discarded: @generated_images.discard(owner, image_id) }
+      rescue GeneratedImages::Error => e
+        raise ArgumentError, e.message
       end
 
       # Subscribes to frontend-neutral runtime notifications.
@@ -390,6 +414,8 @@ module Kward
         rpc_sessions = @mutex.synchronize { @sessions.values.dup }
         rpc_sessions.reverse_each { |rpc_session| close_rpc_session(rpc_session) }
         { closed: true }
+      ensure
+        @generated_images.close
       end
 
       def shutdown_plugins
@@ -409,7 +435,7 @@ module Kward
       # queue a follow-up, or steer the running turn when the active provider
       # supports native steering. The returned turn id is used for status,
       # cancellation, and event replay.
-      def start_turn(session_id:, input:, streaming_behavior: nil, attachments: [], options: {}, context: nil, execution_profile: nil)
+      def start_turn(session_id:, input:, streaming_behavior: nil, attachments: [], options: {}, context: nil, execution_profile: nil, image_previews: true)
         rpc_session = fetch_session(session_id)
         execution_profile = validate_execution_profile(execution_profile)
         normalized_options = enforce_execution_profile_options(normalize_turn_options(options), execution_profile)
@@ -444,7 +470,7 @@ module Kward
           plugin_command_name: plugin_command&.name,
           plugin_arguments: plugin_arguments,
           options: normalized_options,
-          tool_registry: scoped_tool_registry(rpc_session, normalized_options),
+          tool_registry: scoped_tool_registry(rpc_session, normalized_options, image_previews: image_previews),
           execution_profile: execution_profile,
           mutex: Mutex.new
         )
@@ -870,6 +896,7 @@ module Kward
         conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
         conversation.update_execution_profile_context!(rpc_session.execution_profile.prompt_context) if rpc_session.execution_profile
         rpc_session.session = session
+        @generated_images.discard_owner(rpc_session.conversation)
         rpc_session.conversation = conversation
         rebuild_session_tools(rpc_session)
         emit_footer_update(rpc_session)
@@ -1030,16 +1057,17 @@ module Kward
         value.to_s.empty? ? nil : value
       end
 
-      def scoped_tool_registry(rpc_session, options)
+      def scoped_tool_registry(rpc_session, options, image_previews: true)
         names = scoped_tool_names(rpc_session, options)
         approval = tool_approval_callback(rpc_session, options)
-        return nil unless names || approval
+        return nil if !names && !approval && image_previews
 
         build_tool_registry(
           rpc_session.workspace_root,
           rpc_session.prompt,
           allowed_tool_names: names,
           tool_approval: approval,
+          image_previews: image_previews,
           hook_manager: lifecycle_hook_manager(rpc_session.workspace_root),
           hook_context: plugin_context(rpc_session, say_callback: lambda { |message| rpc_session.plugin_output << message.to_s })
         )
@@ -1116,7 +1144,7 @@ module Kward
         )
       end
 
-      def build_tool_registry(workspace_root, prompt, allowed_tool_names: nil, tool_approval: nil, hook_manager: nil, hook_context: nil)
+      def build_tool_registry(workspace_root, prompt, allowed_tool_names: nil, tool_approval: nil, hook_manager: nil, hook_context: nil, image_previews: true)
         ToolRegistry.new(
           workspace: configured_workspace(workspace_root),
           prompt: prompt,
@@ -1124,6 +1152,8 @@ module Kward
           plugin_tools: plugin_registry.tools,
           tool_approval: tool_approval,
           approval_for_allowed_tools: !tool_approval.nil?,
+          image_client: @client,
+          generated_images: (image_previews ? @generated_images : nil),
           hook_manager: hook_manager,
           hook_context: hook_context
         )
@@ -1236,6 +1266,7 @@ module Kward
         @mutex.synchronize { @sessions.delete(rpc_session.id) }
         stop_worker(rpc_session)
         stop_footer_worker(rpc_session)
+        @generated_images.discard_owner(rpc_session.conversation)
       end
 
       def stop_worker(rpc_session, wait: false)
@@ -1530,6 +1561,9 @@ module Kward
           emit_turn_event(turn, "toolCall", normalized_tool_event_payload(event.tool_call))
         when Events::ToolUpdate
           emit_turn_event(turn, "toolUpdate", normalized_tool_update_event_payload(event.tool_call, event.content, elapsed_ms: event.elapsed_ms))
+        when Events::ImageReady
+          image = event.image
+          emit_turn_event(turn, "imageReady", { id: image.id, toolCallId: ToolCall.id(event.tool_call), filename: image.filename, mimeType: "image/png", size: image.size })
         when Events::ToolResult
           emit_turn_event(turn, "toolResult", normalized_tool_result_event_payload(event.tool_call, event.content))
         when Events::Answer

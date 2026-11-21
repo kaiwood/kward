@@ -10,6 +10,7 @@ require_relative "edit_file"
 require_relative "fetch_content"
 require_relative "fetch_raw"
 require_relative "git_commit"
+require_relative "generate_image"
 require_relative "list_directory"
 require_relative "mcp_tool"
 require_relative "plugin_tool"
@@ -83,6 +84,7 @@ module Kward
 
     BUILTIN_TOOL_NAMES = (CORE_TOOL_NAMES + %w[
       git_commit
+      generate_image
       web_search
       fetch_content
       fetch_raw
@@ -113,7 +115,7 @@ module Kward
     # @param skills [Array<ConfigFiles::Skill>, nil] override discovered skills
     # @param ask_user_question_enabled [Boolean, nil] override question exposure
     # @param plugin_tools [Array<PluginRegistry::Tool>] trusted plugin tool registrations
-    def initialize(workspace: Workspace.new, workspace_targets: nil, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, editor_prompt_session: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil, mcp_clients: nil, plugin_tools: [], typesafe_client: TypeSafeClient.new, tool_approval: nil, approval_for_allowed_tools: false, permission_policy: nil, hook_manager: nil, hook_context: nil, git_committer: nil)
+    def initialize(workspace: Workspace.new, workspace_targets: nil, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, editor_prompt_session: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil, mcp_clients: nil, plugin_tools: [], typesafe_client: TypeSafeClient.new, tool_approval: nil, approval_for_allowed_tools: false, permission_policy: nil, hook_manager: nil, hook_context: nil, git_committer: nil, image_client: nil, generated_images: nil)
       @workspace = workspace
       @workspace_targets = workspace_targets || Tools::WorkspaceTargets.new(active: workspace)
       @prompt = prompt
@@ -137,6 +139,8 @@ module Kward
       @hook_manager = hook_manager
       @hook_context = hook_context
       @git_committer = git_committer
+      @generated_images = generated_images
+      @image_tool = Tools::GenerateImage.new(client: image_client, images: generated_images) if generated_images && image_client.respond_to?(:generate_codex_image)
       @mcp_clients = if mcp_clients
                        mcp_clients
                      elsif @allowed_tool_names
@@ -198,11 +202,12 @@ module Kward
     # @param tool_call [Hash] model tool call payload
     # @param conversation [Conversation] active conversation
     # @return [String] tool output content appended to the conversation
-    def dispatch(tool_call, conversation, cancellation: nil)
+    def dispatch(tool_call, conversation, cancellation: nil, image_context: nil, &image_ready)
       cancellation&.raise_if_cancelled!
       name = ToolCall.name(tool_call)
       args = ToolCall.arguments(tool_call)
       tool = @tools[name]
+      execute = -> { execute_tool_with_hooks(tool, name, args, tool_call, conversation, cancellation, image_context: image_context, &image_ready) }
 
       original_content = if tool
                            before_tool = run_hook("tool_call_before", conversation, payload: tool_payload(name, args, tool_call))
@@ -222,16 +227,16 @@ module Kward
                                approval = permission_approval_result(tool_call, name, args, cancellation)
                                if approval == :allow_for_session
                                  @permission_policy.allow_for_session!(name)
-                                 execute_tool_with_hooks(tool, name, args, tool_call, conversation, cancellation)
+                                 execute.call
                                elsif approval == true
-                                 execute_tool_with_hooks(tool, name, args, tool_call, conversation, cancellation)
+                                 execute.call
                                else
                                  approval_denied_content(approval, name)
                                end
                              elsif @approval_for_allowed_tools && tool_approval_denied?(tool_call, name, args, cancellation)
                                "Declined: tool execution denied by user: #{name}"
                              else
-                               execute_tool_with_hooks(tool, name, args, tool_call, conversation, cancellation)
+                               execute.call
                              end
                            end
                          else
@@ -268,6 +273,18 @@ module Kward
     # @param name [String, #to_s] exposed tool name
     # @return [Hash] source, display name, and optional MCP identity
     # @api public
+    def schemas_for(provider)
+      return @schemas if provider.to_s.casecmp?("codex")
+
+      @schemas.reject { |schema| ToolCall.name(schema) == Tools::GenerateImage::NAME }
+    end
+
+    def discard_generated_image(conversation, id)
+      @generated_images.discard(conversation, id)
+    rescue GeneratedImages::Error
+      nil
+    end
+
     def metadata_for(name)
       tool = @tools[name.to_s]
       return unknown_tool_metadata(name) unless tool
@@ -371,11 +388,15 @@ module Kward
       )
     end
 
-    def execute_tool_with_hooks(tool, name, args, tool_call, conversation, cancellation)
+    def execute_tool_with_hooks(tool, name, args, tool_call, conversation, cancellation, image_context:, &image_ready)
       args = run_shell_before_hooks(name, args, tool_call, conversation, cancellation)
       run_file_change_before_hooks(name, args, tool_call, conversation, cancellation)
       run_mcp_before_hooks(name, args, tool_call, conversation, cancellation)
-      content = tool.call(args, conversation, cancellation: cancellation)
+      content = if tool.is_a?(Tools::GenerateImage)
+                  tool.call(args, conversation, cancellation: cancellation, **(image_context || {}), &image_ready)
+                else
+                  tool.call(args, conversation, cancellation: cancellation)
+                end
       run_mcp_after_hooks(name, args, content, conversation)
       run_shell_after_hooks(name, args, content, conversation)
       run_file_change_after_hooks(name, args, content, conversation)
@@ -582,7 +603,7 @@ module Kward
     end
 
     def build_schema_tools
-      tools = @tools.values_at(*CORE_TOOL_NAMES)
+      tools = @tools.values_at(*CORE_TOOL_NAMES, Tools::GenerateImage::NAME)
       tools << @tools["replace_editor_buffer"] if @tools["replace_editor_buffer"]
       tools << @tools["open_editor"] if @tools["open_editor"]
       tools << @tools["prepare_shell_command"] if @tools["prepare_shell_command"]
@@ -599,6 +620,7 @@ module Kward
 
     def all_tools
       tools = core_tools
+      tools << @image_tool if @image_tool
       tools << Tools::GitCommit.new(committer: @git_committer, workspace_targets: @workspace_targets) if @git_committer
       (tools + [
         (Tools::TypeSafeEvaluate.new(client: @typesafe_client) if @typesafe_client&.available?),

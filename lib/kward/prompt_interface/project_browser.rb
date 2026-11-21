@@ -656,65 +656,38 @@ module Kward
       end
 
       def open_project_browser_image(path)
-        full_path = File.expand_path(path.to_s, prompt_workspace_root)
-        part = Kward::ImageAttachments.image_part_from_path(full_path)
-        unless part
-          @project_browser_state[:status] = "Cannot preview #{path}: unreadable or larger than 20 MB"
+        state = image_viewer_state_for(File.expand_path(path.to_s, prompt_workspace_root), path.to_s)
+        if state[:preview_error]
+          @project_browser_state[:status] = "Cannot preview #{path}: #{state[:preview_error]}"
           return false
         end
 
-        protocol = terminal_image_protocol
-        unless protocol
-          @project_browser_state[:status] = "Cannot preview #{path}: terminal does not support inline images"
-          return false
-        end
-
-        part = Kward::ImageAttachments.terminal_image_part(part, protocol)
-        unless part
-          @project_browser_state[:status] = "Cannot preview #{path}: terminal cannot render this image format"
-          return false
-        end
-
-        image_id = next_terminal_image_id
-        columns = image_viewer_columns(screen_width)
-        rows = image_viewer_preview_rows(screen_height, width: screen_width)
-        terminal_columns, terminal_rows = image_viewer_terminal_size(part, protocol, columns, rows)
-        sequence = Kward::ImageAttachments.terminal_image_sequence(
-          part,
-          width: terminal_columns,
-          height: terminal_rows,
-          protocol: protocol,
-          image_id: image_id,
-          move_cursor: false,
-          env: ENV
-        )
-        unless sequence
-          @project_browser_state[:status] = "Cannot preview #{path}: terminal cannot render this image format"
-          return false
-        end
-
-        @image_viewer_state = {
-          path: full_path,
-          display_path: path.to_s,
-          protocol: protocol,
-          image_id: image_id,
-          part: part,
-          zoom: 1.0,
-          columns: columns,
-          rows: rows,
-          sequence: sequence
-        }
+        @image_viewer_state = state
         @pending_keys.clear
         @asking = true
         true
+      end
+
+      def image_viewer_state_for(path, display_path)
+        state = { path: path, display_path: display_path, zoom: 1.0 }
+        part = ImageAttachments.image_part_from_path(path)
+        return state.merge(preview_error: "unreadable or larger than 20 MB") unless part
+
+        protocol = terminal_image_protocol
+        return state.merge(preview_error: "terminal does not support inline images") unless protocol
+
+        part = ImageAttachments.terminal_image_part(part, protocol)
+        return state.merge(preview_error: "terminal cannot render this image format") unless part
+
+        state.merge(protocol: protocol, part: part, image_id: next_terminal_image_id)
       end
 
       def close_image_viewer
         return false unless image_viewer_active?
 
         clear_image_viewer_output_locked
+        sync_project_browser_query_input unless @image_viewer_state[:generated]
         @image_viewer_state = nil
-        sync_project_browser_query_input
         @asking = true
         true
       end
@@ -739,7 +712,7 @@ module Kward
       end
 
       def zoom_image_viewer(direction)
-        return false unless image_viewer_active?
+        return false unless image_viewer_active? && !@image_viewer_state[:preview_error]
 
         delta = direction == :in ? IMAGE_VIEWER_ZOOM_STEP : -IMAGE_VIEWER_ZOOM_STEP
         zoom = [[image_viewer_zoom + delta, IMAGE_VIEWER_MIN_ZOOM].max, IMAGE_VIEWER_MAX_ZOOM].min

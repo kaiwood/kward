@@ -45,6 +45,8 @@ module Kward
         :error_reported,
         :local_busy_activity,
         :pending_runtime_outputs,
+        :image_offers,
+        :offered_image_ids,
         keyword_init: true
       ) do
         TRANSIENT_SHELL_OUTPUT_LIMIT = 200_000
@@ -241,8 +243,9 @@ module Kward
           return switch_tab(@tabs.index(existing))
         end
 
-        save_active_tab_state
         stop_tab_live_view
+        save_active_tab_state
+        suspend_tab_images(active_tab)
         scope_key = plugin_tab_scope_key(tab_type)
         descriptor = { "kind" => "plugin", "plugin_tab_type" => tab_type.id, "label" => tab_type.title, "scope_key" => scope_key }
         host = build_plugin_tab_host(tab_type, workspace_root: session_store.cwd, scope_key: scope_key)
@@ -304,7 +307,9 @@ module Kward
           hook_context: hook_context,
           mcp_clients: strict ? [] : nil,
           plugin_tools: strict ? [] : plugin_registry.tools,
-          git_committer: git_committer
+          git_committer: git_committer,
+          image_client: @client,
+          generated_images: (@generated_images ||= GeneratedImages.new)
         )
         @footer_conversation = conversation
         @footer_tool_registry = tool_registry
@@ -446,8 +451,9 @@ module Kward
       def open_new_tab(session_store)
         return say_sessions_unavailable unless session_store
 
-        save_active_tab_state
         stop_tab_live_view
+        save_active_tab_state
+        suspend_tab_images(active_tab)
         session = track_session(session_store.create(provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort))
         conversation = new_conversation(workspace_root: session_store.cwd)
         session.attach(conversation)
@@ -464,6 +470,8 @@ module Kward
           return nil
         end
 
+        stop_tab_live_view
+        discard_tab_images(tab)
         if @tabs.length <= 1
           close_kwsh_session(tab.shell) if tab&.shell && respond_to?(:close_kwsh_session, true)
           close_plugin_tab(tab)
@@ -472,7 +480,6 @@ module Kward
           return PromptInterface::EXIT_INPUT
         end
 
-        stop_tab_live_view
         close_kwsh_session(tab.shell) if tab&.shell && respond_to?(:close_kwsh_session, true)
         tab.session&.delete_if_unused if tab&.session.respond_to?(:delete_if_unused)
         close_plugin_tab(tab)
@@ -486,8 +493,9 @@ module Kward
         return if index == @active_tab_index
         return unless index.between?(0, @tabs.length - 1)
 
-        save_active_tab_state
         stop_tab_live_view
+        save_active_tab_state
+        suspend_tab_images(active_tab)
         @active_tab_index = index
         activate_tab(index)
       end
@@ -496,6 +504,7 @@ module Kward
         tab = active_tab
         return agent unless tab
 
+        discard_tab_images(tab) unless tab.agent&.conversation.equal?(agent.conversation)
         tab.session = @active_session
         worktree = reconcile_worktree_binding(tab, agent.conversation)
         tab.agent = build_tab_agent(agent.conversation, tab.session, worktree: worktree)
@@ -572,6 +581,7 @@ module Kward
         update_plugin_tab_slash_commands(tab)
         update_prompt_tabs
         render_tab(tab) if render
+        offer_tab_images(tab)
         start_tab_live_view(tab) if tab.running?
         if tab.local_busy? && tab.shell
           @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
@@ -787,6 +797,7 @@ module Kward
         update_prompt_tabs
         tab.answer = tab.driver.submit(input, display_input: display_input, cancellation: tab.cancellation, steering: tab.steering) do |event|
           tab.record_event(event)
+          update_prompt_tabs if event.is_a?(Events::ImageReady) && !tab.equal?(active_tab)
         end
         tab.status = "ready"
         tab.unread = tab != active_tab
@@ -968,6 +979,8 @@ module Kward
           break unless @tab_live_view_token.equal?(token)
 
           if tab.idle?
+            next if tab.seen_events < tab.event_history.length
+
             renderer.call(:flush, tab.driver)
             break
           end
@@ -992,11 +1005,42 @@ module Kward
           elsif plugin_tab_type_for(driver)&.transcript_events
             notify_plugin_tab_transcript_event(event, driver)
           end
+          offer_tab_images(tab, events: [event]) if event.is_a?(Events::ImageReady)
           handle_interactive_event(event, tab.markdown_chunks, tab.stream_state)
           flush_interactive_markdown_deltas(tab.markdown_chunks, tab.stream_state)
         rescue StandardError => e
           runtime_output("Tab view error: #{e.message}")
         end
+      end
+
+      def offer_tab_images(tab, events: tab.event_history)
+        return unless tab.equal?(active_tab) && tab.agent && @prompt.respond_to?(:offer_generated_images)
+
+        offers = tab.image_offers || []
+        tab.image_offers = nil
+        offered = tab.offered_image_ids ||= {}
+        events.each do |event|
+          next unless event.is_a?(Events::ImageReady) && !offered[event.image.id]
+
+          offered[event.image.id] = true
+          offers << { store: @generated_images, owner: tab.agent.conversation, image: event.image }
+        end
+        @prompt.offer_generated_images(offers) unless offers.empty?
+      end
+
+      def suspend_tab_images(tab)
+        return unless tab && @prompt.respond_to?(:take_generated_image_offers)
+
+        tab.image_offers = @prompt.take_generated_image_offers
+      end
+
+      def discard_tab_images(tab)
+        return unless tab&.agent && @generated_images
+
+        suspend_tab_images(tab)
+        tab.image_offers = nil
+        tab.offered_image_ids = nil
+        @generated_images.discard_owner(tab.agent.conversation)
       end
 
       def plugin_tab_type_for(driver)
@@ -1027,7 +1071,16 @@ module Kward
           label = tab.label.to_s.empty? ? default_tab_label(index) : tab.label.to_s
           binding = worktree_binding_for(tab)
           label = "#{label} · #{binding.branch}" if binding&.active?
+          label = "#{label} · image" if tab != active_tab && tab_image_waiting?(tab)
           { name: label, color: tab_label_color(tab) }
+        end
+      end
+
+      def tab_image_waiting?(tab)
+        return true if tab.image_offers && !tab.image_offers.empty?
+
+        Array(tab.event_history).reverse_each.any? do |event|
+          event.is_a?(Events::ImageReady) && !tab.offered_image_ids&.key?(event.image.id)
         end
       end
 
@@ -1112,8 +1165,9 @@ module Kward
         return runtime_output("Tab #{value} does not exist.") unless target_index.between?(0, @tabs.length - 1)
         return if target_index == @active_tab_index
 
-        save_active_tab_state
         stop_tab_live_view
+        save_active_tab_state
+        suspend_tab_images(active_tab)
         tab = @tabs.delete_at(@active_tab_index)
         @tabs.insert(target_index, tab)
         @active_tab_index = target_index
@@ -1160,6 +1214,9 @@ module Kward
         rescue StandardError
           nil
         end
+      ensure
+        @generated_images&.close
+        @generated_images = nil
       end
 
       def build_plugin_tab_host(tab_type, workspace_root:, scope_key:)

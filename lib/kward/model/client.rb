@@ -15,6 +15,7 @@ require_relative "copilot_models"
 require_relative "model_info"
 require_relative "sources"
 require_relative "payloads"
+require_relative "codex_images"
 require_relative "../telemetry/logger"
 require_relative "stream_parser"
 
@@ -126,6 +127,7 @@ module Kward
       current_model = resolved_copilot_chat_model(current_model) if resolved_provider == "Copilot" && model.nil?
 
       validate_image_support!(resolved_provider, current_model, messages)
+      tools = tools.reject { |tool| ToolCall.name(tool) == "generate_image" } if resolved_provider != "Codex"
       request_body = JSON.dump(request_body_payload(resolved_provider, messages, tools, max_tokens: max_tokens, model: current_model, reasoning: reasoning, text_format: text_format))
       with_retries(resolved_provider, current_model, request_bytes: request_body.bytesize, on_retry: on_retry, cancellation: cancellation) do
         request_started_at = @telemetry_logger.monotonic_now
@@ -164,6 +166,16 @@ module Kward
     rescue StandardError => e
       log_error("model_request_error", e)
       raise e
+    end
+
+    # Generates via the Codex subscription only, never using a public API key.
+    def generate_codex_image(prompt, turn_id: nil, cancellation: nil)
+      _url, token, provider, account_id = credentials(provider: "Codex")
+      unless provider == "Codex" && !token.to_s.empty?
+        raise CodexImages::Error, "Sign in to Codex to generate images."
+      end
+
+      CodexImages.generate(prompt, token: token, account_id: account_id, turn_id: turn_id, cancellation: cancellation)
     end
 
     # Returns the active provider label after applying env/config/credential fallback rules.

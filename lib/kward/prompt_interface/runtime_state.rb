@@ -35,7 +35,7 @@ module Kward
 
       def spinner_active?
         busy = @busy || (@select_state && @select_state[:busy_activity])
-        busy && @queued_count.zero? && @started && @asking
+        busy && (@queued_count.zero? || @busy_activity == "Generating image…") && @started && @asking
       end
 
       def completion_status(status)

@@ -7,6 +7,8 @@ module Kward
       private
 
       def tool_activity(tool_call)
+        return "Generating image…" if tool_call_name(tool_call) == "generate_image"
+
         "running #{tool_call_name(tool_call).tr("_", " ")}"
       end
 

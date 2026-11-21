@@ -54,6 +54,7 @@ require_relative "prompt_interface/layout"
 require_relative "prompt_interface/screen"
 require_relative "prompt_interface/key_handler"
 require_relative "prompt_interface/runtime_state"
+require_relative "prompt_interface/generated_image_preview"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -86,6 +87,7 @@ module Kward
     include SlashOverlay
     include FileOverlay
     include ProjectBrowser
+    include GeneratedImagePreview
     include SelectionPrompt
     include QuestionPrompt
     include PluginUIRequests
@@ -630,7 +632,8 @@ module Kward
             resized = handle_resize_locked
             footer_refreshed = tick_footer_locked
             completion_changed = tick_completion_locked
-            render_prompt_locked if resized || footer_refreshed || completion_changed
+            preview_opened = open_pending_generated_image_locked
+            render_prompt_locked if resized || footer_refreshed || completion_changed || preview_opened
           else
             result = handle_key(key)
             render_prompt_locked unless result.is_a?(String) || result == EXIT_INPUT || prompt_action_result?(result)
@@ -988,6 +991,7 @@ module Kward
         return false if value == @busy_activity
 
         @busy_activity = value
+        @image_generation_started_at = value == "Generating image…" ? monotonic_now : nil
         render_prompt_locked if @started && @asking && @busy
         true
       end
@@ -1074,7 +1078,8 @@ module Kward
           spun = tick_spinner_locked
           footer_refreshed = tick_footer_locked
           completion_changed = tick_completion_locked
-          render_prompt_locked if resized || spun || footer_refreshed || completion_changed
+          preview_opened = open_pending_generated_image_locked
+          render_prompt_locked if resized || spun || footer_refreshed || completion_changed || preview_opened
           return nil
         end
 

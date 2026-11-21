@@ -266,6 +266,14 @@ Use this for tasks such as:
 This screenshot shows the broken layout. Find the likely CSS issue.
 ```
 
+### Generate an image with Codex
+
+In an interactive Codex chat, ask normally: “Create a pixel-art lighthouse on a stormy coast.” Kward shows an animated indicator while Codex works. Generation uses your Codex account limits and does not fall back to API-key billing.
+
+When the PNG is ready, Kward opens a preview. Press **D** to save to Downloads, or **P** to choose a folder inside the current project or worktree. Press **Tab** to complete a directory and **Enter** to save. Kward chooses an unused filename rather than overwriting anything. If your terminal can’t display the image, the save options still work.
+
+Press **Esc** in the directory picker to return to the preview. Press **Esc** in the preview to discard it; saved copies are unaffected. Unsaved previews are temporary and do not survive closing the tab or quitting Kward. Generation is available in interactive terminal chat and in RPC clients that implement [generated image previews](rpc.md#generated-image-previews), not in one-shot, filter, or Pan mode.
+
 ## Pan mode
 
 Pan mode starts a mobile-friendly local web UI:

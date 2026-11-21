@@ -1,3 +1,4 @@
+require "securerandom"
 require_relative "cancellation"
 require_relative "model/chat_invocation"
 require_relative "compactor"
@@ -103,9 +104,11 @@ module Kward
     # @return [String] final assistant answer
     def run_turn(on_reasoning_delta: nil, on_retry: nil, cancellation: nil, steering: nil, options: {}, tool_registry: nil, summary: nil)
       overflow_retried = false
+      image_turn_id = SecureRandom.uuid
       steering_state = build_steering_state(steering) do |event|
         yield event if block_given?
       end
+      registry = tool_registry || @tool_registry
       loop do
         cancellation&.raise_if_cancelled!
         auto_compact_if_needed
@@ -136,6 +139,8 @@ module Kward
         end
 
         tool_calls.each do |tool_call|
+          image = nil
+          image_published = false
           cancellation&.raise_if_cancelled!
           summary&.tool_call
           yield Events::ToolCall.new(tool_call: tool_call) if block_given?
@@ -144,7 +149,12 @@ module Kward
           status = "completed"
           error = nil
           begin
-            content = (tool_registry || @tool_registry).dispatch(tool_call, @conversation, cancellation: cancellation)
+            if ToolCall.name(tool_call) == Tools::GenerateImage::NAME && registry.respond_to?(:discard_generated_image)
+              provider = message["provider"] || message[:provider]
+              content = registry.dispatch(tool_call, @conversation, cancellation: cancellation, image_context: { provider: provider, turn_id: image_turn_id }) { |preview| image = preview }
+            else
+              content = registry.dispatch(tool_call, @conversation, cancellation: cancellation)
+            end
           rescue StandardError => e
             status = "failed"
             error = e
@@ -157,7 +167,14 @@ module Kward
             elapsed_ms = @telemetry_logger.duration_ms(tool_started_at)
             yield Events::ToolUpdate.new(tool_call: tool_call, content: content, elapsed_ms: elapsed_ms)
             yield Events::ToolResult.new(tool_call: tool_call, content: content)
+            if image
+              cancellation&.raise_if_cancelled!
+              yield Events::ImageReady.new(tool_call: tool_call, image: image)
+              image_published = true
+            end
           end
+        ensure
+          registry.discard_generated_image(@conversation, image.id) if image && !image_published
         end
         steered_after_tools = append_steering_events(steering_state)
         yield Events::SteeringApplied.new(count: steered_after_tools) if block_given? && steered_after_tools.positive?
@@ -262,10 +279,13 @@ module Kward
         yield event if block_given?
       end
       registry = tool_registry || @tool_registry
+      provider = options[:provider] || @conversation.provider
+      schema_provider = provider || (@client.current_provider if @client.respond_to?(:current_provider))
+      schemas = registry.respond_to?(:schemas_for) ? registry.schemas_for(schema_provider) : registry.schemas
       request = {
         messages: @conversation.context_messages,
-        tools: registry.schemas,
-        provider: options[:provider] || @conversation.provider,
+        tools: schemas,
+        provider: provider,
         model: options[:model] || @conversation.model,
         reasoning: options[:reasoning] || @conversation.reasoning_effort,
         provider_required: @strict_provider
