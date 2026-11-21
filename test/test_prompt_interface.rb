@@ -313,6 +313,44 @@ class TestPromptInterface < KwardTestCase
     assert_equal "╭ You ─────────────╮", line
   end
 
+  def test_busy_composer_drops_help_before_clipping_activity
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.define_singleton_method(:monotonic_now) { 0.0 }
+    activity = "Running a long repository check"
+    prompt.begin_busy_input(activity: activity)
+
+    wide, = prompt.send(:composer_layout, 80, 20)
+    assert_includes strip_ansi(wide.first), Kward::PromptInterface::BUSY_HELP_TEXT
+
+    narrow, = prompt.send(:composer_layout, 48, 20)
+    header = strip_ansi(narrow.first)
+    assert_includes header, "⠋ #{activity}"
+    refute_includes header, Kward::PromptInterface::BUSY_HELP_TEXT
+    assert_equal 48, Kward::TerminalText.width(header)
+  end
+
+  def test_busy_composer_clips_wide_activity_without_wrapping_the_header
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.instance_variable_set(:@color_enabled, true)
+    prompt.begin_busy_input(activity: "Running #{'界' * 20}")
+
+    rows, = prompt.send(:composer_layout, 32, 20)
+    header = strip_ansi(rows.first)
+
+    assert_match(/\A╭ You · ⠋ Running 界+─*╮\z/, header)
+    assert_equal 32, Kward::TerminalText.width(header)
+  end
+
+  def test_very_narrow_composer_uses_one_line_for_the_draft
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.send(:replace_input, "abc")
+
+    rows, row, col = prompt.send(:composer_layout, 4, 20)
+
+    assert_equal ["abc "], rows.map { |line| strip_ansi(line) }
+    assert_equal [0, 3], [row, col]
+  end
+
   def test_prompt_interface_compact_composer_does_not_show_status
     prompt = Kward::PromptInterface.new(
       input: StringIO.new,

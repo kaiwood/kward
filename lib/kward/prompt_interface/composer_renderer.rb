@@ -11,7 +11,7 @@ module Kward
       def composer_layout(width, height = screen_height)
         return interactive_layout(width, height) if interactive_active_locked?
         return editor_layout(width, height) if editor_visible?
-        return compact_composer_layout(width) if height < 4
+        return compact_composer_layout(width) if width < 5 || height < 4
         return question_composer_layout(width, height) if @question_state
 
         content_width = [width - 4, 1].max
@@ -40,6 +40,7 @@ module Kward
         lines, cursor_line, cursor_col = @composer.lines_and_cursor
         prefix = "#{@prompt_label} "
         prefix_width = TerminalText.width(prefix)
+        prefix, prefix_width = "", 0 if prefix_width >= width
         line = lines[cursor_line] || ""
         input_width = [width - prefix_width, 1].max
         layout = TerminalText.wrap(line, width: input_width, cursor: cursor_col)
@@ -77,41 +78,52 @@ module Kward
       end
 
       def top_border(width)
-        title = composer_title
+        title = composer_title(width - 2)
+        gap = width - 2 - TerminalText.width(ANSI.strip(title))
         status = cached_composer_status_text
         if status
-          gap = width - 2 - TerminalText.width(ANSI.strip(title)) - TerminalText.width(ANSI.strip(status))
-          if gap >= 0
-            return colored("╭", :primary_green) + title + colored("─" * gap, :primary_green) + status + colored("╮", :primary_green)
+          status_width = TerminalText.width(ANSI.strip(status))
+          if status_width <= gap
+            gap -= status_width
+          else
+            status = nil
           end
         end
-        plain_title = ANSI.strip(title)
-        "#{colored("╭", :primary_green)}#{title}#{colored("─" * [width - TerminalText.width(plain_title) - 2, 0].max, :primary_green)}#{colored("╮", :primary_green)}"
+        "#{colored("╭", :primary_green)}#{title}#{colored("─" * gap, :primary_green)}#{status}#{colored("╮", :primary_green)}"
       end
 
-      def composer_title
+      def composer_title(max_width = nil)
         label = composer_title_label
-        if @busy && @busy_activity_visible && @busy_activity == "Generating image…"
-          track = Array.new(7, "░")
-          position = @spinner_frame_index % track.length
-          track[position] = "█"
-          elapsed = formatted_elapsed(monotonic_now - (@image_generation_started_at || @busy_started_at || monotonic_now))
-          text = "#{label} · #{colored(track.join, :activity)} #{@busy_activity} · #{colored(elapsed, :metadata)}"
-          status_composer_text(@busy_help ? "#{text} · #{BUSY_HELP_TEXT}" : text)
-        elsif @busy && @busy_activity_visible && @queued_count.positive?
-          status_composer_text(busy_title("#{label} · #{colored("#{@queued_count} queued", :metadata)}"))
-        elsif @busy && @busy_activity_visible && @steered_count.to_i.positive?
-          status_composer_text(busy_title("#{label} · #{colored(spinner_frame, :activity, :bold)} steering"))
-        elsif @busy && @busy_activity_visible && response_arriving?
-          status_composer_text(busy_title("#{label} · #{colored("✦", :activity, :bold)} responding"))
-        elsif @busy && @busy_activity_visible
-          status_composer_text(busy_title("#{label} · #{colored(spinner_frame, :activity, :bold)} #{@busy_activity}"))
+        text = if @busy && @busy_activity_visible
+          busy_composer_title(label, max_width)
         elsif @completion_status
           completion = colored(@completion_status[:text], @completion_status[:style], :bold)
-          status_composer_text("#{label} · #{completion}")
+          "#{label} · #{completion}"
         else
-          status_composer_text(label)
+          label
         end
+        title = status_composer_text(text)
+        max_width ? visible_truncate(title, max_width) : title
+      end
+
+      def busy_composer_title(label, max_width)
+        if @busy_activity == "Generating image…"
+          track = Array.new(7, "░")
+          track[@spinner_frame_index % track.length] = "█"
+          elapsed = formatted_elapsed(monotonic_now - (@image_generation_started_at || @busy_started_at || monotonic_now))
+          return busy_title("#{label} · #{colored(track.join, :activity)} #{@busy_activity}", max_width, elapsed: elapsed)
+        end
+
+        activity = if @queued_count.positive?
+          colored("#{@queued_count} queued", :metadata)
+        elsif @steered_count.to_i.positive?
+          "#{colored(spinner_frame, :activity, :bold)} steering"
+        elsif response_arriving?
+          "#{colored("✦", :activity, :bold)} responding"
+        else
+          "#{colored(spinner_frame, :activity, :bold)} #{@busy_activity}"
+        end
+        busy_title("#{label} · #{activity}", max_width)
       end
 
       def composer_title_label
@@ -120,10 +132,17 @@ module Kward
         @prompt_label.delete_suffix(">")
       end
 
-      def busy_title(text)
-        elapsed = busy_elapsed_text
-        text = "#{text} · #{colored(elapsed, :metadata)}" if elapsed
-        @busy_help ? "#{text} · #{BUSY_HELP_TEXT}" : text
+      def busy_title(text, max_width, elapsed: busy_elapsed_text)
+        suffixes = []
+        suffixes << colored(elapsed, :metadata) if elapsed
+        suffixes << BUSY_HELP_TEXT if @busy_help
+        suffixes.each do |suffix|
+          expanded = "#{text} · #{suffix}"
+          break if max_width && TerminalText.width(ANSI.strip(expanded)) + 2 > max_width
+
+          text = expanded
+        end
+        text
       end
 
       def status_composer_text(text)
