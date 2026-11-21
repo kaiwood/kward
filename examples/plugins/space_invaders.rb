@@ -10,7 +10,6 @@
 #   ←/→  Move
 #   Space  Fire
 #   Q / Esc  Quit
-#   Ctrl+C  Force quit (handled by Kward)
 #
 # The game renders colored sprites and particle-burst explosions inside the
 # composer canvas region using the interactive mode API.

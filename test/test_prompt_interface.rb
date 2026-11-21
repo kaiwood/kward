@@ -2662,7 +2662,7 @@ class TestPromptInterface < KwardTestCase
     assert_includes plain, "X"
     assert_includes plain, "O"
     assert_includes plain, "Interactive"
-    assert_includes plain, "Ctrl+C exits"
+    assert_includes plain, "Esc exits"
   ensure
     TTY::Screen.define_singleton_method(:width, original_width) if original_width
     TTY::Screen.define_singleton_method(:height, original_height) if original_height
@@ -2713,15 +2713,51 @@ class TestPromptInterface < KwardTestCase
     TTY::Screen.define_singleton_method(:height, original_height) if original_height
   end
 
-  def test_interactive_ctrl_c_forces_exit
+  def test_interactive_ctrl_c_is_available_to_the_plugin_without_exiting
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
-    prompt.start
-
     controller = prompt.start_interactive(title: "Test", rows: 3, fps: 30)
-    prompt.send(:handle_interactive_key, "\x03")
 
-    assert controller.exited?
-    assert prompt.interactive_exited?
+    ["\x03", "\e[99;5u"].each do |key|
+      prompt.send(:handle_interactive_key, key)
+
+      assert_equal :ctrl_c, controller.poll_key
+      refute prompt.interactive_exited?
+    end
+  end
+
+  def test_interactive_poll_input_keeps_running_after_shift_and_command_reports
+    input, writer = IO.pipe
+    prompt = Kward::PromptInterface.new(input: input, output: StringIO.new)
+    controller = prompt.start_interactive(title: "Test", rows: 3, fps: 30)
+
+    ["\e[57441;2u", "\e[57444;9u", "\e[57444;1:3u"].each do |report|
+      writer.write(report)
+      assert_nil prompt.poll_input
+      assert_nil controller.poll_key
+      refute prompt.interactive_exited?
+    end
+
+    writer.write("\e[D")
+    assert_nil prompt.poll_input
+    assert_equal :left, controller.poll_key
+
+    writer.write("\e[27u")
+    assert_equal :interactive_exited, prompt.poll_input
+  ensure
+    writer&.close
+    input&.close
+  end
+
+  def test_interactive_modified_escape_and_escape_release_do_not_exit
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    controller = prompt.start_interactive(title: "Test", rows: 3, fps: 30)
+
+    prompt.send(:handle_interactive_key, "\e[27;2u")
+    assert_equal "\e[27;2u", controller.poll_key
+
+    prompt.send(:handle_interactive_key, "\e[27;1:3u")
+    assert_nil controller.poll_key
+    refute prompt.interactive_exited?
   end
 
   def test_interactive_escape_forces_exit

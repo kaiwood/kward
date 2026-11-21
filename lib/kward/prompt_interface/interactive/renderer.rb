@@ -42,7 +42,7 @@ module Kward
 
       def interactive_status_text(state)
         fps = state[:controller].fps
-        "Interactive · #{fps.to_i}fps · Ctrl+C exits"
+        "Interactive · #{fps.to_i}fps · Esc exits"
       end
 
       def interactive_bottom_rows(width)

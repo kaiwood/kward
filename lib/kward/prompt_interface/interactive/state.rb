@@ -14,38 +14,36 @@ module Kward
       def route_interactive_key(key)
         return false unless interactive_active_locked?
 
-        interactive_key = interactive_csi_u_key(key)
-        unless interactive_key == false
-          return force_interactive_exit if interactive_key == :force_exit
-
-          @interactive_state[:controller].push_key(interactive_key)
-          return true
+        interactive_key = if (sequence = parse_csi_u_key(key))
+          interactive_csi_u_key(sequence)
+        elsif key == TerminalKeys::ESCAPE
+          :force_exit
+        elsif key == TerminalKeys::CTRL_C
+          :ctrl_c
+        else
+          key_name_for(key) || key
         end
+        return force_interactive_exit if interactive_key == :force_exit
 
-        name = key_name_for(key) if key.is_a?(String) && key.length >= 1
-        return force_interactive_exit if key == "\x03" || name == :escape
-
-        @interactive_state[:controller].push_key(name || key)
+        @interactive_state[:controller].push_key(interactive_key) if interactive_key
         true
       end
 
-      def interactive_csi_u_key(key)
-        sequence = parse_csi_u_key(key)
-        return false unless sequence
-
+      def interactive_csi_u_key(sequence)
         code = sequence[:code]
         modifier = sequence[:modifier]
-        queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
+        queue_pending_keys(sequence[:remaining]) unless sequence[:remaining].to_s.empty?
+        return if sequence[:event_type] == 3 || TerminalKeys::CSI_U_MODIFIER_KEY_CODES.cover?(code)
 
-        return :force_exit if code == 27 || (code.to_i.chr.downcase == "c" && ctrl_modifier?(modifier))
+        # Ignore Caps Lock and Num Lock when matching a key binding.
+        held_modifiers = (modifier - 1) & 0b111111
+        return :force_exit if code == 27 && held_modifiers.zero?
+        return :ctrl_c if [67, 99].include?(code) && held_modifiers == 4
         return :return if code == 13
         return :backspace if [8, 127].include?(code)
         return :space if code == 32 && !ctrl_modifier?(modifier) && !alt_modifier?(modifier) && !super_modifier?(modifier)
 
-        text = csi_u_printable_text(sequence)
-        return text if text
-
-        false
+        csi_u_printable_text(sequence) || sequence[:sequence]
       end
 
       def force_interactive_exit

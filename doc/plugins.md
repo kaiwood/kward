@@ -568,7 +568,7 @@ Kward.plugin do |plugin|
       ui.put(0, x, "X", :red)
       x = (x + 1) % ui.width
       key = ui.poll_key
-      return :exit if key == :ctrl_c || key == "q"
+      next :exit if key == "q"
       ui.render
     end
   end
@@ -596,8 +596,9 @@ The `ui` controller object passed to the handler block exposes:
 | `fps` | Target frame rate |
 
 Keys are returned as symbols (`:left`, `:right`, `:up`, `:down`, `:return`,
-`:backspace`, `:space`, `:pageup`, `:pagedown`) or raw strings for keys
-without a named mapping. Ctrl+C always exits the loop immediately.
+`:backspace`, `:space`, `:pageup`, `:pagedown`, `:ctrl_c`) or raw strings for keys
+without a named mapping. Kward exits on plain Esc. To add a quit key such as `q`
+or Ctrl+C, handle it in the tick callback and call `ui.exit` or return `:exit`.
 
 The tick callback runs at the configured frame rate (1–120 fps, default 30).
 Calls to `put` and `clear_frame` stage canvas changes; call `render` after the
@@ -611,7 +612,7 @@ Returning `:exit` from the tick callback ends the loop, same as calling
   cursor, and transcript viewport).
 - Interactive mode is a distinct state from the busy-input spinner lifecycle —
   no spinner or busy chrome is shown.
-- Ctrl+C, the plugin calling `exit`, or the tick callback returning `:exit`
+- Plain Esc, the plugin calling `exit`, or the tick callback returning `:exit`
   all exit cleanly and restore the prior composer state.
 - Resize during interactive mode forces a clean exit and restore.
 
