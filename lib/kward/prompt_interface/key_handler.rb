@@ -69,6 +69,7 @@ module Kward
 
       def legacy_handoff_key(sequence)
         return "" if sequence[:event_type] == 3
+        return "" if TerminalKeys::CSI_U_MODIFIER_KEY_CODES.cover?(sequence[:code])
 
         event = csi_u_key_event(sequence)
         return event[:text] if event[:type] == :printable

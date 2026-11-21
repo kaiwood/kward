@@ -85,6 +85,7 @@ module Kward
       (1..9).map { |number| "\e#{number}" }
     ).freeze
 
+    CSI_U_MODIFIER_KEY_CODES = (57441..57454).freeze
     CSI_U_PATTERN = /\A\e\[(\d+)(?::[\d:]*)?((?:;[\d:]*)*)u/.freeze
     CSI_SEQUENCE_PATTERN = /\A\e\[[0-?]*[ -\/]*[@-~]/.freeze
     CSI_PREFIX_PATTERN = /\A\e\[[0-?]*[ -\/]*\z/.freeze

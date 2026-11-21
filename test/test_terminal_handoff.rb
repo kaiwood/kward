@@ -99,6 +99,19 @@ class TestTerminalHandoff < KwardTestCase
     end
   end
 
+  def test_standalone_modifier_reports_do_not_reach_child_input
+    keys = ["\e[57441;2u", "\e[57444;9u", "\e[57444;10u", "\e[57450;9:2u"]
+    keys.each do |key|
+      (1...key.bytesize).each do |split|
+        prompt = build_prompt
+        first = prompt.filter_terminal_handoff_input("a" + key.byteslice(0, split))
+        second = prompt.filter_terminal_handoff_input(key.byteslice(split..) + "\e[A")
+        assert_equal({ input: "a", tab_action: nil }, first, "#{key.inspect} at #{split}")
+        assert_equal({ input: "\e[A", tab_action: nil }, second, "#{key.inspect} at #{split}")
+      end
+    end
+  end
+
   def test_tab_shortcuts_accept_extended_fields_lock_modifiers_and_xterm_encoding
     keys = ["\e[51;5u", "\e[51;5:1u", "\e[51;69u", "\e[51;133u", "\e[51::51;5u", "\e[27;5;51~"]
     keys.each do |key|
@@ -127,7 +140,7 @@ class TestTerminalHandoff < KwardTestCase
 
   def test_bracketed_paste_is_forwarded_without_executing_embedded_shortcuts
     prompt = build_prompt
-    paste = "\e[200~text\x14\e[51;5u\e[201~"
+    paste = "\e[200~text\x14\e[51;5u\e[57444;9u\e[201~"
     forwarded = +""
     paste.each_byte do |byte|
       result = prompt.filter_terminal_handoff_input(byte.chr)

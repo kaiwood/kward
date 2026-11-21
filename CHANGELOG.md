@@ -57,6 +57,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Prevent standalone modifier presses, such as Cmd or Shift, from printing escape sequences while an interactive shell command runs.
 - Keep pending terminal image previews available when a queued follow-up starts before the preview opens.
 - Return an empty final chunk when an RPC image fetch starts exactly at the end of the image.
 - Native dot-sourcing now continues searching `PATH` when a matching file cannot be opened, selecting the first readable candidate as required.
