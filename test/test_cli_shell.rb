@@ -163,6 +163,71 @@ class TestCLIShell < KwardTestCase
     end
   end
 
+  def test_option_arrows_and_meta_letters_move_by_words
+    with_terminal do |reader, writer, pid|
+      read_until(reader, PROMPT)
+      writer.write("echo one two three\e[1;3D\eBX\e[1;3CY\eFZ\n")
+      read_until(reader, "\r\none Xtwo YthreeZ\r\n")
+      read_until(reader, PROMPT)
+      writer.write("exit\n")
+      assert_equal 0, wait_for_exit(pid).exitstatus
+    end
+  end
+
+  def test_word_cuts_support_both_option_backspace_encodings_and_yank_in_order
+    with_terminal("LC_ALL" => "C.UTF-8") do |reader, writer, pid|
+      prompt = read_until(reader, PROMPT)
+      skip "C.UTF-8 locale is not installed" if prompt.include?("unavailable locale")
+      writer.write("printf '<%s>\\n' keep café/notes.txt   tail\e\x7F\e\b\n")
+      read_until(reader, "\r\n<keep>\r\n")
+      read_until(reader, PROMPT)
+      writer.write("printf '<%s>\\n' \x19\n")
+      read_until(reader, "\r\n<café/notes.txt>\r\n<tail>\r\n".b)
+      read_until(reader, PROMPT)
+      writer.write("printf '<%s>\\n' keep discard tail\eb\eb\ed\n")
+      read_until(reader, "\r\n<keep>\r\n<tail>\r\n")
+      read_until(reader, PROMPT)
+      writer.write("printf '<%s>\\n' keep discard\x17\n")
+      read_until(reader, "\r\n<keep>\r\n")
+      read_until(reader, PROMPT)
+      writer.write("exit\n")
+      assert_equal 0, wait_for_exit(pid).exitstatus
+    end
+  end
+
+  def test_line_cuts_can_be_yanked_into_the_draft
+    with_terminal do |reader, writer, pid|
+      read_until(reader, PROMPT)
+      writer.write("printf '<%s>\\n' keep discard\eb\x0B\x0B\n")
+      read_until(reader, "\r\n<keep>\r\n")
+      read_until(reader, PROMPT)
+      writer.write("printf '<%s>\\n' \x19\n")
+      read_until(reader, "\r\n<discard>\r\n")
+      read_until(reader, PROMPT)
+      writer.write("printf 'whole-line\\n'\eb\x15")
+      read_until(reader, "\r#{PROMPT}\e[K")
+      writer.write("\x19")
+      draft = read_until(reader, "\r#{PROMPT}printf 'whole-line\\n'\e[K")
+      refute_includes draft, PASTE_OFF
+      writer.write("\n")
+      read_until(reader, "\r\nwhole-line\r\n")
+      read_until(reader, PROMPT)
+      writer.write("exit\n")
+      assert_equal 0, wait_for_exit(pid).exitstatus
+    end
+  end
+
+  def test_cut_to_end_of_line_keeps_later_lines_of_a_pasted_draft
+    with_terminal do |reader, writer, pid|
+      read_until(reader, PROMPT)
+      writer.write("\e[200~echo one discard\necho two\e[201~\x01\ef\ef\x0B\n")
+      read_until(reader, "\r\none\r\ntwo\r\n")
+      read_until(reader, PROMPT)
+      writer.write("exit\n")
+      assert_equal 0, wait_for_exit(pid).exitstatus
+    end
+  end
+
   def test_multiline_bracketed_paste_requires_enter_and_preserves_continuations
     with_terminal do |reader, writer, pid|
       read_until(reader, PROMPT)

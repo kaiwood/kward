@@ -47,6 +47,10 @@ module Kward
     CTRL_SHIFT_TAB = ["\e[9;6u", "\e[27;6;9~", "\e[1;6I", "\e[1;6Z"].freeze
     SHIFT_ENTER = ["\e[13;2u", "\e[13;2~", "\e[27;2;13~", "\e\r", "\e\n"].freeze
 
+    ALT_B = ["\eb", "\eB"].freeze
+    ALT_D = ["\ed", "\eD"].freeze
+    ALT_F = ["\ef", "\eF"].freeze
+    ALT_BACKSPACE = ["\e\b", "\e\x7F"].freeze
     ALT_LEFT = ["\e[1;3D", "\e[3D"].freeze
     ALT_RIGHT = ["\e[1;3C", "\e[3C"].freeze
     ALT_UP = ["\e[1;3A", "\e[3A"].freeze

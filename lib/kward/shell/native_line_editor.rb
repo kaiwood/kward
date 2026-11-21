@@ -6,6 +6,11 @@ module Kward
   module NativeShell
     # Non-modal edit state. The terminal adapter owns byte reads and redraws.
     class LineEditor
+      # Keep path and flag punctuation in words, like the default Zsh Emacs keymap.
+      WORD_CHARACTERS = "[:alnum:]#{Regexp.escape('*?_-.[]~=/&;!#$%^(){}<>')}".freeze
+      WORD_START = /\G[#{WORD_CHARACTERS}]*[^#{WORD_CHARACTERS}]*/
+      WORD_END = /\G[^#{WORD_CHARACTERS}]*[#{WORD_CHARACTERS}]*/
+
       def initialize(runtime)
         @runtime = runtime
       end
@@ -22,6 +27,7 @@ module Kward
           @entries = @runtime.history.entries
           @index = @entries.length
           @last_tab = false
+          @continued_cut = false
           loop do
             changed.call(@line, @position)
             key = get.call
@@ -31,6 +37,8 @@ module Kward
             return nil if key == eof && @line.empty?
 
             @last_tab = false unless TerminalKeys::TAB.include?(key)
+            consecutive_cut = @continued_cut
+            @continued_cut = false
             case key
             when *TerminalKeys::TAB then complete(changed, alert)
             when *TerminalKeys::UP, TerminalKeys::CTRL_P then recall(-1)
@@ -41,10 +49,14 @@ module Kward
             when *TerminalKeys::END_KEY, TerminalKeys::CTRL_E then @position = @line.length
             when erase, *TerminalKeys::BACKSPACE
               @line.slice!(@position -= 1) if @position.positive?
-            when kill
-              @line.clear
-              @position = 0
+            when kill then cut(0, @line.length)
             when eof, *TerminalKeys::DELETE then @line.slice!(@position)
+            when *TerminalKeys::ALT_LEFT, *TerminalKeys::ALT_B then @position = previous_word
+            when *TerminalKeys::ALT_RIGHT, *TerminalKeys::ALT_F then @position = @line.match(WORD_START, @position).end(0)
+            when TerminalKeys::CTRL_K then cut(@position, line_end, consecutive_cut)
+            when TerminalKeys::CTRL_W, *TerminalKeys::ALT_BACKSPACE then cut(previous_word, @position, consecutive_cut)
+            when *TerminalKeys::ALT_D then cut(@position, @line.match(WORD_END, @position).end(0), consecutive_cut)
+            when TerminalKeys::CTRL_Y then insert(@locale.text(@cut_buffer).scrub) if @cut_buffer
             when TerminalSequences::BRACKETED_PASTE_START
               text = paste.call
               return nil unless text
@@ -75,6 +87,32 @@ module Kward
           alert.call
         end
         @last_tab = true
+      end
+
+      def previous_word
+        @position - @line[0, @position].reverse.match(WORD_END).end(0)
+      end
+
+      def line_end
+        newline = @line.index("\n", @position)
+        return @line.length unless newline
+
+        newline == @position ? newline + 1 : newline
+      end
+
+      def cut(start, finish, consecutive = false)
+        return if start == finish
+
+        text = @line.slice!(start...finish)
+        @cut_buffer = if !consecutive
+          text
+        elsif start < @position
+          text + @cut_buffer
+        else
+          @cut_buffer + text
+        end
+        @position = start
+        @continued_cut = true
       end
 
       def insert(text)

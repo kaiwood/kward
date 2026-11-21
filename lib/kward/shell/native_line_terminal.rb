@@ -13,6 +13,7 @@ module Kward
 
       MAX_ESCAPE_BYTES = 32
       MAX_PASTE_BYTES = 1_048_576
+      META_KEYS = (TerminalKeys::ALT_B + TerminalKeys::ALT_D + TerminalKeys::ALT_F + TerminalKeys::ALT_BACKSPACE).freeze
 
       def initialize(runtime, editor, bracketed_paste: false)
         @runtime = runtime
@@ -61,17 +62,19 @@ module Kward
         nil
       end
 
-      # Decode CSI/SS3 keys only for the non-modal editor. Vi still receives a
-      # bare Escape immediately. Never look past the final byte of a key.
+      # Decode CSI/SS3 and Meta keys only for the non-modal editor. Vi receives
+      # a bare Escape immediately. Never look past the final byte of a key.
       def key
         first = character
         return first unless first == TerminalKeys::ESCAPE
 
         prefix = escape_character
         return first unless prefix
-        return prefix unless prefix == "[" || prefix == "O"
 
         sequence = first + prefix
+        return sequence if META_KEYS.include?(sequence)
+        return prefix unless prefix == "[" || prefix == "O"
+
         while sequence.bytesize < MAX_ESCAPE_BYTES && (byte = escape_character)
           # Preserve Enter and control characters even after a truncated key.
           return byte if byte.ord < 32 || byte.ord == 127

@@ -15,6 +15,8 @@ All notable changes to Kward will be documented in this file.
 
 - Customize interactive `kward shell` with Zsh-style `PROMPT` escapes for colors, the current directory, username, host, and exit status. Unset `PROMPT` to return to `PS1`.
 
+- Move and cut by word in `kward shell` with Option/Alt shortcuts and Ctrl+W. Ctrl+K cuts to the end of the line, and Ctrl+Y restores text cut by these shortcuts or Ctrl+U.
+
 - Generate images by asking in a Codex chat. Kward previews the result and can save it to Downloads or a project directory chosen with Tab completion. RPC clients can fetch, save, and discard previews.
 
 - Added Claude Fable 5.2, Mythos 5.2, Opus 5.5, Sonnet 5.5, and Haiku 5.5 to the Anthropic model picker.
