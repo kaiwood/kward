@@ -82,6 +82,45 @@ class TestAdaptivePtyOutputSink < KwardTestCase
     refute sink.inline?
   end
 
+  def test_kitty_probe_and_chunked_image_stay_inline_without_replaying_payloads
+    sink, events = build_sink
+    probe = Kward::TerminalImageSupport::KITTY_PROBE
+    image = Kward::TerminalSequences.kitty_graphics("A" * 4100, image_id: 7)
+    output = "before\r\n#{probe}#{image}after\r\n"
+    output.each_byte { |byte| sink.write(byte.chr) }
+    sink.finish
+
+    assert sink.inline?
+    assert sink.transcript_safe?
+    assert sink.preserve_terminal_view?
+    assert_equal output, written_output(events)
+    assert_equal "before\r\n\e[cafter\r\n", sink.captured_output
+    refute sink.truncated?
+  end
+
+  def test_unknown_or_incomplete_apc_still_uses_exclusive_passthrough
+    ["\e_other;AAAA\e\\", "\e_Ga=q;AAAA", "\e_Ga=q;AA\e[2J"].each do |output|
+      sink, events = build_sink
+      sink.write(output)
+      sink.finish
+
+      assert_equal output, written_output(events)
+      refute sink.transcript_safe?
+      refute sink.preserve_terminal_view?
+    end
+  end
+
+  def test_later_screen_control_disables_kitty_view_preservation
+    sink, events = build_sink
+    output = Kward::TerminalSequences.kitty_query + "\e[?1049h"
+    sink.write(output)
+    sink.finish
+
+    assert_equal output, written_output(events)
+    refute sink.inline?
+    refute sink.preserve_terminal_view?
+  end
+
   def test_bracketed_paste_and_cursor_visibility_remain_inline
     sink, events = build_sink
     output = "\e[?2004h\e[?25linput\e[?25h\e[?2004l"

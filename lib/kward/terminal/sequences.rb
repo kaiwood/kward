@@ -32,6 +32,10 @@ module Kward
     SGR_INVERSE = "\e[7m".freeze
     SGR_INVERSE_OFF = "\e[27m".freeze
 
+    KITTY_GRAPHICS_PREFIX = "\e_G".freeze
+    KITTY_GRAPHICS_COMMAND = /\A\e_G(?:[A-Za-z]=[A-Za-z0-9+-]+(?:,[A-Za-z]=[A-Za-z0-9+-]+)*)?(?:;[A-Za-z0-9+\/=]*)?\e\\\z/.freeze
+    DEVICE_QUERY = /\A\e\[(?:>?0?c|>0?q|\?u|[56]n|\?6n|1[468]t)\z/.freeze
+
     module_function
 
     def keyboard_mode_mutation?(sequence)

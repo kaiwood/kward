@@ -785,6 +785,7 @@ module Kward
       input = nil
       output = nil
       transition = nil
+      keep_view = false
       @mutex.synchronize do
         if inline
           handle_resize_locked
@@ -815,14 +816,16 @@ module Kward
         @terminal_owner = :child
       end
 
-      yield(input, output, transition)
+      yield(input, output, transition, -> { keep_view = true })
     ensure
       @mutex.synchronize do
+        width, height = screen_size
+        keep_view &&= @terminal_handoff_mode == :inline && width == @last_width && height == @last_height
         @terminal_owner = :kward
         @terminal_handoff_mode = nil
         print_output_locked(TerminalSequences::CONTROL_SEQUENCE_CANCEL)
         print_output_locked(TerminalSequences::COMPOSER_MODES_RESTORE)
-        restore_scroll_region_locked
+        restore_scroll_region_locked unless keep_view
         print_output_locked(TerminalSequences::SGR_RESET)
         enter_raw_mode_locked
         print_output_locked(preserve_tab_keybindings ? TerminalSequences::KEYBOARD_PROTOCOL_SET : KEYBOARD_PROTOCOL_ENABLE)
@@ -834,8 +837,13 @@ module Kward
         restore_editor_cursor_shape_locked(force: true)
         @cursor_visible = nil
         @last_composer_rows = []
-        width, height = screen_size
-        with_synchronized_output_locked { redraw_screen_locked(width: width, height: height) }
+        with_synchronized_output_locked do
+          if keep_view
+            resume_inline_terminal_view_locked(height)
+          else
+            redraw_screen_locked(width: width, height: height)
+          end
+        end
         flush_output_locked
       end
     end
@@ -1209,6 +1217,15 @@ module Kward
     end
 
     private
+
+    def resume_inline_terminal_view_locked(height)
+      # Start later transcript output on a blank live row without clearing image placements.
+      move_to_screen(transcript_bottom_row(height), 1)
+      print_output_locked("\r\n")
+      @stream_state.reset
+      render_prompt_locked
+      render_cursor_visibility_locked unless @asking
+    end
 
     def switch_terminal_handoff_to_exclusive
       @mutex.synchronize do

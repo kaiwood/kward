@@ -7,6 +7,7 @@ module Kward
   # screen-oriented or unknown terminal controls.
   class AdaptivePtyOutputSink
     MAX_SEQUENCE_BYTES = 4096
+    MAX_KITTY_SEQUENCE_BYTES = 4096 + 512
     SAFE_CONTROLS = [0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d].freeze
     TERMINAL_STRING_INTRODUCERS = [0x5d, 0x50, 0x5e, 0x5f, 0x58].freeze
 
@@ -22,14 +23,18 @@ module Kward
       @mode = :inline
       @sequence = +"".b
       @synchronized_output = false
+      @kitty_graphics = false
     end
 
     def write(chunk)
       value = chunk.to_s.b
-      capture(value)
-      return @output.write(value) if exclusive?
+      if exclusive?
+        capture(value)
+        return @output.write(value)
+      end
 
       write_inline(value)
+      value.bytesize
     end
 
     def flush
@@ -52,6 +57,11 @@ module Kward
 
     def transcript_safe?
       inline? && @sequence.empty?
+    end
+
+    # Images and capability probes belong to the live terminal, not transcript replay.
+    def preserve_terminal_view?
+      inline? && @kitty_graphics
     end
 
     def pre_input_capture_only?
@@ -90,6 +100,11 @@ module Kward
             track_safe_sequence(@sequence)
             safe_output << @sequence
             @sequence.clear
+          elsif status == :kitty
+            flush_safe_output(safe_output)
+            @output.write(@sequence)
+            @sequence.clear
+            @kitty_graphics = true
           elsif status == :exclusive
             flush_safe_output(safe_output)
             remainder = value.byteslice((index + 1)..).to_s.b
@@ -104,15 +119,32 @@ module Kward
     end
 
     def sequence_status
-      return :exclusive if @sequence.bytesize > MAX_SEQUENCE_BYTES
       return :pending if @sequence.bytesize == 1
 
       second = @sequence.getbyte(1)
+      return kitty_sequence_status if second == 0x5f # APC
+      return :exclusive if @sequence.bytesize > MAX_SEQUENCE_BYTES
       return csi_status if second == "[".ord
       return :exclusive if TERMINAL_STRING_INTRODUCERS.include?(second)
       return escape_intermediate_status if second.between?(0x20, 0x2f)
 
       :exclusive
+    end
+
+    def kitty_sequence_status
+      return :pending if @sequence.bytesize == 2
+      return :exclusive unless @sequence.start_with?(TerminalSequences::KITTY_GRAPHICS_PREFIX)
+      return :exclusive if @sequence.bytesize > MAX_KITTY_SEQUENCE_BYTES
+
+      if @sequence.end_with?("\e\\")
+        return TerminalSequences::KITTY_GRAPHICS_COMMAND.match?(@sequence) ? :kitty : :exclusive
+      end
+
+      # A Kitty payload is base64; no other control can run inside it.
+      last = @sequence.getbyte(-1)
+      return :exclusive if @sequence.getbyte(-2) == 0x1b || (last < 0x20 && last != 0x1b)
+
+      :pending
     end
 
     def csi_status
@@ -139,7 +171,7 @@ module Kward
         value.match?(/\A\e\[[0-9;]*[CDG`]\z/) ||
         value.match?(/\A\e\[\?25[hl]\z/) ||
         value.match?(/\A\e\[\?(?:2004|2026)[hl]\z/) ||
-        value.match?(/\A\e\[[0-9;]* q\z/)
+        value.match?(/\A\e\[[0-9;]* q\z/) || TerminalSequences::DEVICE_QUERY.match?(value)
     end
 
     def track_safe_sequence(sequence)
@@ -157,6 +189,7 @@ module Kward
     def flush_safe_output(value)
       return if value.empty?
 
+      capture(value)
       @output.write(value)
       value.clear
     end
@@ -165,6 +198,7 @@ module Kward
       end_synchronized_output
       @on_exclusive.call
       @mode = :exclusive
+      capture(value)
       @output.write(value) unless value.empty?
     end
 

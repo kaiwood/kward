@@ -1586,6 +1586,70 @@ class TestCLI < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_shell_handoff_keeps_kitty_graphics_and_probe_output_on_screen
+    input, writer = IO.pipe
+    writer.close
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    graphics = "\e_Ga=T,f=24,s=1,v=1,q=2;AAAA\e\\"
+    probe = Kward::TerminalImageSupport::KITTY_PROBE
+    emitted = "before\n#{probe}#{graphics}after\n"
+    command = Shellwords.join([RbConfig.ruby, "-e", "print #{emitted.dump}"])
+
+    result = cli.send(:run_user_interactive_pty_command, command, shell: "/bin/sh", env: {}, cwd: Dir.pwd)
+
+    assert_equal 0, result.exit_status
+    frame = output.string.split(probe + graphics, 2).fetch(1)
+    assert_includes frame, "after\r\n"
+    refute_includes frame, "\e[2J"
+    transcript = prompt.tab_view_snapshot[:transcript_buffer].to_s
+    assert_includes transcript, "before\nafter\n"
+    refute_includes transcript, graphics
+  ensure
+    prompt&.close
+    input&.close
+    writer&.close unless writer&.closed?
+  end
+
+  def test_shell_handoff_relays_kitty_probe_replies_and_keeps_following_output_visible
+    input, terminal = IO.pipe
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    probe = Kward::TerminalImageSupport::KITTY_PROBE
+    reply = "\e_Gi=31;OK\e\\\e[?1;2c"
+    script = <<~RUBY
+      STDIN.raw do
+        STDOUT.write(#{probe.dump})
+        STDOUT.flush
+        if STDIN.read(#{reply.bytesize}) == #{reply.dump}
+          puts "probe succeeded"
+        end
+      end
+    RUBY
+    command = Shellwords.join([RbConfig.ruby, "-rio/console", "-e", script])
+    result = nil
+    worker = Thread.new do
+      result = cli.send(:run_user_interactive_pty_command, command, shell: "/bin/sh", env: {}, cwd: Dir.pwd)
+    end
+    wait_until(timeout: 2) { output.string.include?(probe) }
+    terminal.write(reply)
+
+    assert worker.join(2), "the child did not receive the terminal reply"
+    assert_equal 0, result.exit_status
+    frame = output.string.split(probe, 2).fetch(1)
+    assert_includes frame, "probe succeeded"
+    refute_includes frame, "\e[2J"
+    refute_includes prompt.tab_view_snapshot[:transcript_buffer].to_s, reply
+  ensure
+    worker&.kill if worker&.alive?
+    worker&.join
+    prompt&.close
+    input&.close
+    terminal&.close
+  end
+
   def test_interactive_loop_records_line_oriented_bang_output
     Dir.mktmpdir do |dir|
       prompt = FakePrompt.new(["!ls", "/exit"])

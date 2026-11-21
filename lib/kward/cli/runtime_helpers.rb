@@ -385,13 +385,15 @@ module Kward
 
       def with_interactive_terminal_handoff
         if @prompt.respond_to?(:with_inline_terminal_handoff)
-          with_tab_keybinding_handoff(:with_inline_terminal_handoff) do |input, output, transition|
+          with_tab_keybinding_handoff(:with_inline_terminal_handoff) do |input, output, transition, keep_view|
             sink = AdaptivePtyOutputSink.new(
               output: output,
               on_exclusive: transition,
               max_capture_bytes: MAX_TRANSIENT_TERMINAL_OUTPUT_BYTES
             )
-            yield(input, sink)
+            result = yield(input, sink)
+            keep_view&.call if result && !result.tab_action && !result.background && sink.preserve_terminal_view?
+            result
           end
         elsif @prompt.respond_to?(:with_terminal_handoff)
           with_tab_keybinding_handoff(:with_terminal_handoff) do |input, output|
