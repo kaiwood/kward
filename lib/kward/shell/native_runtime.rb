@@ -44,8 +44,8 @@ module Kward
       include Jobs
       include Traps
 
-      UNSUPPORTED = %w[local typeset builtin source].freeze
-      SPECIAL = %w[export readonly eval . unset exit return break continue shift set exec trap times :].freeze
+      UNSUPPORTED = %w[local typeset builtin].freeze
+      SPECIAL = %w[export readonly eval . source unset exit return break continue shift set exec trap times :].freeze
       BUILTINS = (SPECIAL + %w[true false cd pwd alias unalias read getopts command shopt declare umask ulimit kwsh jobs fg bg wait kill hash type fc]).freeze
 
       attr_reader :variables, :aliases, :status, :exited
@@ -492,7 +492,7 @@ module Kward
         when "kill" then kill_builtin(args, streams)
         when "trap" then trap_builtin(args, streams)
         when "exec" then exec_builtin(args, streams)
-        when "." then source_script(args, streams)
+        when ".", "source" then source_script(name, args, streams)
         when "eval"
           raise ExecutionError, "eval nesting exceeds 100 levels" if @eval_depth >= 100
           @eval_depth += 1

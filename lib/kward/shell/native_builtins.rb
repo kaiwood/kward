@@ -287,12 +287,12 @@ module Kward
         0
       end
 
-      def source_script(args, streams)
-        raise ExecutionError, ".: expected a file" if args.empty?
+      def source_script(utility, args, streams)
+        raise ExecutionError, "#{utility}: expected a file" if args.empty?
         raise ExecutionError, "source nesting exceeds 100 levels" if @source_depth >= 100
         name = args.first
         input = open_source_file(name)
-        raise ExecutionError, ".: file not found: #{name}" unless input
+        raise ExecutionError, "#{utility}: file not found: #{name}" unless input
         previous = @arguments
         @arguments = args.drop(1) if args.length > 1
         @source_depth += 1

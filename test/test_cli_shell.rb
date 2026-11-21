@@ -40,35 +40,66 @@ class TestCLIShell < KwardTestCase
     assert_includes output, "Usage: kward shell"
   end
 
-  def test_interactive_kwshrc_applies_aliases_exports_and_relative_sources_in_order
+  def test_interactive_kwshrc_executes_native_code_in_order_without_reading_json
     Dir.mktmpdir do |home|
-      config = File.join(home, "settings")
+      config = File.join(home, "shell settings")
       Dir.mkdir(config)
       File.write(File.join(config, "config.json"), "not JSON")
-      File.write(File.join(config, "kwshrc"), "export SHELL_TEST_COLOR=first\nsource extra.rc\n")
-      File.write(File.join(config, "extra.rc"), "alias report_config='printf \"rc:%s:%s\\n\" \"$SHELL_TEST_COLOR\"'\n")
-      File.write(File.join(home, ".kwshrc"), <<~KWSHRC)
-        export SHELL_TEST_COLOR=override
-        export ENV=#{home}/startup
-        touch #{home}/unwanted
+      File.write(File.join(config, "kwshrc"), <<~'KWSHRC')
+        cd "$HOME"
+        source './extra rc' first
+        alias report_config='show_config'
+        show_config() {
+          printf 'rc:%s:%s\n' "$SHELL_TEST_COLOR" "$1"
+        }
       KWSHRC
-      File.write(File.join(home, "startup"), "touch #{home}/unwanted\n")
+      File.write(File.join(home, "extra rc"), <<~'KWSHRC')
+        if [ "$1" = first ]; then
+          eval 'export SHELL_TEST_COLOR=first'
+        fi
+      KWSHRC
+      File.write(File.join(home, ".kwshrc"), <<~'KWSHRC')
+        export SHELL_TEST_COLOR="$SHELL_TEST_COLOR:override"
+        export ENV="$HOME/unwanted-startup"
+      KWSHRC
+      File.write(File.join(home, "unwanted-startup"), "exit 99\n")
+      File.write(File.join(home, "startup"), 'export SHELL_TEST_COLOR="$SHELL_TEST_COLOR:env"')
       env = { "HOME" => home, "KWARD_CONFIG_PATH" => File.join(config, "config.json"), "ENV" => nil, "SHELL_TEST_COLOR" => nil }
 
       with_terminal(env) do |reader, writer, pid|
         read_until(reader, PROMPT)
         writer.write("report_con\tworks\n")
-        read_until(reader, "\r\nrc:override:works\r\n")
+        read_until(reader, "\r\nrc:first:override:works\r\n")
         read_until(reader, PROMPT)
         writer.write("exit\n")
         assert_equal 0, wait_for_exit(pid).exitstatus
       end
-      refute File.exist?(File.join(home, "unwanted"))
 
-      output, error, status = Open3.capture3(env, RbConfig.ruby, EXECUTABLE, "shell", "-c", 'printf "%s" "${SHELL_TEST_COLOR-unset}"')
+      output, error, status = Open3.capture3(env.merge("ENV" => '${HOME}/startup'), RbConfig.ruby, EXECUTABLE,
+                                            "shell", "-ic", 'report_config "$1"', "name", "argument")
       assert status.success?, error
-      assert_equal "unset", output
+      assert_equal "rc:first:override:env:argument\n", output
       assert_empty error
+    end
+  end
+
+  def test_noninteractive_shell_and_separate_kwsh_do_not_execute_kwshrc
+    Dir.mktmpdir do |home|
+      Dir.mkdir(File.join(home, ".kward"))
+      File.write(File.join(home, ".kward", "kwshrc"), "exit 91\n")
+      File.write(File.join(home, ".kwshrc"), "exit 92\n")
+      script = File.join(home, "script")
+      File.write(script, "printf clean\n")
+      env = { "HOME" => home, "KWARD_CONFIG_PATH" => nil, "ENV" => nil }
+      kwsh = File.expand_path("../exe/kwsh", __dir__)
+
+      [[EXECUTABLE, "shell", "-c", "printf clean"], [EXECUTABLE, "shell", script],
+       [EXECUTABLE, "shell"], [kwsh, "-ic", "printf clean"]].each do |command|
+        output, error, status = Open3.capture3(env, RbConfig.ruby, *command, stdin_data: "printf clean\n")
+        assert status.success?, "#{command.inspect}: #{error}"
+        assert_equal "clean", output
+        assert_empty error
+      end
     end
   end
 
@@ -77,8 +108,11 @@ class TestCLIShell < KwardTestCase
       File.write(File.join(home, ".kwshrc"), "export PRIVATE='fixture-secret\n")
       with_terminal("HOME" => home, "KWARD_CONFIG_PATH" => nil) do |reader, writer, pid|
         startup = read_until(reader, PROMPT)
-        assert_includes startup, "could not read kwshrc"
+        assert_match(/kwsh: line \d+: unclosed single quote/, startup)
         refute_includes startup, "fixture-secret"
+        writer.write("printf 'still running\\n'\n")
+        read_until(reader, "\r\nstill running\r\n")
+        read_until(reader, PROMPT)
         writer.write("exit\n")
         assert_equal 0, wait_for_exit(pid).exitstatus
       end

@@ -261,14 +261,20 @@ class TestPersistentShellSession < KwardTestCase
     end
   end
 
-  def test_dot_sources_native_code_while_source_remains_declarative
+  def test_top_level_source_is_declarative_but_native_dot_and_source_execute
     Dir.mktmpdir("persistent-source") do |dir|
-      File.write(File.join(dir, "library.kwsh"), "export NATIVE_LIBRARY=ready\nprintf sourced\n")
+      File.write(File.join(dir, "library.kwsh"), "export NATIVE_LIBRARY=ready\nprintf 'sourced\\n'\n")
       shell = build_shell(dir)
-      result = shell.run_for_agent(". ./library.kwsh")
+      result = shell.run_for_agent("source ./library.kwsh")
       assert_equal 0, result.exit_status
-      assert_includes result.output, "sourced"
+      refute_includes result.output.lines, "sourced\n"
       assert_equal "ready", shell.child_env["NATIVE_LIBRARY"]
+
+      [". ./library.kwsh", "if true; then source ./library.kwsh; fi"].each do |command|
+        result = shell.run_for_agent(command)
+        assert_equal 0, result.exit_status
+        assert_includes result.output.lines, "sourced\n"
+      end
     ensure
       shell&.close
     end

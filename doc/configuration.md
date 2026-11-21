@@ -190,9 +190,9 @@ Project-local hooks can also live in `.kward/hooks.json`, but Kward loads them o
 
 ## Shell configuration
 
-Interactive `kward shell` and the hosted `/shell` both read `~/.kward/kwshrc` and then `~/.kwshrc`. When `KWARD_CONFIG_PATH` selects a different config file, Kward looks for the first `kwshrc` beside that file instead. Later entries override earlier aliases and exports. The separate `kwsh` executable and non-interactive `kward shell` invocations do not load these files automatically. See the [Shell guide](shell.md) for editing, history, and prompt customization.
+Interactive `kward shell` and the hosted `/shell` both load `~/.kward/kwshrc` and then `~/.kwshrc`, but only the standalone shell **executes** them. When `KWARD_CONFIG_PATH` selects another main config file, Kward looks for the first `kwshrc` beside that file instead. The separate `kwsh` executable and non-interactive `kward shell` do not load these files automatically.
 
-Example rc file:
+For settings shared with `/shell` and leading-`!` commands, stick to declarative directives:
 
 ```sh
 alias ll='ls -la'
@@ -202,7 +202,7 @@ export PATH="$HOME/bin:$PATH"
 source ~/.kward/kwsh-aliases
 ```
 
-Only declarative `alias`, `export`, and `source` (or `.`) directives are handled. `source` parses the referenced file without executing it, resolving relative paths from the containing rc file. Other shell scripting is ignored for now.
+In standalone `kward shell`, you can also write functions, `if` statements, and other native shell code. `source` works like `.`: it executes the file in the current shell, looks up bare names on `PATH`, and resolves paths such as `./other.rc` from the working directory. Load only files you trust. The hosted loader does not execute shell code; it reads only `alias`, `export`, and `source` (or `.`), and it resolves relative includes from the containing rc file. See the [Shell guide](shell.md) for startup examples and how `ENV` fits in.
 
 ### Shell-agent model
 
@@ -232,9 +232,9 @@ export KWSH_REASONING="none"
 
 `KWSH_PROVIDER` selects the shell-agent provider, `KWSH_MODE` selects its model, and `KWSH_REASONING` selects its reasoning effort. Empty values are ignored.
 
-Values exported in `kwshrc` are applied when either shell starts and are also available to leading-`!` commands. For the hosted shell, they are applied after Kward's conservative color defaults. Keys must be valid environment-variable names; invalid keys are ignored. Values support shell quoting and simple `$VAR`/`${VAR}` expansion. `/shell` keeps one persistent local interactive shell process per tab.
+The declarative exports read by `/shell` and leading-`!` commands support shell quoting and simple `$VAR`/`${VAR}` expansion. Invalid variable names are ignored. The hosted shell applies these exports after Kward’s conservative color defaults and keeps one persistent local shell process per tab.
 
-`alias` entries expand the first word of a command once. For example, `alias ll='ls -la'` makes `ll lib` run `ls -la lib`. Configured aliases are available in `kward shell`, inside `/shell`, and after the normal composer's `!` prefix, including command-name Tab completion. Built-in shell commands such as `cd`, `pwd`, `export`, `unset`, `alias`, `capture`, `clear`, `pty`, and `exit` take precedence over aliases inside `/shell`. External commands receive an interactive PTY by default. Prefix a submitted line with `?` inside `/shell` to ask the transient shell assistant about the current command output or state. An alias value can begin with `capture` when its `/shell` output should use the configured timeout, output limit, and transcript sanitization. Leading-`!` alias invocations are always interactive, so Kward removes a leading `capture` or legacy `pty` mode marker from the expanded alias before execution. Run `alias` inside `kwsh` to list configured aliases. Aliases created at runtime with that built-in belong only to the current shell session and are not available to `!command` input.
+`alias ll='ls -la'` makes `ll lib` run `ls -la lib`. Configured aliases are available in `kward shell`, `/shell`, and after the normal composer’s `!` prefix, including command-name Tab completion. Native aliases expand at parse time; the one-off `!` path replaces only the initial command name. Built-in shell commands such as `cd`, `pwd`, `export`, `unset`, `alias`, `capture`, `clear`, `pty`, and `exit` take precedence over aliases inside `/shell`. External commands receive an interactive PTY by default. Prefix a submitted line with `?` inside `/shell` to ask the transient shell assistant about the current command output or state. An alias value can begin with `capture` when its `/shell` output should use the configured timeout, output limit, and transcript sanitization. Leading-`!` alias invocations are always interactive, so Kward removes a leading `capture` or legacy `pty` mode marker from the expanded alias before execution. Run `alias` inside `kwsh` to list configured aliases. Aliases created at runtime with that built-in belong only to the current shell session and are not available to `!command` input.
 
 ## Provider and model settings
 

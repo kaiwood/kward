@@ -12,6 +12,26 @@ class TestNativeShellInvocation < KwardTestCase
                   RbConfig.ruby, EXECUTABLE, *args, **options)
   end
 
+  def test_source_is_an_executable_alias_for_dot_in_native_scripts
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "library"), 'value=$1; helper() { printf "%s" "$value"; }; return 7; printf unreachable')
+      script = <<~'SHELL'
+        source library inner
+        printf '%s:%s:' "$?" "$1"
+        helper
+      SHELL
+      output, error, status = invoke("-c", script, "name", "outer", env: { "PATH" => "#{dir}:/usr/bin:/bin" })
+      assert status.success?, error
+      assert_equal "7:outer:inner", output
+      assert_empty error
+
+      output, error, status = invoke("-c", "source no-such-file; printf unreachable", env: { "PATH" => dir })
+      assert_equal 2, status.exitstatus
+      assert_empty output
+      assert_includes error, "source: file not found: no-such-file"
+    end
+  end
+
   def test_required_alias_names_and_restorable_listing_format
     names = %w[1 a!b a%b a,b a-b a@b _ -dash]
     source = names.map { |name| "alias -- #{Shellwords.escape("#{name}=printf '%s' '#{name}|' ")}" }.join("\n")

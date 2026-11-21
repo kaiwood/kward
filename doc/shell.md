@@ -29,7 +29,7 @@ kward shell scripts/check.kwsh README.md
 printf 'printf "hello\\n"\n' | kward shell
 ```
 
-Interactive `kward shell` reads the same [declarative kwshrc files](#configure-kwsh) as `/shell`. Use them for aliases and exported variables; non-interactive commands, scripts, and pipelines do not read them.
+Interactive `kward shell` executes `~/.kward/kwshrc` and then `~/.kwshrc` in the current shell. Put aliases, exports, functions, and other native shell code there. Ordinary `-c` commands, scripts, and piped input skip startup files unless you explicitly pass `-i`. The hosted `/shell` only reads declarative settings from these files. See [Configuration](configuration.md) for the difference.
 
 From a checkout, use `ruby exe/kward shell`. This is a traditional terminal frontend for **kwsh**, not Bash or Zsh; their startup files, programmable completions, and language extensions don’t carry over. The hosted composer and `/shell` shortcuts are not part of this mode. It isn’t an RPC or Pan session capability: it needs a local terminal for interactive editing and job control.
 
@@ -244,7 +244,7 @@ ENV="$HOME/.kwsh-env" kwsh -i
 kwsh -ec 'printf "%s\n" "$1"' example argument
 ```
 
-Interactive startup parameter-expands `ENV` and executes the named native file when it exists. Non-interactive invocations ignore `ENV`; startup loading is also disabled when real and effective user or group IDs differ. This executable startup file is separate from declarative `kwshrc`. `PS1` and `PS2` support parameter expansion; `PS1` then replaces `!` with the next history number and `!!` with a literal `!`. Trace prefixes parameter-expand `PS4` (default `+ `); command substitutions in startup path or prompt text are rejected. Errors leave the prompt usable, and input is read without consuming a following command's stdin. Shell options may be grouped and may follow `-c` or `-s`. Standalone command history, `fc`, and `set -o vi` line editing are available. Emacs editing is not implemented.
+Interactive startup parameter-expands `ENV` and executes the named native file when it exists. Non-interactive invocations ignore `ENV`; startup loading is also disabled when real and effective user or group IDs differ. The separate `kwsh` executable uses `ENV` but does not automatically load `kwshrc`. `PS1` and `PS2` support parameter expansion; `PS1` then replaces `!` with the next history number and `!!` with a literal `!`. Trace prefixes parameter-expand `PS4` (default `+ `); command substitutions in startup path or prompt text are rejected. Errors leave the prompt usable, and input is read without consuming a following command's stdin. Shell options may be grouped and may follow `-c` or `-s`. Standalone command history, `fc`, and `set -o vi` line editing are available. Emacs editing is not implemented.
 
 Executable text files without a shebang also run natively when invoked from kwsh:
 
@@ -373,7 +373,7 @@ Brace expansion runs before substitutions and only on unquoted source text. It s
 
 ### Manage script state
 
-- `. ./library.kwsh [args...]` executes a native library in the current shell; supplied positional arguments are restored afterward. This is separate from declarative `source` in the prompt.
+- `. ./library.kwsh [args...]` (or `source ./library.kwsh [args...]`) executes a native library in the current shell. Supplied arguments temporarily replace the shell’s positional parameters. Paths with a slash resolve from the shell’s current directory if relative; bare names are searched on `PATH`. At the hosted `/shell` prompt, use `.` to execute code: top-level `source` there is a declarative config loader.
 - `LINENO` reports the current source line, including commands in functions and sourced files. Explicitly assigning or unsetting it disables automatic tracking for that interpreter.
 - `readonly name=value`, `unset -f function`, `command [-p] [-v|-V]`, and `getopts` operate on interpreter state.
 - Explicit `eval` uses the native parser, not Ruby evaluation or a system shell. Treat its argument as executable source, not data.
@@ -506,7 +506,7 @@ Native aliases expand unquoted command tokens while parsing, before parameter ex
 
 Alias names accept letters, digits, and `!`, `%`, `,`, `-`, `@`, `_`, including numeric names such as `1`. Use `alias -- '-name=value'` for a name beginning with `-`. `alias` and `alias name` list quoted `name=value` entries, without an `alias ` prefix; prepend `alias -- ` when restoring a listed entry. `command -v` and `type` retain their separate command-description output.
 
-Files, stdin, and explicit native source execute one complete input unit at a time. An error on a later line does not undo earlier commands. Stdin execution does not read ahead of a command that consumes its own input. `source` and `kwshrc` remain declarative and non-executing; `. ./file` now consistently means executable native sourcing in `/shell` as well as scripts.
+Files, stdin, and explicit native source execute one complete input unit at a time. An error on a later line does not undo earlier commands. Stdin execution does not read ahead of a command that consumes its own input. Executable startup files and native `source` follow the same rules. The hosted `/shell` prompt’s declarative `source` command is separate.
 
 ### Select character and sorting rules
 
@@ -568,7 +568,7 @@ Authority: [POSIX shell language](https://pubs.opengroup.org/onlinepubs/97999197
 
 This is **not yet a fully POSIX- or Bash-conforming shell**. Additional builtin options, arithmetic array references, advanced array forms, and exact Bash/POSIX regular-expression semantics remain outside the implemented subset. `wait -n`, Bash pseudo-traps (`DEBUG`, `ERR`, `RETURN`), and emacs editing are not implemented. The XSI profile remains incomplete: `echo` delegates to the host utility (whose `-n` and backslash handling is not guaranteed to be XSI-conforming), and native diagnostics do not implement message-catalog lookup through `NLSPATH`. Use `printf` for portable output.
 
-`capture`, `pty`, `clear`, declarative `source`, and `kward edit` remain prompt conveniences rather than scripting builtins. Native aliases use read-time token expansion; the separate one-off `!` path retains its existing single command-prefix replacement. `kwshrc` stays non-executing.
+`capture`, `pty`, `clear`, and `kward edit` remain hosted prompt conveniences rather than scripting builtins. The hosted prompt also handles top-level `source` as a config loader; native programs treat `source` like `.`. Native aliases use read-time token expansion; the separate one-off `!` path retains its existing single command-prefix replacement.
 
 The persistent shell and shell-agent API remain TUI-only. RPC/Pan still report that session capability unsupported. The standalone executable can be invoked as an ordinary external program through existing sandboxed command tools; it does not bypass their permission, cancellation, or sandbox boundaries.
 
@@ -620,7 +620,7 @@ ruby -Itest -e '(Dir["test/test_native_shell*.rb"] + %w[test/test_persistent_she
 
 Installed multi-character collation tests require Czech or Slovak UTF-8 locale data and explicitly skip when unavailable. Deterministic matcher tests still run everywhere. Use POSIX.1-2024 as the authority when adding cases; Bash and the host `/bin/sh` can help investigate differences but are not conformance oracles. Do not turn implementation-defined or unspecified behavior into a purported universal requirement.
 
-Language and state transitions remain native; implementing these features must not introduce a Bash or `/bin/sh` fallback. Declarative `kwshrc` loading and ordinary model/RPC command isolation remain separate contracts.
+Language and state transitions remain native; implementing these features must not introduce a Bash or `/bin/sh` fallback. Hosted declarative `kwshrc` loading and ordinary model/RPC command isolation remain separate from executable standalone startup.
 
 References: [POSIX Shell Command Language](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html), [POSIX read](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/read.html), [Bash parameter expansion](https://www.gnu.org/software/bash/manual/html_node/Shell-Parameter-Expansion.html), and [Bash arrays](https://www.gnu.org/software/bash/manual/html_node/Arrays.html), [POSIX wait](https://pubs.opengroup.org/onlinepubs/9799919799.2024edition/utilities/wait.html), and [POSIX job control](https://pubs.opengroup.org/onlinepubs/9799919799.2024edition/utilities/fg.html), and [Apple newlocale](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/newlocale.3.html).
 
@@ -807,17 +807,32 @@ The hosted `/shell` and interactive `kward shell` load these optional rc files i
 ~/.kwshrc
 ```
 
-When `KWARD_CONFIG_PATH` selects another main config file, Kward reads the first file beside that config file instead. The later file overrides earlier aliases and exported variables with the same names. The rc format supports declarative `alias`, `export`, and `source` directives. Interactive `kward shell` reads them without loading Kward’s JSON config at startup; `?` loads the agent configuration on demand. The separate `kwsh` executable does not automatically load them. An `ENV` assignment in `kwshrc` is exported but does not select an executable startup file for that session; set `ENV` in the parent environment for that.
+When `KWARD_CONFIG_PATH` selects another main config file, Kward looks for the first `kwshrc` beside that file instead. The second file sees the first file’s changes and can override them. The separate `kwsh` executable does not automatically load either file.
+
+### Standalone startup scripts
+
+Interactive `kward shell` sources both files in the live native shell, including with `-i`. For example, put this in `~/.kwshrc`:
 
 ```sh
-alias ll='ls -la'
-alias gs="git status --short"
-export BUNDLE_WITHOUT=production
-export PATH="$HOME/bin:$PATH"
-source ~/.kward/kwsh-aliases
+if [ -d "$HOME/bin" ]; then
+  export PATH="$HOME/bin:$PATH"
+fi
+
+work() { cd "$HOME/work"; }
+alias gs='git status --short'
 ```
 
-`source` reads another rc file without executing it; relative paths in rc-file directives are resolved from the file containing the directive. When entered as a `/shell` builtin, the path is resolved from the current shell directory and its aliases and exports are applied immediately, without restarting Kward. Unsupported shell scripting is ignored for now.
+You can use functions, `if`, `eval`, and other supported native syntax, but not arbitrary Bash or Zsh configuration. Only put trusted code in these files: commands run with your privileges and can change files or exit the shell. A syntax error stops that startup file, not the interactive shell; earlier commands are not undone. Startup files are skipped when the real and effective user or group IDs differ. Kward’s main JSON config is not parsed until you ask the shell agent a `?` question.
+
+To include a file, use `source "$HOME/.kward/kwsh-aliases"` or the POSIX spelling `. "$HOME/.kward/kwsh-aliases"`. If you used `source extra.rc` to load a file beside your rc, update it to an explicit path: native `source` searches `PATH` for a bare filename, and `source ./extra.rc` uses the current directory, not the rc file’s directory.
+
+If you set `ENV` before launching `kward shell`, it selects a separate startup file that runs after both rc files. Assigning `ENV` inside `kwshrc` does not select that file. Non-interactive invocations load neither `kwshrc` nor `ENV`.
+
+### Hosted shell configuration
+
+The hosted `/shell` and leading-`!` commands still read only declarative `alias`, `export`, and `source` (or `.`) directives from rc files. The loader does not execute code or follow shell conditionals. In these declarative files, an include is relative to the file containing it. At the `/shell` prompt, top-level `source <file>` applies declarative settings using the shell’s working directory; use `. ./file` when you want to execute a script instead. If you share rc files with the hosted shell, keep them declarative and use an inherited `ENV` for standalone-only code.
+
+### Shell-agent model
 
 By default, the hosted `/shell` agent uses the active conversation's provider, model, and reasoning effort. The standalone `kward shell` agent starts from Kward's configured selection. To override either default, set `shell.agent` in the main JSON file:
 

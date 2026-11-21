@@ -20,9 +20,7 @@ module Kward
         name ||= command_name || file || $0
         interactive = invocation.interactive || !hosted && invocation.prompt?(input, error)
         env = ENV.to_h
-        config = load_rc && interactive && !hosted ? read_rc(env, error: error) : {}
-        runtime = Runtime.new(arguments: args, name: name, replace_process: !hosted,
-                              env: env.merge(config.fetch(:env, {})), aliases: config.fetch(:aliases, {}),
+        runtime = Runtime.new(arguments: args, name: name, replace_process: !hosted, env: env,
                               interactive: interactive || hosted, hosted: hosted, descriptors: descriptors, own_descriptors: own_descriptors, process_owned: process_owned)
         runtime.send(:reset_child_state, job_group: Process.getpgrp) if hosted
         runtime.with_signals do
@@ -30,7 +28,10 @@ module Kward
             status = runtime.run("\\set #{Shellwords.join(options)}", input: input, output: output, error: error)
             return status unless status.zero?
           end
-          load_startup(runtime, input: input, output: output, error: error, value: env.fetch("ENV", "")) if interactive
+          if interactive
+            load_kwshrc(runtime, input: input, output: output, error: error) if load_rc && !hosted
+            load_startup(runtime, input: input, output: output, error: error, value: env.fetch("ENV", "")) unless runtime.exited
+          end
           unless runtime.exited
             if command
               runtime.run(command, input: input, output: output, error: error)
@@ -59,14 +60,15 @@ module Kward
         descriptors.values.compact.uniq.each { |io| io.close unless io.closed? } if own_descriptors
       end
 
-      def read_rc(env, error:)
-        return {} unless matching_identity?
+      def load_kwshrc(runtime, input:, output:, error:)
+        return unless matching_identity?
 
-        Kwshrc.read(Kwshrc.paths, env: env)
-      rescue Kwshrc::ParseError, ArgumentError, SystemCallError
-        # Parser diagnostics may contain the original line, including secrets.
-        error.puts("kwsh: could not read kwshrc; check its aliases, exports, and source directives")
-        {}
+        Kwshrc.paths.each do |path|
+          break if runtime.exited
+          next unless File.file?(path)
+
+          runtime.run("\\. #{Shellwords.escape(path)}", input: input, output: output, error: error)
+        end
       end
 
       def matching_identity?
@@ -77,7 +79,7 @@ module Kward
         return unless matching_identity?
         path = runtime.expand_parameters(value)
         return if path.empty? || !File.file?(File.expand_path(path, runtime.cwd))
-        runtime.run(". #{Shellwords.escape(path)}", input: input, output: output, error: error)
+        runtime.run("\\. #{Shellwords.escape(path)}", input: input, output: output, error: error)
       rescue ExpansionError, ExecutionError => e
         error.puts("kwsh: ENV: #{e.message}")
       end
