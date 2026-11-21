@@ -132,7 +132,10 @@ module Kward
                 if instruction.empty?
                   error.puts("Shell prompt instruction required after ?")
                 else
-                  draft = shell_link.ask(instruction, runtime, input: input, output: output, error: error)
+                  draft = shell_link.ask(instruction, runtime, input: input, output: output, error: error) do
+                    prompt = runtime.prompt_text("PS1", error: error, formatted: edit_lines)
+                    render_plain_prompt(runtime, prompt, literal: true)
+                  end
                 end
                 next
               end
@@ -195,12 +198,19 @@ module Kward
         read_line(source, runtime, input: input, output: output, error: error)
       end
 
-      def render_plain_prompt(runtime, prompt)
-        return prompt unless prompt.is_a?(PromptFormat)
+      def render_plain_prompt(runtime, prompt, literal: false)
+        return prompt unless literal || prompt.is_a?(PromptFormat)
 
-        Locale.with(runtime.variables) { |locale| prompt.render(prompt.cells(locale.encoding)) }
+        render = ->(locale) do
+          if prompt.is_a?(PromptFormat)
+            prompt.render(prompt.cells(locale.encoding))
+          else
+            TerminalText.locale_cells(prompt).map(&:first).join
+          end
+        end
+        Locale.with(runtime.variables, &render)
       rescue ExecutionError
-        Locale.with({}) { |locale| prompt.render(prompt.cells(locale.encoding)) }
+        Locale.with({}, &render)
       end
 
       def read_line(source, runtime, input:, output:, error:)

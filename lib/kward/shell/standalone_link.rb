@@ -32,8 +32,10 @@ module Kward
           message = receive
           case message.fetch("type")
           when "run"
-            status = runtime.run_shell_agent_command(message.fetch("command"), timeout: message.fetch("timeout"), output: output, error: error) do
-              send_message("running")
+            command = message.fetch("command")
+            status = runtime.run_shell_agent_command(command, timeout: message.fetch("timeout"), output: output, error: error) do
+              echo_command(command, prompt: yield, terminal: error)
+              request("running") # Wait for the launcher to drain the echo and start capture.
             end
             send_message("result", status: status, cwd: utf8(runtime.cwd))
           when "answer"
@@ -47,6 +49,13 @@ module Kward
       end
 
       private
+
+      def echo_command(command, prompt:, terminal:)
+        display = command.gsub(/[[:cntrl:]&&[^\n\t]]/) { |character| character.dump[1...-1] }
+        terminal.write(prompt.b, display.b)
+        terminal.write("\n") unless display.end_with?("\n")
+        terminal.flush
+      end
 
       def utf8(value)
         value.to_s.dup.force_encoding(Encoding::UTF_8).scrub

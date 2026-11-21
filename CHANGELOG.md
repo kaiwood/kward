@@ -15,6 +15,8 @@ All notable changes to Kward will be documented in this file.
 
 - Display and edit pasted multiline drafts on separate terminal rows before submitting them.
 
+- Show the command and stream its output live when the standalone `kward shell` agent runs it for you.
+
 ### Added
 
 - Pause standalone shell history and shell-agent context capture with `history pause`, then restore recording with `history resume`.

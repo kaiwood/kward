@@ -138,14 +138,17 @@ module Kward
           chunk = @reader.read_nonblock(CHUNK_BYTES, exception: false)
           break unless chunk.is_a?(String)
 
+          write_terminal(chunk)
           @capture&.write(chunk)
-          unless @hide_output
-            $stdout.write(chunk)
-            $stdout.flush
-          end
         end
       rescue Errno::EIO
         nil
+      end
+
+      def write_terminal(bytes)
+        $stdout.write(bytes)
+        $stdout.flush
+        @at_line_start = bytes.end_with?("\n")
       end
 
       def start_capture
@@ -236,24 +239,28 @@ module Kward
 
       def run_for_agent(command, timeout_seconds: nil, cancellation: nil)
         cancellation&.raise_if_cancelled!
+        respond("run", command: command, timeout: timeout_seconds || self.timeout_seconds)
+        JSON.parse(@channel.readline).fetch("type") == "running" or raise IOError, "Shell agent command did not start"
         @lock.synchronize do
           drain_output
           start_capture
-          @hide_output = true
+          @agent_running = true
+          respond("ok")
         end
-        respond("run", command: command, timeout: timeout_seconds || self.timeout_seconds)
-        JSON.parse(@channel.readline).fetch("type") == "running" or raise IOError, "Shell agent command did not start"
-        @lock.synchronize { @agent_running = true }
         Process.kill("INT", @pid) if cancellation&.cancelled?
         result = JSON.parse(@channel.readline)
         @cwd = result.fetch("cwd")
-        output = @lock.synchronize { stop_capture }
+        output = @lock.synchronize do
+          captured = stop_capture
+          write_terminal("\r\n") unless @at_line_start
+          captured
+        end
         @last_command, @last_output, @status_of_command = command, output, result.fetch("status")
         cancellation&.raise_if_cancelled!
         Kwsh::Result.new(output: output, exit_status: @status_of_command)
       ensure
         @lock.synchronize do
-          @agent_running = @hide_output = false
+          @agent_running = false
           @capture = nil
         end
       end

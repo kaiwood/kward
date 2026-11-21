@@ -716,27 +716,89 @@ class TestCLIShell < KwardTestCase
         elsif messages.last.to_s.include?("interactive-secret")
           answer("Leaked interactive input")
         else
-          tool("run_shell_command", command: "export VIA_AGENT=live; /bin/echo tool-output")
+          command = <<~'SH'
+            export VIA_AGENT=live; /bin/echo tool-output; /bin/echo tool-error >&2
+            while [ ! -f "$AGENT_TEST_GATE" ]; do /bin/sleep 0.01; done
+            printf tail-output
+          SH
+          tool("run_shell_command", command: command, timeout_seconds: 10)
         end
+      end
+    CODE
+    Dir.mktmpdir do |dir|
+      gate = File.join(dir, "continue")
+      with_shell_agent(client, "AGENT_TEST_GATE" => gate) do |reader, writer, pid|
+        read_until(reader, PROMPT)
+        writer.write("/bin/sh -c 'echo waiting; read -r value; echo \"$value\"'\n")
+        read_until(reader, "\r\nwaiting\r\n")
+        writer.write("interactive-secret\n")
+        read_until(reader, "\r\ninteractive-secret\r\n")
+        read_until(reader, PROMPT)
+        writer.write("? set VIA_AGENT to live\n")
+        output = read_until(reader, "\r\ntool-output\r\ntool-error\r\n")
+        assert_includes output, "\r\n#{PROMPT}export VIA_AGENT=live; /bin/echo tool-output; /bin/echo tool-error >&2\r\nwhile"
+        File.write(gate, "")
+        read_until(reader, "tail-output\r\nTool result: Exit status: 0")
+        result = read_until(reader, "\r\ntool-output\r\ntool-error\r\ntail-output\r\n")
+        refute_includes result, "export VIA_AGENT=live"
+        read_until(reader, PROMPT)
+        writer.write("/bin/echo \"$VIA_AGENT\"\n")
+        read_until(reader, "\r\nlive\r\n")
+        read_until(reader, PROMPT)
+        writer.write("exit\n")
+        assert_equal 0, wait_for_exit(pid).exitstatus
+      end
+    end
+  end
+
+  def test_shell_agent_relays_command_output_even_when_it_cannot_be_captured
+    client = <<~'CODE'
+      def chat(messages, **)
+        if (result = tool_result(messages))
+          text = (result[:content] || result["content"]).to_s
+          return answer(text.include?("STDOUT:") ? "Unexpected captured output" : "Command finished")
+        end
+
+        tool("run_shell_command", command: <<~'SH')
+          printf 'Downloading\n\033[?25l\033[?7s\033[?7l10%%\r\033[K100%%\n\033[?7h\033[?7r\033[?25h'
+          printf 'Finished download\n' >&2
+        SH
       end
     CODE
     with_shell_agent(client) do |reader, writer, pid|
       read_until(reader, PROMPT)
-      writer.write("/bin/sh -c 'echo waiting; read -r value; echo \"$value\"'\n")
-      read_until(reader, "\r\nwaiting\r\n")
-      writer.write("interactive-secret\n")
-      read_until(reader, "\r\ninteractive-secret\r\n")
-      read_until(reader, PROMPT)
-      writer.write("? set VIA_AGENT to live\n")
-      output = read_until(reader, "Tool result: Exit status: 0")
-      refute_includes output, "\r\ntool-output\r\n"
-      read_until(reader, "\r\ntool-output\r\n")
-      read_until(reader, PROMPT)
-      writer.write("/bin/echo \"$VIA_AGENT\"\n")
-      read_until(reader, "\r\nlive\r\n")
+      writer.write("? run the download\n")
+      read_until(reader, "Downloading\r\n\e[?25l\e[?7s\e[?7l10%\r\e[K100%\r\n\e[?7h\e[?7r\e[?25hFinished download\r\nCommand finished\r\n")
       read_until(reader, PROMPT)
       writer.write("exit\n")
       assert_equal 0, wait_for_exit(pid).exitstatus
+    end
+  end
+
+  def test_shell_agent_echo_uses_the_live_styled_prompt_for_each_command
+    client = <<~'CODE'
+      def chat(messages, **)
+        results = messages.count { |message| (message[:role] || message["role"]) == "tool" }
+        case results
+        when 0 then tool("run_shell_command", command: 'cd "$AGENT_TEST_DIRECTORY"; false')
+        when 1 then tool("run_shell_command", command: "/bin/echo after-change")
+        else answer("Done changing directories.")
+        end
+      end
+    CODE
+    Dir.mktmpdir do |dir|
+      destination = File.join(dir, "changed-dir")
+      Dir.mkdir(destination)
+      with_shell_agent(client, "AGENT_TEST_DIRECTORY" => destination,
+                       "PROMPT" => "%F{cyan}%1~ [%?]%f > ", "KWARD_COLOR" => "always") do |reader, writer, pid|
+        read_until(reader, "\e[0m")
+        writer.write("? change directories, then print a message\n")
+        read_until(reader, "\e[36mchanged-dir [1]\e[39m > \e[0m/bin/echo after-change\r\n")
+        read_until(reader, "after-change\r\nDone changing directories.\r\n")
+        read_until(reader, "\e[36mchanged-dir [0]\e[39m > \e[0m")
+        writer.write("exit\n")
+        assert_equal 0, wait_for_exit(pid).exitstatus
+      end
     end
   end
 
@@ -752,6 +814,7 @@ class TestCLIShell < KwardTestCase
     with_shell_agent(client) do |reader, writer, pid|
       read_until(reader, PROMPT)
       writer.write("? run a sleep command with a timeout\n")
+      read_until(reader, "\r\n#{PROMPT}/bin/sleep 20\r\n")
       read_until(reader, "\r\nExit status: 124\r\n")
       read_until(reader, PROMPT)
       writer.write("/bin/echo still-live\n")
