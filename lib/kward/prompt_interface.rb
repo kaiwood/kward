@@ -246,14 +246,14 @@ module Kward
       @last_spinner_tick = monotonic_now
       @last_footer_refresh = nil
       @cached_footer_text = nil
-      @last_composer_status_refresh = 0.0
+      @last_composer_status_refresh = nil
       @cached_composer_status_text = nil
       @prompt_label = "You>"
       @assistant_label = "Assistant"
       @stream_state = StreamState.new
       @rendered_rows = 0
       @last_composer_rows = []
-      @cursor_rendered_row = 0
+      @rendered_composer_cursor = nil
       @transcript_buffer = TranscriptBuffer.new(limit: TRANSCRIPT_BUFFER_LIMIT)
       @transcript_viewport_rows = 0
       @restoring_transcript = false
@@ -585,8 +585,8 @@ module Kward
         editor_open = @mutex.synchronize do
           if key.nil?
             resized = handle_resize_locked
-            footer_refreshed = tick_footer_locked
-            render_prompt_locked if resized || footer_refreshed
+            chrome_changed = tick_composer_chrome_locked
+            render_prompt_locked if resized || chrome_changed
           else
             result = handle_key(key)
             action = result if prompt_action_result?(result)
@@ -630,10 +630,10 @@ module Kward
         @mutex.synchronize do
           if key.nil?
             resized = handle_resize_locked
-            footer_refreshed = tick_footer_locked
+            chrome_changed = tick_composer_chrome_locked
             completion_changed = tick_completion_locked
             preview_opened = open_pending_generated_image_locked
-            render_prompt_locked if resized || footer_refreshed || completion_changed || preview_opened
+            render_prompt_locked if resized || chrome_changed || completion_changed || preview_opened
           else
             result = handle_key(key)
             render_prompt_locked unless result.is_a?(String) || result == EXIT_INPUT || prompt_action_result?(result)
@@ -696,8 +696,8 @@ module Kward
         @mutex.synchronize do
           if key.nil?
             resized = handle_resize_locked
-            footer_refreshed = tick_footer_locked
-            render_prompt_locked if resized || footer_refreshed
+            chrome_changed = tick_composer_chrome_locked
+            render_prompt_locked if resized || chrome_changed
           else
             result = handle_select_key(key)
             result = drain_pending_select_keys_locked(result)
@@ -1076,10 +1076,10 @@ module Kward
         if key.nil?
           resized = handle_resize_locked
           spun = tick_spinner_locked
-          footer_refreshed = tick_footer_locked
+          chrome_changed = tick_composer_chrome_locked
           completion_changed = tick_completion_locked
           preview_opened = open_pending_generated_image_locked
-          render_prompt_locked if resized || spun || footer_refreshed || completion_changed || preview_opened
+          render_prompt_locked if resized || spun || chrome_changed || completion_changed || preview_opened
           return nil
         end
 
@@ -1185,7 +1185,7 @@ module Kward
         @cached_footer_text = nil
         @last_footer_refresh = nil
         @cached_composer_status_text = nil
-        @last_composer_status_refresh = 0.0
+        @last_composer_status_refresh = nil
         render_prompt_locked if @started && @asking
       end
     end

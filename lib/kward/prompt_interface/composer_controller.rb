@@ -291,7 +291,6 @@ module Kward
           reset_history_search if reset_history
           @asking = false
           @rendered_rows = 0
-          @cursor_rendered_row = 0
         end
       end
 

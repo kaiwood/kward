@@ -18,8 +18,8 @@ module Kward
           @mutex.synchronize do
             if key.nil?
               resized = handle_resize_locked
-              footer_refreshed = tick_footer_locked
-              render_prompt_locked if resized || footer_refreshed
+              chrome_changed = tick_composer_chrome_locked
+              render_prompt_locked if resized || chrome_changed
             else
               result = handle_git_key(key)
               render_prompt_locked unless result.is_a?(String) || result == SELECT_CANCEL || git_action?(result)
@@ -210,8 +210,8 @@ module Kward
           @mutex.synchronize do
             if key.nil?
               resized = handle_resize_locked
-              footer_refreshed = tick_footer_locked
-              render_prompt_locked if resized || footer_refreshed
+              chrome_changed = tick_composer_chrome_locked
+              render_prompt_locked if resized || chrome_changed
             else
               handle_editor_key(key)
               render_prompt_locked if editor_active?

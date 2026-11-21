@@ -87,8 +87,16 @@ module Kward
         true
       end
 
+      def tick_composer_chrome_locked
+        return false unless @started && @asking && !terminal_owned_by_child_locked?
+
+        footer_changed = tick_footer_locked
+        status_changed = tick_composer_status_locked
+        footer_changed || status_changed
+      end
+
       def tick_footer_locked
-        return false unless @footer && @started && @asking
+        return false unless @footer
         return false unless footer_refresh_due?
 
         previous_text = @cached_footer_text
@@ -120,19 +128,33 @@ module Kward
         arity.zero? ? @footer.call : @footer.call(max_width)
       end
 
+      def tick_composer_status_locked
+        return false unless @composer_status && composer_status_refresh_due?
+        return false if editor_visible? || screen_height < 4
+
+        previous_text = @cached_composer_status_text
+        refresh_composer_status_text_locked
+        previous_text != @cached_composer_status_text
+      end
+
       def cached_composer_status_text
         return nil unless @composer_status
 
-        now = monotonic_now
-        elapsed = now - @last_composer_status_refresh.to_f
-        if @cached_composer_status_text.nil? || elapsed >= COMPOSER_STATUS_REFRESH_INTERVAL
-          text = @composer_status.call.to_s
-          @cached_composer_status_text = text.empty? ? nil : status_composer_text(text)
-          @last_composer_status_refresh = now
-        end
+        refresh_composer_status_text_locked if composer_status_refresh_due?
         @cached_composer_status_text
+      end
+
+      def composer_status_refresh_due?
+        @last_composer_status_refresh.nil? || monotonic_now - @last_composer_status_refresh >= COMPOSER_STATUS_REFRESH_INTERVAL
+      end
+
+      def refresh_composer_status_text_locked
+        text = @composer_status.call.to_s
+        @cached_composer_status_text = text.empty? ? nil : status_composer_text(text)
       rescue StandardError
         @cached_composer_status_text = nil
+      ensure
+        @last_composer_status_refresh = monotonic_now
       end
 
       def monotonic_now

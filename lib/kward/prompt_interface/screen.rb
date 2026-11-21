@@ -130,26 +130,22 @@ module Kward
         redraw_transcript_locked(width: width, height: height) if should_redraw_transcript && new_reserved_rows != old_reserved_rows
       end
 
-      def handle_resize_locked
+      def handle_resize_locked(width: screen_width, height: screen_height)
         return false if terminal_owned_by_child_locked?
+        return false if width == @last_width && height == @last_height
 
-        current_width, current_height = screen_size
-        return false if current_width == @last_width && current_height == @last_height
-
-        old_width = @last_width
-        old_height = @last_height
-        old_reserved_rows = @reserved_rows
-        restore_scroll_region_locked
-        rows_to_clear = resize_prompt_clear_rows(old_width, current_width, old_reserved_rows)
-        clear_resized_composer_region_locked(old_height, current_height, rows_to_clear)
-        @reserved_rows = 0
-        @last_width = current_width
-        @last_height = current_height
-        @last_footer_refresh = nil if current_width != old_width
-        if interactive_active_locked?
-          @interactive_state[:controller].resize(width: interactive_canvas_width(current_width))
+        with_synchronized_output_locked do
+          rows_to_clear = resize_prompt_clear_rows(@last_width, width, @reserved_rows)
+          restore_scroll_region_locked
+          clear_resized_composer_region_locked(@last_height, height, rows_to_clear)
+          @last_footer_refresh = nil if width != @last_width
+          @last_width = width
+          @last_height = height
+          if interactive_active_locked?
+            @interactive_state[:controller].resize(width: interactive_canvas_width(width))
+          end
+          redraw_screen_locked(width: width, height: height)
         end
-        redraw_screen_locked(width: current_width, height: current_height)
         true
       end
 
@@ -188,6 +184,7 @@ module Kward
         rows_to_clear ||= [@reserved_rows, @rendered_rows].max
         clear_bottom_rows_locked(height, rows_to_clear)
         @last_composer_rows = []
+        @rendered_composer_cursor = nil
       end
 
       def resize_prompt_clear_rows(old_width, current_width, old_reserved_rows)

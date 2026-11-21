@@ -157,6 +157,37 @@ class TestPromptInterface < KwardTestCase
     refute_includes strip_ansi(output.string), "status 2"
   end
 
+  def test_prompt_interface_refreshes_status_while_idle_without_a_footer
+    input, writer = IO.pipe
+    output = StringIO.new
+    value = "first model"
+    calls = 0
+    now = 0.0
+    prompt = Kward::PromptInterface.new(input: input, output: output, composer_status: -> { calls += 1; value })
+    prompt.define_singleton_method(:monotonic_now) { now }
+    prompt.start
+    output.truncate(0)
+    output.rewind
+
+    value = "second model"
+    now += Kward::PromptInterface::COMPOSER_STATUS_REFRESH_INTERVAL
+    prompt.poll_input
+
+    assert_includes strip_ansi(output.string), "second model"
+    assert_equal 2, calls
+    output.truncate(0)
+    output.rewind
+
+    now += Kward::PromptInterface::COMPOSER_STATUS_REFRESH_INTERVAL
+    prompt.poll_input
+
+    assert_empty output.string
+    assert_equal 3, calls
+  ensure
+    writer&.close unless writer&.closed?
+    input&.close unless input&.closed?
+  end
+
   def test_prompt_interface_throttles_footer_during_typing
     count = 0
     output = StringIO.new
@@ -1776,6 +1807,9 @@ class TestPromptInterface < KwardTestCase
     prompt.poll_input
 
     assert_includes strip_ansi(output.string), "╭ You · ⠙ thinking "
+    cursor = Kward::TerminalSequences.move_to(TTY::Screen.height - 1, 3)
+    assert_order output.string, Kward::PromptInterface::SYNCHRONIZED_OUTPUT_ENABLE,
+      "thinking", cursor, Kward::PromptInterface::SYNCHRONIZED_OUTPUT_DISABLE
   ensure
     writer&.close unless writer&.closed?
     input&.close unless input&.closed?
@@ -1958,6 +1992,44 @@ class TestPromptInterface < KwardTestCase
     refute_includes strip_ansi(output.string), "╭"
   end
 
+  def test_streaming_does_not_consume_pending_composer_status_updates
+    input, writer = IO.pipe
+    output = StringIO.new
+    now = 0.0
+    footer = "first footer"
+    status = "first model"
+    prompt = Kward::PromptInterface.new(
+      input: input, output: output, footer: -> { footer }, composer_status: -> { status }, busy_help: false
+    )
+    prompt.define_singleton_method(:monotonic_now) { now }
+    prompt.define_singleton_method(:screen_width) { 80 }
+    prompt.define_singleton_method(:screen_height) { 20 }
+    prompt.begin_busy_input
+    prompt.set_queued_count(1) # No spinner tick to trigger an incidental repaint.
+    prompt.start_stream_block("Assistant")
+    output.truncate(0)
+    output.rewind
+
+    footer = "second footer"
+    status = "second model"
+    now += [Kward::PromptInterface::FOOTER_REFRESH_INTERVAL, Kward::PromptInterface::COMPOSER_STATUS_REFRESH_INTERVAL].max
+    prompt.write_delta("hello")
+
+    refute_includes strip_ansi(output.string), "second footer"
+    refute_includes strip_ansi(output.string), "second model"
+    assert_order output.string, "hello", Kward::TerminalSequences.move_to(18, 3), Kward::PromptInterface::SYNCHRONIZED_OUTPUT_DISABLE
+    output.truncate(0)
+    output.rewind
+
+    prompt.poll_input
+
+    assert_order output.string, Kward::PromptInterface::SYNCHRONIZED_OUTPUT_ENABLE,
+      "second model", "second footer", Kward::TerminalSequences.move_to(18, 3), Kward::PromptInterface::SYNCHRONIZED_OUTPUT_DISABLE
+  ensure
+    writer&.close unless writer&.closed?
+    input&.close unless input&.closed?
+  end
+
   def test_prompt_interface_restores_cursor_to_composer_after_stream_render
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
@@ -2121,6 +2193,8 @@ class TestPromptInterface < KwardTestCase
     assert_includes output.string, TTY::Cursor.clear_screen
     assert_match(/\e\[1;\d+r/, output.string)
     assert_includes strip_ansi(output.string), "╭ You "
+    assert_order output.string, Kward::PromptInterface::SYNCHRONIZED_OUTPUT_ENABLE, "\e[r",
+      TTY::Cursor.clear_screen, "╭ You ", Kward::TerminalSequences.move_to(11, 3), Kward::PromptInterface::SYNCHRONIZED_OUTPUT_DISABLE
   ensure
     TTY::Screen.define_singleton_method(:height, original_height) if original_height
   end

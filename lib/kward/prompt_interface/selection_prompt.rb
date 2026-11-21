@@ -362,9 +362,9 @@ module Kward
         @mutex.synchronize do
           resized = handle_resize_locked
           spun = tick_spinner_locked
-          footer_refreshed = tick_footer_locked
-          render_prompt_locked if resized || spun || footer_refreshed
-          flush_output_locked if resized || spun || footer_refreshed
+          chrome_changed = tick_composer_chrome_locked
+          render_prompt_locked if resized || spun || chrome_changed
+          flush_output_locked if resized || spun || chrome_changed
         end
       end
 
