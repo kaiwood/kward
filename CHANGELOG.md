@@ -57,10 +57,9 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Restore the current terminal size on new shell PTYs, including after a `/shell` worker restarts.
 - Preserve wide characters, combining accents, and backspace redraws in shell transcript replay.
-
 - Bound the size of shell transcript replay when a command uses cursor movement.
-
 - Keep busy composer headers on one line in narrow panes, dropping the cancel hint before clipping the activity text.
 - Keep the draft and cursor visible in short panes by collapsing tabs, footers, and overlays as space runs out, while leaving room for transcript scrolling.
 - Keep the composer cursor steady during spinner and status redraws, and refresh the header and footer even when the spinner is paused or the composer is idle.

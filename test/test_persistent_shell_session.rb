@@ -844,6 +844,19 @@ class TestPersistentShellSession < KwardTestCase
     end
   end
 
+  def test_restarted_worker_sets_size_on_its_new_pty
+    Dir.mktmpdir("persistent-shell") do |dir|
+      shell = build_shell(dir, window_size_provider: -> { [37, 94] })
+      assert_equal "37 94", shell.run_for_agent("stty size").output.lines.last.strip
+
+      shell.send(:restart_process)
+
+      assert_equal "37 94", shell.run_for_agent("stty size").output.lines.last.strip
+    ensure
+      shell&.close
+    end
+  end
+
   def test_timeout_keeps_the_shell_available
     Dir.mktmpdir("persistent-shell") do |dir|
       shell = build_shell(dir, timeout_seconds: 1)

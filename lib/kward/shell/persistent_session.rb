@@ -300,6 +300,7 @@ module Kward
 
       @reader.sync = true
       @writer.sync = true
+      @window_size = nil
       update_window_size
     end
 
@@ -316,6 +317,7 @@ module Kward
         cancellation&.raise_if_cancelled!
         marker = next_marker
         @protocol_pending = true
+        update_window_size
         write_protocol_command(command, marker, suppress_git_pager: suppress_git_pager, config: config)
         read_until_marker(
           marker,
@@ -790,8 +792,8 @@ module Kward
       size = [rows, columns]
       return if size == @window_size
 
-      @window_size = size
       @reader.winsize = size
+      @window_size = size
     rescue StandardError
       nil
     end

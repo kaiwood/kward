@@ -17,7 +17,6 @@ module Kward
 
     def initialize(window_size_provider: nil)
       @window_size_provider = window_size_provider
-      @window_size = nil
     end
 
     def run(*command, env: {}, cwd: Dir.pwd, input: $stdin, sink:, tab_action_handler: nil, on_detach: nil)
@@ -28,6 +27,7 @@ module Kward
       forwarded = false
       detached = nil
 
+      @window_size = nil
       update_window_size(reader, pid)
       with_raw_input(input) do
         input_forwarded, tab_action = drain_initial_input(input, writer, sink, tab_action_handler: tab_action_handler)
@@ -216,8 +216,8 @@ module Kward
       window_size = terminal_window_size
       return if window_size == @window_size
 
-      @window_size = window_size
       reader.winsize = window_size
+      @window_size = window_size
       signal_process("WINCH", -pid) || signal_process("WINCH", pid)
     rescue StandardError
       nil

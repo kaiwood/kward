@@ -224,6 +224,23 @@ class TestInteractivePtyRunner < KwardTestCase
     close_ios(input_reader, input_writer, output_reader, output_writer)
   end
 
+  def test_reused_runner_sets_size_on_each_new_pty
+    runner = Kward::InteractivePtyRunner.new(window_size_provider: -> { [37, 94] })
+
+    2.times do
+      reader, writer = IO.pipe
+      writer.puts("ready")
+      writer.close
+      output = StringIO.new
+      result = runner.run(RbConfig.ruby, "-rio/console", "-e", "gets; puts IO.console.winsize.join(' ')", input: reader, sink: output)
+
+      assert_equal 0, result.exit_status
+      assert_equal "37 94", output.string.lines.last.strip
+    ensure
+      close_ios(reader, writer)
+    end
+  end
+
   def test_stopped_child_is_terminated_instead_of_stranding_terminal
     input_reader, input_writer = IO.pipe
     output_reader, output_writer = IO.pipe
