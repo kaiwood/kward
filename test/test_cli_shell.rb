@@ -626,6 +626,53 @@ class TestCLIShell < KwardTestCase
     assert_equal PROMPT, prompt
   end
 
+  def test_private_history_mode_skips_disk_history_and_shell_agent_context
+    client = <<~'CODE'
+      def chat(messages, **)
+        prompt = messages.reverse.find { |message| (message[:role] || message["role"]) == "user" }
+        text = (prompt[:content] || prompt["content"]).to_s
+        answer(text.include?("Last command: (none)") && !text.include?("private-fixture") ? "No captured context." : "Unexpected context.")
+      end
+    CODE
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "history")
+      with_shell_agent(client, "HISTFILE" => path, "PROMPT" => "%F{cyan}ready> %f") do |reader, writer, pid|
+        read_until(reader, PROMPT)
+        writer.write("echo public-before\n")
+        read_until(reader, "\r\npublic-before\r\n")
+        read_until(reader, PROMPT)
+        writer.write("history pause\n")
+        private_prompt = "\r[private] \e[36mready> "
+        read_until(reader, private_prompt)
+        writer.write("if true; then\n")
+        read_until(reader, "\r[private] more> ")
+        writer.write("echo private-fixture; fi\n")
+        read_until(reader, "\r\nprivate-fixture\r\n")
+        read_until(reader, private_prompt)
+        writer.write("? check the last command\n")
+        read_until(reader, "Shell agent unavailable while history is paused.")
+        read_until(reader, private_prompt)
+        writer.write("history status\n")
+        read_until(reader, "\r\nShell history is paused.\r\n")
+        read_until(reader, private_prompt)
+        writer.write("\x12private")
+        read_until(reader, "(failed reverse-i-search: private): echo public-before\e[K")
+        writer.write("\x07history resume\n")
+        read_until(reader, "\r\e[36mready> ")
+        writer.write("? check the last command\n")
+        read_until(reader, "\r\nNo captured context.\r\n")
+        read_until(reader, PROMPT)
+        writer.write("echo public-after\n")
+        read_until(reader, "\r\npublic-after\r\n")
+        read_until(reader, PROMPT)
+        writer.write("exit\n")
+        assert_equal 0, wait_for_exit(pid).exitstatus
+      end
+      entries = File.readlines(path).map { |line| JSON.parse(line).last }
+      assert_equal ["echo public-before", "echo public-after", "exit"], entries
+    end
+  end
+
   def test_shell_question_receives_the_last_stderr_and_exit_status_and_prepares_an_editable_draft
     client = <<~'CODE'
       def chat(messages, **)
@@ -717,7 +764,7 @@ class TestCLIShell < KwardTestCase
 
   private
 
-  def with_shell_agent(client_code)
+  def with_shell_agent(client_code, env = {})
     lib = File.expand_path("../lib", __dir__)
     code = <<~RUBY_CODE
       require "kward/shell/standalone_agent"
@@ -743,7 +790,7 @@ class TestCLIShell < KwardTestCase
       exit Kward::Entrypoint.run
     RUBY_CODE
     Dir.mktmpdir do |home|
-      with_terminal({ "HOME" => home, "KWARD_CONFIG_PATH" => nil, "KWARD_CONFIG_DIR" => nil },
+      with_terminal({ "HOME" => home, "KWARD_CONFIG_PATH" => nil, "KWARD_CONFIG_DIR" => nil }.merge(env),
                     command: ["-I", lib, "-e", code, "--"]) { |*pty| yield(*pty) }
     end
   end

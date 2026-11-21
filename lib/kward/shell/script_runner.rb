@@ -85,6 +85,7 @@ module Kward
       def run_interactive(runtime, source_input, input:, output:, error:, edit_lines:, shell_link: nil)
         source = +"".b
         draft = nil
+        history_controls = edit_lines && source_input.tty? && error.tty?
         terminals = { vi: ViTerminal.new(runtime) }
         terminals[:line] = LineTerminal.new(runtime, LineEditor.new(runtime), bracketed_paste: true) if edit_lines
         runtime.with_signals do
@@ -119,7 +120,14 @@ module Kward
                 runtime.run(source, input: input, output: output, error: error) unless source.empty? || runtime.exited
                 break
               end
+              if history_controls && source.empty? && handle_history_control(line, runtime.history, shell_link, output)
+                next
+              end
               if shell_link && source.empty? && line.start_with?("?")
+                if runtime.history.paused?
+                  error.puts("Shell agent unavailable while history is paused. Use history resume first.")
+                  next
+                end
                 instruction = line.delete_prefix("?").strip
                 if instruction.empty?
                   error.puts("Shell prompt instruction required after ?")
@@ -131,7 +139,7 @@ module Kward
               source << line
               text = source.dup.force_encoding(Encoding::UTF_8)
               text.force_encoding(Encoding::BINARY) unless text.valid_encoding?
-              capture = shell_link && !text.strip.empty?
+              capture = shell_link && !runtime.history.paused? && !text.strip.empty?
               begin
                 Parser.parse(text, aliases: runtime.aliases, eof: edited)
               rescue IncompleteInput
@@ -152,6 +160,21 @@ module Kward
             end
           end
         end
+      end
+
+      def handle_history_control(line, history, shell_link, output)
+        case line.strip
+        when "history pause"
+          shell_link&.clear_context
+          history.paused = true
+        when "history resume"
+          history.paused = false
+        when "history status"
+          output.puts(history.paused? ? "Shell history is paused." : "Shell history is recording.")
+        else
+          return false
+        end
+        true
       end
 
       def read_prompt_line(runtime, source, terminals, prompt:, input:, output:, error:, draft: nil)

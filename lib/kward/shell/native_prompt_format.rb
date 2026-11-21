@@ -11,7 +11,7 @@ module Kward
       COLORS = %w[black red green yellow blue magenta cyan white].freeze
       STYLES = { "%f" => [39], "%k" => [49], "%B" => [1], "%b" => [22] }.freeze
 
-      def initialize(template, directory:, home:, status:, color:)
+      def initialize(template, directory:, home:, status:, color:, prefix: "")
         @directory = directory.b
         @home = home.to_s.b
         @status = status
@@ -19,6 +19,7 @@ module Kward
           style = STYLES[part] || color_style(part)
           style ? (style if color) : expand(part)
         end
+        @parts.unshift(prefix.b) unless prefix.empty?
         @styled = @parts.any? { |part| part.is_a?(Array) }
       end
 

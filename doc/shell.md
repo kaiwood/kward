@@ -52,6 +52,12 @@ Press **Ctrl+R** and type part of a command to find it in history. Press **Ctrl+
 
 If your Mac types special characters instead of sending the shortcuts, try **Terminal → Settings → Profiles → Keyboard → Use Option as Meta key**. **Ctrl+W** works without Option/Meta setup.
 
+### Pause history for a sensitive command
+
+At a `kward shell` prompt, enter `history pause` on its own line. The prompt starts with `[private]` until you enter `history resume`. `history status` reports whether recording is paused. These controls are local to the current terminal session and are not saved to history.
+
+While paused, commands are not added to in-memory or on-disk history, inline suggestions are hidden, and the shell does not collect command context for `?`. Resume before using the shell agent. Previously saved history stays intact. This does not hide commands from the terminal or clear scrollback, and it cannot prevent programs from logging their own input.
+
 ### Customize the prompt
 
 Try this at a `kward shell` prompt, or add the same line to `~/.kwshrc` to keep it:

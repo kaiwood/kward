@@ -182,6 +182,9 @@ module Kward
               @status_of_command = message.fetch("status")
             end
             respond("ok")
+          when "clear_context"
+            @lock.synchronize { @capture = @last_command = @last_output = @status_of_command = nil }
+            respond("ok")
           when "ask" then answer(message)
           end
         end

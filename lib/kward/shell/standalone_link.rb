@@ -22,6 +22,10 @@ module Kward
         request("finish", status: status)
       end
 
+      def clear_context
+        request("clear_context")
+      end
+
       def ask(instruction, runtime, input:, output:, error:)
         send_message("ask", instruction: utf8(instruction), cwd: utf8(runtime.cwd))
         loop do

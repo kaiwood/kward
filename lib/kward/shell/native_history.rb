@@ -22,7 +22,18 @@ module Kward
         @path = nil
       end
 
+      def paused?
+        @paused == true
+      end
+
+      def paused=(paused)
+        discard_pending if paused
+        @paused = paused
+      end
+
       def with_entry(text)
+        return yield if paused?
+
         @pending = text unless text.strip.empty?
         yield
       ensure
@@ -39,7 +50,7 @@ module Kward
       end
 
       def add(text)
-        return if text.strip.empty?
+        return if paused? || text.strip.empty?
         text = text.chomp
         saved = with_lock do
           entries = read_entries

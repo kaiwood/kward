@@ -31,6 +31,9 @@ module Kward
           @line = draft.to_s.b.force_encoding(encoding).scrub
           @position = @line.length
           @history = @runtime.history
+          @cuts.clear if @private_edit != @history.paused?
+          @private_edit = @history.paused?
+          suggestions &&= !@private_edit
           @history.refresh
           @entries = @history.entries
           @index = @entries.length
