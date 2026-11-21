@@ -1090,7 +1090,7 @@ module Kward
 
         result = handle_key(key)
         render_prompt_locked unless [EXIT_INPUT, CANCEL_INPUT].include?(result) || prompt_action_result?(result)
-        [EXIT_INPUT, CANCEL_INPUT].include?(result) ? result : result
+        result
       end
     ensure
       perform_pending_transcript_redraw
