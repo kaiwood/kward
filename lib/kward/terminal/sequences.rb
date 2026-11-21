@@ -50,6 +50,10 @@ module Kward
       match && (match[1].split(";") & %w[47 1047 1049]).any?
     end
 
+    def sgr(*codes)
+      "\e[#{codes.join(';')}m"
+    end
+
     def scroll_region(top, bottom)
       "\e[#{top};#{bottom}r"
     end

@@ -33,6 +33,22 @@ Interactive `kward shell` reads the same [declarative kwshrc files](#configure-k
 
 From a checkout, use `ruby exe/kward shell`. This is a traditional terminal frontend for **kwsh**, not Bash or Zsh; their startup files, programmable completions, and language extensions don’t carry over. The hosted composer and `/shell` shortcuts are not part of this mode. It isn’t an RPC or Pan session capability: it needs a local terminal for interactive editing and job control.
 
+### Customize the prompt
+
+Try this at a `kward shell` prompt, or add the same line to `~/.kwshrc` to keep it:
+
+```sh
+export PROMPT='%F{cyan}%~%f %F{yellow}[%?]%f %# '
+```
+
+The prompt shows your current directory in cyan, the last exit status in yellow, and a `%` (`#` for root). `cd` and command results update it automatically. On narrow terminals, use `%1~` instead of `%~` to show just the final directory name.
+
+- **Directory:** `%~` abbreviates `$HOME` as `~`; `%d` or `%/` shows the full directory; `%1~` shows the last component (or `~` at home).
+- **Other details:** `%n` is your username, `%m` is the short hostname, `%?` is the last exit status, `%#` is the prompt character, and `%%` is a literal `%`.
+- **Styles:** `%F{cyan}` sets the text color and `%f` resets it. `%K{blue}` and `%k` do the same for the background; `%B` and `%b` toggle bold. Colors accept the eight standard names, a palette index from `0` to `255`, or `#RRGGBB`. `NO_COLOR=1`, `KWARD_COLOR=never`, and `TERM=dumb` can disable styling.
+
+This is a single-line subset of Zsh’s prompt syntax, not a shell expression. The shell does not expand variables or run commands when drawing it. `unset PROMPT` returns to `PS1`; `PROMPT=''` requests a blank prompt. Continuation lines still use `PS2`. The separate `kwsh` executable and hosted `/shell` keep their existing prompts; RPC and Pan do not render this prompt.
+
 ### Ask the shell agent
 
 At an interactive `kward shell` prompt, ask about the last command just as you would in `/shell`:

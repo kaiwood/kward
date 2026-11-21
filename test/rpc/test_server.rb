@@ -244,6 +244,7 @@ class TestRPCServer < KwardTestCase
     assert_equal false, capabilities.dig("shell", "nativeScripting")
     assert_equal false, capabilities.dig("shell", "history")
     assert_equal false, capabilities.dig("shell", "lineEditing")
+    assert_equal false, capabilities.dig("shell", "promptFormat")
     assert_equal false, capabilities.dig("shell", "mailNotifications")
     assert_equal "interactiveTuiOnly", capabilities.dig("shell", "reason")
     assert_equal false, capabilities.dig("scratchpad", "supported")

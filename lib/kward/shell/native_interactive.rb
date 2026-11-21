@@ -1,4 +1,6 @@
 require_relative "native_completion"
+require_relative "native_prompt_format"
+require_relative "../terminal/ansi"
 
 module Kward
   module NativeShell
@@ -74,8 +76,13 @@ module Kward
         nil
       end
 
-      def prompt_text(name, error:)
+      def prompt_text(name, error:, formatted: false)
         default = { "PS1" => "$ ", "PS2" => "> ", "PS4" => "+ " }.fetch(name)
+        if formatted && name == "PS1" && @variables.key?("PROMPT")
+          color = error.tty? && @variables["TERM"] != "dumb" && ANSI.enabled?(error, env: @variables)
+          return PromptFormat.new(@variables.fetch("PROMPT"), directory: cwd, home: @variables["HOME"], status: @status, color: color)
+        end
+
         value = expand_parameters(@variables.fetch(name, default))
         value = value.gsub(/!!|!/) { |mark| mark == "!!" ? "!" : history.next_number.to_s } if name == "PS1" && !@hosted
         value

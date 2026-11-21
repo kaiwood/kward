@@ -268,6 +268,93 @@ class TestCLIShell < KwardTestCase
     end
   end
 
+  def test_prompt_from_kwshrc_updates_directory_and_status_and_unset_restores_ps1
+    Dir.mktmpdir do |home|
+      Dir.mkdir(File.join(home, "project"))
+      File.write(File.join(home, ".kwshrc"), "export PROMPT='%F{cyan}%~%f [%?] %%> '\n")
+      env = { "HOME" => home, "KWARD_CONFIG_PATH" => nil, "KWARD_CONFIG_DIR" => nil }
+      with_terminal(env) do |reader, writer, pid|
+        read_until(reader, PASTE_ON + "\r\e[36m")
+        writer.write("cd \"$HOME/project\"; false\n")
+        read_until(reader, "\e[36m~/project\e[39m [1] %> \e[0m")
+        writer.write("if true; then\n")
+        read_until(reader, "more> ")
+        writer.write("true; fi\n")
+        read_until(reader, "\e[36m~/project\e[39m [0] %> \e[0m")
+        writer.write("unset PROMPT\n")
+        read_until(reader, "\r" + PROMPT)
+        writer.write("exit\n")
+        assert_equal 0, wait_for_exit(pid).exitstatus
+      end
+    end
+  end
+
+  def test_prompt_colors_do_not_count_toward_the_cursor_in_either_editor
+    with_terminal("PROMPT" => "%F{cyan}XY%f> ") do |reader, writer, pid|
+      row = "\r\e[36mXY\e[39m> \e[0m"
+      read_until(reader, row + "\e[K\e[5G")
+      writer.write("ab\e[D")
+      read_until(reader, row + "ab\e[K\e[6G")
+      writer.write("\x15set -o vi\n")
+      read_until(reader, row + "\e[K\e[5G")
+      writer.write("xexit\e0x\n")
+      assert_equal 0, wait_for_exit(pid).exitstatus
+    end
+  end
+
+  def test_truncated_prompt_resets_styles_before_the_command_line
+    with_terminal("PROMPT" => "%K{20}%B%F{#a0b1c2}#{'x' * 5000}%f%b%k") do |reader, writer, pid|
+      output = read_until(reader, "\e[0m\e[K")
+      assert_match(/\r\e\[48;5;20m\e\[1m\e\[38;2;160;177;194mx+\e\[0m\e\[K\z/, output)
+      refute_includes output, "\e[39m"
+      writer.write("exit\n")
+      assert_equal 0, wait_for_exit(pid).exitstatus
+    end
+  end
+
+  def test_prompt_respects_no_color_and_treats_metadata_as_literal_text
+    Dir.mktmpdir do |home|
+      Dir.mkdir(File.join(home, "work%F{red}\e[2J"))
+      env = { "HOME" => home, "PROMPT" => "%K{20}%B%~%b%k %F{#a0b1c2}%?%f > ", "NO_COLOR" => "1" }
+      with_terminal(env) do |reader, writer, pid|
+        read_until(reader, PASTE_ON + "\r")
+        writer.write("cd \"$HOME\"/work*\n")
+        output = read_until(reader, "~/work%F{red}^[[2J 0 > ")
+        refute_match(/\e\[[\d;]+m/, output)
+        refute_includes output, "\e[2J"
+        writer.write("exit\n")
+        assert_equal 0, wait_for_exit(pid).exitstatus
+      end
+    end
+  end
+
+  def test_plain_prompt_preserves_literals_without_running_shell_expansions
+    with_terminal("TERM" => "dumb", "PROMPT" => '%F{cyan}$(exit 8) %? %unknown%f > ') do |reader, writer, pid|
+      output = read_until(reader, '$(exit 8) 0 %unknown > ')
+      refute_includes output, "\e[36m"
+      refute_includes output, PASTE_ON
+      writer.write("exit 17\n")
+      assert_equal 17, wait_for_exit(pid).exitstatus
+    end
+  end
+
+  def test_prompt_metadata_in_explicit_interactive_input_does_not_change_kwsh_defaults
+    kwsh = File.expand_path("../exe/kwsh", __dir__)
+    env = { "ENV" => nil, "PROMPT" => "%n@%m %d (%1~)%# ", "PS1" => PROMPT }
+    dir = Dir.pwd
+    username = Etc.getpwuid(Process.euid).name
+    host = Etc.uname.fetch(:nodename).split(".", 2).first
+    sigil = Process.euid.zero? ? "#" : "%"
+    env.merge!("HOME" => dir, "PWD" => dir)
+    _out, prompt, status = Open3.capture3(env, RbConfig.ruby, EXECUTABLE, "shell", "-i", stdin_data: "exit\n")
+    assert status.success?, prompt
+    assert_equal "#{username}@#{host} #{dir} (~)#{sigil} ", prompt
+
+    _out, prompt, status = Open3.capture3(env, RbConfig.ruby, kwsh, "-i", stdin_data: "exit\n")
+    assert status.success?, prompt
+    assert_equal PROMPT, prompt
+  end
+
   def test_shell_question_receives_the_last_stderr_and_exit_status_and_prepares_an_editable_draft
     client = <<~'CODE'
       def chat(messages, **)
@@ -392,7 +479,8 @@ class TestCLIShell < KwardTestCase
 
 
   def with_terminal(env = {}, command: [EXECUTABLE], **env_options)
-    defaults = { "ENV" => nil, "HISTFILE" => "", "PS1" => PROMPT, "PS2" => "more> ", "TERM" => "xterm" }
+    defaults = { "ENV" => nil, "HISTFILE" => "", "PROMPT" => nil, "KWARD_COLOR" => nil, "FORCE_COLOR" => nil, "CLICOLOR_FORCE" => nil,
+                 "NO_COLOR" => nil, "CLICOLOR" => nil, "PS1" => PROMPT, "PS2" => "more> ", "TERM" => "xterm" }
     PTY.spawn(defaults.merge(env, env_options), RbConfig.ruby, *command, "shell") do |reader, writer, pid|
       yield reader, writer, pid
     ensure

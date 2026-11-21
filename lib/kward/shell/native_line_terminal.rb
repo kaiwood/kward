@@ -2,6 +2,7 @@ require "io/console"
 require_relative "../terminal/keys"
 require_relative "../terminal/sequences"
 require_relative "../terminal/locale_text"
+require_relative "native_prompt_format"
 
 module Kward
   module NativeShell
@@ -37,7 +38,7 @@ module Kward
         error.puts
         result
       ensure
-        @source = @error = @streams = nil
+        @source = @error = @streams = @prompt = @prompt_cells = nil
       end
 
       private
@@ -136,7 +137,8 @@ module Kward
         end
         columns = @source.winsize.last
         columns = 80 if columns < 4
-        prompt_cells = fit(TerminalText.locale_cells(@prompt), columns / 2)
+        prompt_cells = fit(prompt_cells_for_redraw, columns / 2)
+        prompt = @prompt.is_a?(PromptFormat) ? @prompt.render(prompt_cells) : prompt_cells.map(&:first).join
         prompt_width = prompt_cells.sum(&:last)
         available = [columns - prompt_width - 1, 1].max
         cells = TerminalText.locale_cells(text)
@@ -144,9 +146,17 @@ module Kward
         @left += 1 while @left < position && cells[@left...position].sum(&:last) >= available
         visible = fit(cells[@left..] || [], available)
         column = prompt_width + cells[@left...position].sum(&:last) + 1
-        @error.write(TerminalSequences::CARRIAGE_RETURN + prompt_cells.map(&:first).join + visible.map(&:first).join +
+        @error.write(TerminalSequences::CARRIAGE_RETURN + prompt + visible.map(&:first).join +
                      TerminalSequences::ERASE_LINE_END + TerminalSequences.move_to_column(column))
         @error.flush
+      end
+
+      def prompt_cells_for_redraw
+        @prompt_cells ||= if @prompt.is_a?(PromptFormat)
+                            @prompt.cells(@editor.encoding)
+                          else
+                            TerminalText.locale_cells(@prompt)
+                          end
       end
 
       def fit(cells, limit)

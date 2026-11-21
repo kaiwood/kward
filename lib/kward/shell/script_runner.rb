@@ -94,7 +94,7 @@ module Kward
                 runtime.notify_jobs(error: error, force: source.empty?)
                 prompt = source.empty? ? "PS1" : "PS2"
                 runtime.check_mail(error) if source.empty?
-                text = runtime.prompt_text(prompt, error: error)
+                text = runtime.prompt_text(prompt, error: error, formatted: edit_lines)
                 read_prompt_line(runtime, source_input, terminals, prompt: text, input: input, output: output, error: error, draft: draft)
               end
               draft = nil
@@ -167,9 +167,17 @@ module Kward
           end
         end
         error.puts("Prepared shell command:\n#{draft}") if draft
-        error.write(prompt)
+        error.write(render_plain_prompt(runtime, prompt))
         error.flush
         read_line(source, runtime, input: input, output: output, error: error)
+      end
+
+      def render_plain_prompt(runtime, prompt)
+        return prompt unless prompt.is_a?(PromptFormat)
+
+        Locale.with(runtime.variables) { |locale| prompt.render(prompt.cells(locale.encoding)) }
+      rescue ExecutionError
+        Locale.with({}) { |locale| prompt.render(prompt.cells(locale.encoding)) }
       end
 
       def read_line(source, runtime, input:, output:, error:)
