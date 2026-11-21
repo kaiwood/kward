@@ -127,18 +127,28 @@ class TestCLIShell < KwardTestCase
     end
   end
 
-  def test_second_tab_lists_ambiguous_matches_and_keeps_the_draft
+  def test_completion_menu_cycles_cancels_and_accepts_without_submitting
     Dir.mktmpdir do |dir|
-      %w[match-left match-right].each { |name| File.write(File.join(dir, name), "") }
+      ["match-left", "match right"].each { |name| File.write(File.join(dir, name), "") }
       with_terminal do |reader, writer, pid|
         read_until(reader, PROMPT)
         writer.write("cd #{Shellwords.escape(dir)}\n")
         read_until(reader, PROMPT)
         writer.write("printf '<%s>\\n' mat\t\t")
-        read_until(reader, "\r\nmatch-left\r\nmatch-right\r\n")
-        read_until(reader, "printf '<%s>\\n' match-")
-        writer.write("left\n")
-        read_until(reader, "\r\n<match-left>\r\n")
+        read_until(reader, "> match right")
+        writer.write("\t")
+        read_until(reader, "> match-left")
+        writer.write("\e[Z")
+        read_until(reader, "> match right")
+        writer.write("\e")
+        read_until(reader, "\r#{PROMPT}printf '<%s>\\n' match\e[K")
+        writer.write("\t\t")
+        read_until(reader, "> match right")
+        writer.write("\n")
+        draft = read_until(reader, "\r#{PROMPT}printf '<%s>\\n' match\\ right \e[K")
+        refute_includes draft, PASTE_OFF
+        writer.write("\n")
+        read_until(reader, "\r\n<match right>\r\n")
         read_until(reader, PROMPT)
         writer.write("exit\n")
         assert_equal 0, wait_for_exit(pid).exitstatus

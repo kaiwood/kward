@@ -25,7 +25,7 @@ module Kward
       def read(source, prompt:, input:, output:, error:, draft: nil)
         @source, @prompt, @error = source, prompt, error
         @streams = { input: input, output: output, error: error }
-        @left = 0
+        @left = @menu_rows = 0
         controls = control_characters(source)
         callbacks = { get: method(:character), changed: method(:redraw), alert: method(:alert) }
         if @bracketed_paste
@@ -36,7 +36,10 @@ module Kward
             write(TerminalSequences::BRACKETED_PASTE_ENABLE) if @bracketed_paste
             @editor.read(**callbacks, **controls, draft: draft)
           ensure
-            write(TerminalSequences::BRACKETED_PASTE_RESTORE) if @bracketed_paste
+            if @bracketed_paste
+              draw_menu(nil, @column, @source.winsize) if @menu_rows.positive?
+              write(TerminalSequences::BRACKETED_PASTE_RESTORE)
+            end
           end
         end
         error.puts
@@ -138,14 +141,15 @@ module Kward
         @error.flush
       end
 
-      def redraw(text, position)
+      def redraw(text, position, menu: nil)
         unless position
           @error.write("\r\n")
           text.lines(chomp: true).each { |line| @error.write(TerminalText.locale_cells(line).map(&:first).join + "\r\n") }
           @error.flush
           return
         end
-        columns = @source.winsize.last
+        size = @source.winsize
+        columns = size.last
         columns = 80 if columns < 4
         prompt_cells = fit(prompt_cells_for_redraw, columns / 2)
         prompt = @prompt.is_a?(PromptFormat) ? @prompt.render(prompt_cells) : prompt_cells.map(&:first).join
@@ -158,7 +162,33 @@ module Kward
         column = prompt_width + cells[@left...position].sum(&:last) + 1
         @error.write(TerminalSequences::CARRIAGE_RETURN + prompt + visible.map(&:first).join +
                      TerminalSequences::ERASE_LINE_END + TerminalSequences.move_to_column(column))
+        @column = column
+        draw_menu(menu, column, size)
         @error.flush
+      end
+
+      def draw_menu(menu, column, size)
+        height, width = size
+        limit = height < 2 ? 4 : [height - 1, 6].min
+        rows = []
+        if menu
+          candidates, selected = menu
+          count = [candidates.length, limit].min
+          start = selected.clamp(0, candidates.length - count)
+          rows = candidates[start, count].map.with_index(start) do |candidate, index|
+            (index == selected ? "> " : "  ") + candidate
+          end
+        end
+        count = [[rows.length, @menu_rows].max, limit].min
+        return if count.zero?
+
+        width = 80 if width < 4
+        count.times do |index|
+          cells = TerminalText.locale_cells(rows[index].to_s)
+          @error.write("\r\n" + TerminalSequences::ERASE_LINE_END + fit(cells, width - 1).map(&:first).join)
+        end
+        @error.write(TerminalSequences.move_up(count) + TerminalSequences.move_to_column(column))
+        @menu_rows = rows.length
       end
 
       def prompt_cells_for_redraw

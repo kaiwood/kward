@@ -11,6 +11,8 @@ All notable changes to Kward will be documented in this file.
 
 - Merge opt-in shell history across terminals and browse matching commands with Up/Down after typing a prefix.
 
+- Cycle through ambiguous standalone shell completions with Tab and Shift+Tab, and accept a match without running the command.
+
 ### Added
 
 - Added `kward shell` to run native kwsh directly in your terminal without starting the agent or composer at launch. Use `?` to ask the same shell agent as `/shell` about recent output, run an explicit command, or prefill an editable command draft. Interactive sessions load `kwshrc` aliases and exports. The standalone prompt has Tab completion, arrow-key history and editing, bracketed paste, and native job control.

@@ -35,15 +35,17 @@ module Kward
           @entries = @history.entries
           @index = @entries.length
           @history_prefix = nil
+          @menu = nil
           @last_tab = false
           @continued_cut = false
           @undo = []
           @last_yank = nil
           loop do
-            changed.call(@line, @position)
+            draw(changed)
             key = get.call
             return nil unless key
             raise Interrupt if key == interrupt
+            next if @menu && handle_menu(key)
             if HISTORY_SEARCH_KEYS.include?(key) && ![erase, kill, eof].include?(key)
               @last_tab = @continued_cut = false
               @last_yank = nil
@@ -61,7 +63,7 @@ module Kward
             consecutive_cut = @continued_cut
             @continued_cut = false
             case key
-            when *TerminalKeys::TAB then complete(changed, alert)
+            when *TerminalKeys::TAB then complete(alert)
             when *TerminalKeys::UP then recall(-1, prefix: true)
             when *TerminalKeys::DOWN then recall(1, prefix: true)
             when TerminalKeys::CTRL_P then recall(-1)
@@ -97,23 +99,51 @@ module Kward
           end
         end
       ensure
-        @locale = @line = @draft = @entries = @undo = @last_yank = @history_prefix = nil
+        @locale = @line = @draft = @entries = @undo = @last_yank = @history_prefix = @menu = nil
       end
 
       private
 
-      def complete(changed, alert)
+      def complete(alert)
         completion = @runtime.complete_line(@line, @position)
         return alert.call unless completion
 
         if @line[completion.range] != completion.replacement
           replace(completion.range.begin, completion.range.size, @locale.text(completion.replacement))
         elsif @last_tab && completion.candidates.length > 1
-          changed.call(completion.candidates.join("\n"), nil)
+          @menu = completion
+          @menu_index = 0
         else
           alert.call
         end
         @last_tab = true
+      end
+
+      def draw(changed)
+        return changed.call(@line, @position) unless @menu
+
+        text = @line.dup
+        choice = @locale.text(@menu.choices.fetch(@menu_index))
+        text[@menu.choice_range] = choice
+        changed.call(text, @menu.choice_range.begin + choice.length, menu: [@menu.candidates, @menu_index])
+      end
+
+      def handle_menu(key)
+        case key
+        when *TerminalKeys::TAB, *TerminalKeys::SHIFT_TAB
+          direction = TerminalKeys::TAB.include?(key) ? 1 : -1
+          @menu_index = (@menu_index + direction) % @menu.choices.length
+          return true
+        when TerminalKeys::ESCAPE
+          @menu = nil
+          @last_tab = false
+          return true
+        end
+
+        replace(@menu.choice_range.begin, @menu.choice_range.size, @locale.text(@menu.choices.fetch(@menu_index)))
+        @menu = nil
+        @last_tab = false
+        TerminalKeys::RETURN.include?(key)
       end
 
       def previous_word

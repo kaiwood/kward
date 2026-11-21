@@ -4,7 +4,7 @@ module Kward
   module NativeShell
     # Complete literal words without expanding the draft or executing shell code.
     class Completion
-      Result = Struct.new(:range, :replacement, :candidates, keyword_init: true)
+      Result = Struct.new(:range, :replacement, :candidates, :choices, :choice_range, keyword_init: true)
       COMMAND_BOUNDARIES = %w[; && || | & ( ) { } ;; ;&].freeze
       COMMAND_PREFIXES = %w[! if then elif else while until do].freeze
       REDIRECTIONS = %w[< > << <<- >> <> >| <& >&].freeze
@@ -35,14 +35,17 @@ module Kward
         return if names.empty?
 
         match = names.one? ? names.first : common_prefix(names)
-        unless names.one? || match.length > prefix.length
-          return Result.new(range: start...cursor, replacement: raw, candidates: names)
-        end
-
         finish = word_end(input, current, cursor)
-        replacement = candidate_text(match, tilde: tilde, command: command_position && !prefix.include?("/"))
-        replacement += " " if finish == input.length && names.one? && !match.end_with?("/")
-        Result.new(range: start...finish, replacement: replacement, candidates: names)
+        format = ->(name) { candidate_text(name, tilde: tilde, command: command_position && !prefix.include?("/")) }
+        choices = names.map do |name|
+          text = format.call(name)
+          text += " " if finish == input.length && !name.end_with?("/")
+          text
+        end
+        extend_word = names.one? || match.length > prefix.length
+        Result.new(range: start...(extend_word ? finish : cursor),
+                   replacement: names.one? ? choices.first : (extend_word ? format.call(match) : raw),
+                   candidates: names, choices: choices, choice_range: start...finish)
       rescue SyntaxError, ArgumentError, EncodingError, SystemCallError
         nil
       end
