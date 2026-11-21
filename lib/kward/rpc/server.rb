@@ -668,7 +668,7 @@ module Kward
           },
           startupResources: { supported: true, method: STARTUP_RESOURCE_METHODS.first },
           starterPack: { supported: false, reason: "cliOnlyInstallCommand" },
-          shell: { supported: false, nativeScripting: false, history: false, lineEditing: false, promptFormat: false, mailNotifications: false, reason: "interactiveTuiOnly" },
+          shell: { supported: false, nativeScripting: false, history: false, lineEditing: false, programmableCompletion: false, promptFormat: false, mailNotifications: false, reason: "interactiveTuiOnly" },
           scratchpad: { supported: false, reason: "interactiveTuiOnly" },
           extensionUi: {
             question: { supported: true, notification: UI_QUESTION_NOTIFICATION, method: UI_METHODS.first, maxQuestions: 4, multiSelect: false, preview: false },

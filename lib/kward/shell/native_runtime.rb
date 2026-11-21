@@ -10,6 +10,8 @@ require_relative "native_builtins"
 require_relative "native_history"
 require_relative "native_interactive"
 require_relative "native_arrays"
+require_relative "native_locals"
+require_relative "native_programmable_completion"
 require_relative "native_jobs"
 require_relative "native_traps"
 require_relative "native_program"
@@ -41,12 +43,14 @@ module Kward
       include Interactive
       include Condition
       include Arrays
+      include Locals
+      include ProgrammableCompletion
       include Jobs
       include Traps
 
-      UNSUPPORTED = %w[local typeset builtin].freeze
+      UNSUPPORTED = %w[typeset builtin].freeze
       SPECIAL = %w[export readonly eval . source unset exit return break continue shift set exec trap times :].freeze
-      BUILTINS = (SPECIAL + %w[true false cd pwd alias unalias read getopts command shopt declare umask ulimit kwsh jobs fg bg wait kill hash type fc]).freeze
+      BUILTINS = (SPECIAL + %w[true false cd pwd alias unalias read getopts command shopt local declare complete compgen umask ulimit kwsh jobs fg bg wait kill hash type fc]).freeze
 
       attr_reader :variables, :aliases, :status, :exited
 
@@ -68,6 +72,8 @@ module Kward
         @shell_pid = Process.pid
         @process_owned = process_owned
         @functions = {}
+        @local_scopes = []
+        @completion_functions = {}
         @command_hash = {}
         @arrays = {}
         @readonly = Set.new
@@ -229,6 +235,8 @@ module Kward
             result = evaluate(command, streams, ignored: index < rest.length - 1) if operator == "&&" ? result.zero? : !result.zero?
           end
           result
+        when :local_array
+          local_array(*node.values)
         when :declare_array
           mode, name, words = node.values
           declare_array([mode, name])
@@ -409,7 +417,7 @@ module Kward
           declaration_index += 1
           declaration_index += 1 while words[declaration_index]&.literal&.match?(/\A(?:-p+|--)\z/)
         end
-        declaration_utility = %w[export readonly].include?(words[declaration_index]&.literal)
+        declaration_utility = %w[export readonly local].include?(words[declaration_index]&.literal)
         arguments = words.each_with_index.flat_map do |word, index|
           declaration = declaration_utility && index > declaration_index && word.assignment
           expand(word, assignment: !!declaration)
@@ -474,6 +482,9 @@ module Kward
         when "read" then read_variables(args, streams)
         when "readonly" then readonly(args, streams)
         when "declare" then declare_array(args)
+        when "local" then local_builtin(args)
+        when "complete" then complete_builtin(args)
+        when "compgen" then compgen_builtin(args, streams)
         when "umask" then umask_builtin(args, streams)
         when "ulimit" then ulimit_builtin(args, streams)
         when "shopt" then shopt(args, streams)
@@ -569,12 +580,14 @@ module Kward
         previous = @arguments
         @arguments = args
         @function_depth += 1
+        @local_scopes << {}
         begin
           evaluate(@functions.fetch(name), streams)
         rescue Flow => flow
           raise unless flow.kind == :return
           flow.status
         ensure
+          restore_locals(@local_scopes.pop)
           @arguments = previous
           @function_depth -= 1
         end

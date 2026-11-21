@@ -21,6 +21,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Support rbenv’s Bash initialization in interactive `kward shell`, with function-local variables and indexed arrays, `rbenv shell`, and programmable Tab completion.
+
 - Pause standalone shell history and shell-agent context capture with `history pause`, then restore recording with `history resume`.
 
 - Show local history suggestions in standalone shell drafts; press Right Arrow to accept a suggestion.

@@ -161,6 +161,73 @@ class TestCLIShell < KwardTestCase
     end
   end
 
+  def test_programmed_completion_uses_literal_arguments_and_isolates_shell_state
+    Dir.mktmpdir do |home|
+      File.write(File.join(home, ".kwshrc"), <<~'SHELL')
+        marker=outside
+        tool() { printf '<%s>\n' "$@"; }
+        _tool() {
+          marker=inside
+          if [ "$COMP_CWORD" -eq 1 ]; then
+            COMPREPLY=( $(compgen -W 'select status' -- "${COMP_WORDS[COMP_CWORD]}") )
+          else
+            local words=("${COMP_WORDS[@]}")
+            unset 'words[0]' 'words[COMP_CWORD]'
+            [ "${words[1]}" = select ] || return 1
+            COMPREPLY=('two words')
+          fi
+        }
+        complete -F _tool tool
+      SHELL
+      with_terminal("HOME" => home, "KWARD_CONFIG_PATH" => nil, "KWSH_AUTOSUGGEST" => "0") do |reader, writer, pid|
+        read_until(reader, PASTE_ON + "\r" + PROMPT)
+        writer.write("tool sel\t")
+        read_until(reader, "\r#{PROMPT}tool select \e[K")
+        writer.write("tw\t")
+        read_until(reader, "\r#{PROMPT}tool select two\\ words \e[K")
+        writer.write("\n")
+        read_until(reader, "\r\n<select>\r\n<two words>\r\n")
+        read_until(reader, PASTE_ON + "\r" + PROMPT)
+        writer.write("printf '%s\\n' \"$marker\"\n")
+        read_until(reader, "\r\noutside\r\n")
+        read_until(reader, PASTE_ON + "\r" + PROMPT)
+        writer.write("tool \"$(touch #{Shellwords.escape(File.join(home, 'not-executed'))})\"\t")
+        read_until(reader, "\a")
+        writer.write("\x03")
+        read_until(reader, PASTE_ON + "\r" + PROMPT)
+        refute File.exist?(File.join(home, "not-executed"))
+        writer.write("exit 0\n")
+        assert_equal 0, wait_for_exit(pid).exitstatus
+      end
+    end
+  end
+
+  def test_programmed_completion_can_be_canceled_without_consuming_the_next_command
+    Dir.mktmpdir do |home|
+      File.write(File.join(home, ".kwshrc"), <<~'SHELL')
+        task() { printf '<%s>\n' "$@"; }
+        _task() {
+          /bin/sleep 30 &
+          printf '%s' "$!" >"$HOME/completion-child"
+          wait
+        }
+        complete -F _task task
+      SHELL
+      with_terminal("HOME" => home, "KWARD_CONFIG_PATH" => nil) do |reader, writer, pid|
+        read_until(reader, PASTE_ON + "\r" + PROMPT)
+        writer.write("task try\t")
+        wait_until(timeout: 1) { File.exist?(File.join(home, "completion-child")) }
+        writer.write("\x03")
+        read_until(reader, "\a")
+        writer.write("again\n")
+        read_until(reader, "\r\n<tryagain>\r\n")
+        read_until(reader, PASTE_ON + "\r" + PROMPT)
+        writer.write("exit\n")
+        assert_equal 0, wait_for_exit(pid).exitstatus
+      end
+    end
+  end
+
   def test_completion_menu_cycles_cancels_and_accepts_without_submitting
     Dir.mktmpdir do |dir|
       ["match-left", "match right"].each { |name| File.write(File.join(dir, name), "") }

@@ -1064,6 +1064,47 @@ class TestNativeShell < KwardTestCase
     assert_output("<a><b>", 'printf "<%s>" ""{a,b}')
   end
 
+  def test_local_bindings_follow_calls_and_restore_scalars_arrays_and_export_state
+    assert_output("inner:child|parent:two words|global:old:kept", <<~'SHELL')
+      export value=global
+      list=(old 'two words')
+      helper() { printf '%s:' "$value"; value=child; }
+      inner() {
+        local value=inner
+        helper
+        printf '%s|' "$value"
+        return 7
+      }
+      outer() {
+        local value=parent
+        local list=("${list[@]}")
+        unset 'list[0]'
+        local only='two words'
+        export only
+        readonly value
+        inner_scope() { printf '%s:%s|' "$value" "${list[1]}"; }
+        inner_scope
+        list[1]=changed
+      }
+      inner
+      test "$?" -eq 7 || exit 9
+      outer
+      test "${only-unset}" = unset || exit 8
+      value=global
+      /bin/sh -c 'printf "%s:" "$value"'
+      printf '%s:kept' "${list[0]}"
+    SHELL
+  end
+
+  def test_local_errors_and_compgen_word_list_filter
+    status, output, error = execute("local not_in_a_function")
+    assert_equal 2, status
+    assert_empty output
+    assert_includes error, "local: only valid in a function"
+    assert_output("two words\ntwo-times\n", %q{compgen -W '"two words" two-times one' -- two})
+    assert_output("", 'compgen -W "alpha beta" -- z', status: 1)
+  end
+
   def test_dot_sourcing_and_eval_use_native_state_and_restore_arguments
     File.write(File.join(@directory, "library.kwsh"), 'VALUE=$1; helper() { printf "%s" "$VALUE"; }; return 7; printf bad')
     assert_output("7:outer:inner:3", <<~'SHELL')

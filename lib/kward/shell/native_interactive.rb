@@ -32,11 +32,13 @@ module Kward
         @options.include?(name)
       end
 
-      def complete_line(text, cursor)
+      def complete_line(text, cursor, cancel: nil)
         return if @hosted
 
         commands = self.class::BUILTINS + @aliases.keys + @functions.keys
-        Completion.new(directory: @directory, variables: @variables, commands: commands).complete(text, cursor)
+        Completion.new(directory: @directory, variables: @variables, commands: commands).complete(text, cursor) do |words|
+          programmed_candidates(words, cancel: cancel) unless @job_child || @history&.paused?
+        end
       end
 
       def vi_expansions(text, full:)

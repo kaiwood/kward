@@ -65,6 +65,10 @@ module Kward
         array = @arrays[name] ||= ArrayValue.new(associative: false, values: {})
         @variables.delete(name)
         array.values.clear unless append
+        populate_array(array, name, words, append: append)
+      end
+
+      def populate_array(array, name, words, append: false)
         index = append && !array.associative ? (array.values.keys.max || -1) + 1 : 0
         words.each do |word|
           if (element = word.array_element)

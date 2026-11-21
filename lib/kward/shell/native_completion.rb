@@ -13,7 +13,7 @@ module Kward
         @directory, @variables, @commands = directory, variables, commands
       end
 
-      def complete(input, cursor)
+      def complete(input, cursor, &programmed)
         source = input[0...cursor]
         tokens = lex(source)
         current = tokens.pop if tokens.last&.value.is_a?(Word) && tokens.last.finish >= cursor
@@ -24,14 +24,19 @@ module Kward
         return unless current || source[tokens.last&.finish || 0..].match?(/\A[ \t\r]*\z/)
 
         prefix ||= ""
-        command, redirect = command_context(tokens)
+        words, redirect = command_context(tokens)
+        command = words.first || ("" unless words.empty?)
         command_position = command.nil? && !redirect
         tilde = raw.start_with?("~/")
-        names = if command_position && !prefix.include?("/")
-                  command_candidates(prefix)
-                else
-                  path_candidates(prefix, tilde: tilde, directories_only: command == "cd" && !redirect, executable: command_position)
-                end
+        names = programmed.call(words + [prefix]) if programmed && words.first && !redirect && words.none?(&:nil?)
+        if names
+          names = names.select { |name| candidate?(name, prefix) }.uniq.sort
+          tilde = false
+        elsif command_position && !prefix.include?("/")
+          names = command_candidates(prefix)
+        else
+          names = path_candidates(prefix, tilde: tilde, directories_only: command == "cd" && !redirect, executable: command_position)
+        end
         return if names.empty?
 
         match = names.one? ? names.first : common_prefix(names)
@@ -81,24 +86,24 @@ module Kward
       end
 
       def command_context(tokens)
-        command = nil
+        words = []
         redirect = false
         tokens.each do |token|
           value = token.value
           if COMMAND_BOUNDARIES.include?(value)
-            command = nil
+            words.clear
             redirect = false
           elsif REDIRECTIONS.include?(value) || (value.is_a?(Array) && value.first == :redirect)
             redirect = true
           elsif value.is_a?(Word)
             if redirect
               redirect = false
-            elsif !command && !value.assignment && !COMMAND_PREFIXES.include?(value.literal)
-              command = literal_text(token) || ""
+            elsif !words.empty? || !value.assignment && !COMMAND_PREFIXES.include?(value.literal)
+              words << literal_text(token)
             end
           end
         end
-        [command, redirect]
+        [words, redirect]
       end
 
       def command_candidates(prefix)

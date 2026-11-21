@@ -25,7 +25,7 @@ module Kward
         @locale.encoding
       end
 
-      def read(get:, paste:, changed:, alert:, clear:, erase:, kill:, eof:, interrupt:, suggestions: false, draft: nil)
+      def read(get:, paste:, changed:, alert:, clear:, erase:, kill:, eof:, interrupt:, suggestions: false, draft: nil, completion_cancel: nil)
         Locale.with(@runtime.variables) do |locale|
           @locale = locale
           @line = draft.to_s.b.force_encoding(encoding).scrub
@@ -72,7 +72,7 @@ module Kward
             consecutive_cut = @continued_cut
             @continued_cut = false
             case key
-            when *TerminalKeys::TAB then complete(alert)
+            when *TerminalKeys::TAB then complete(alert, completion_cancel)
             when *TerminalKeys::UP then move_vertical(-1)
             when *TerminalKeys::DOWN then move_vertical(1)
             when TerminalKeys::CTRL_P then recall(-1)
@@ -116,8 +116,8 @@ module Kward
 
       private
 
-      def complete(alert)
-        completion = @runtime.complete_line(@line, @position)
+      def complete(alert, cancel)
+        completion = @runtime.complete_line(@line, @position, cancel: cancel)
         return alert.call unless completion
 
         if @line[completion.range] != completion.replacement

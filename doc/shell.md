@@ -31,7 +31,7 @@ printf 'printf "hello\\n"\n' | kward shell
 
 Interactive `kward shell` executes `~/.kward/kwshrc` and then `~/.kwshrc` in the current shell. Put aliases, exports, functions, and other native shell code there. Ordinary `-c` commands, scripts, and piped input skip startup files unless you explicitly pass `-i`. The hosted `/shell` only reads declarative settings from these files. See [Configuration](configuration.md) for the difference.
 
-From a checkout, use `ruby exe/kward shell`. This is a traditional terminal frontend for **kwsh**, not Bash or Zsh; their startup files, programmable completions, and language extensions don’t carry over. The hosted composer and `/shell` shortcuts are not part of this mode. It isn’t an RPC or Pan session capability: it needs a local terminal for interactive editing and job control.
+From a checkout, use `ruby exe/kward shell`. This is a traditional terminal frontend for **kwsh**, not Bash or Zsh; their startup files and extensions don’t generally carry over. A small Bash-style completion subset supports rbenv. The hosted composer and `/shell` shortcuts are not part of this mode. It isn’t an RPC or Pan session capability: it needs a local terminal for interactive editing and job control.
 
 ### Edit commands and search history
 
@@ -365,7 +365,7 @@ shopt -s globstar
 printf '%s\n' **/*.rb
 ```
 
-Indexed arrays are sparse, accept arithmetic indices and negative indices relative to the greatest index, and expand in index order. Associative arrays require `declare -A`. Use `"${array[@]}"` for separate arguments, `"${array[*]}"` to join with IFS, and `${!array[@]}` for keys. `unset 'array[index]'` removes an element. Arrays remain private shell state, not environment strings. Declarations accept `declare -a/-A name=(...)` or separate declaration and assignment. `array+=(...)` appends elements, `array[index]+=text` appends to one value, and `read -a array` reads split fields. Local arrays, namerefs, alternate associative key/value-list syntax, and array prefix environments are not implemented.
+Indexed arrays are sparse, accept arithmetic indices and negative indices relative to the greatest index, and expand in index order. Associative arrays require `declare -A`. Use `"${array[@]}"` for separate arguments, `"${array[*]}"` to join with IFS, and `${!array[@]}` for keys. `unset 'array[index]'` removes an element. Arrays remain private shell state, not environment strings. Declarations accept `declare -a/-A name=(...)` or separate declaration and assignment. `array+=(...)` appends elements, `array[index]+=text` appends to one value, and `read -a array` reads split fields. Functions can use `local words=(...)` for a local indexed array. Local associative arrays, namerefs, alternate associative key/value-list syntax, and array prefix environments are not implemented.
 
 `[[ … ]]` avoids splitting and filesystem globbing. It supports string and numeric comparisons, common file tests, pattern matching with `==` / `!=`, parentheses, negation, and lazy `&&` / `||`. Quoting the pattern makes it literal. `=~` accepts regular expressions and sets indexed `BASH_REMATCH` captures. It uses Ruby's engine with a 100 ms timeout, so it is not an exact Bash/POSIX ERE implementation. Put Boolean operator boundaries around a regex operand in separate words.
 
@@ -374,6 +374,7 @@ Brace expansion runs before substitutions and only on unquoted source text. It s
 ### Manage script state
 
 - `. ./library.kwsh [args...]` (or `source ./library.kwsh [args...]`) executes a native library in the current shell. Supplied arguments temporarily replace the shell’s positional parameters. Paths with a slash resolve from the shell’s current directory if relative; bare names are searched on `PATH`. At the hosted `/shell` prompt, use `.` to execute code: top-level `source` there is a declarative config loader.
+- Inside a function, `local name` or `local name=value` shadows a variable until the function returns. Called functions can see the local value; variables not declared local can still change in the enclosing shell. `local name=(...)` does the same for an indexed array. Other Bash `local` flags are not supported.
 - `LINENO` reports the current source line, including commands in functions and sourced files. Explicitly assigning or unsetting it disables automatic tracking for that interpreter.
 - `readonly name=value`, `unset -f function`, `command [-p] [-v|-V]`, and `getopts` operate on interpreter state.
 - Explicit `eval` uses the native parser, not Ruby evaluation or a system shell. Treat its argument as executable source, not data.
@@ -555,6 +556,7 @@ The classification distinguishes **permitted choices** from **system constraints
 | Physical directory reporting (`native_directory.rb`) | macOS F_GETPATH's 1,024-byte buffer; Linux procfs name discovery | System/API constraints; the retained directory descriptor is separate from successful pathname reporting. |
 | Standalone prompt paste (`native_line_terminal.rb`) | 1 MiB per bracketed paste | Oversized pastes are discarded in full. This does not limit scripts or ordinary typed input. |
 | Standalone vi alias macros (`native_vi.rb`) | 100 nested replacements and 1 MiB cumulative replacement bytes per edit line | Additional UP safety policy, not an OS limit. Does not impose a typed-line length ceiling; profile closure must account for this retained restriction. |
+| Programmable completion (`native_programmable_completion.rb`) | 2 seconds, 256 candidates, 64 KiB of replies | Bounds an interactive Tab callback, not script execution. |
 | Native process and file resources (`ulimit` in `native_builtins.rb`) | Inherited or explicitly set OS resource limits, argument/environment size, filesystem limits, available memory/storage, Ruby stack/runtime constraints | Underlying system constraints, not promises that every source fitting a kwsh quota can execute. No Ruby/system-shell eval fallback is introduced. |
 | Hosted capture (`kwsh.rb`, `persistent_session.rb`) | Defaults: 1 MiB output and 300-second captured-command timeout; configurable through the existing shell configuration | Host policy only, unchanged. User-owned interactive commands do not get these capture/time limits. Normal model/RPC shell tools keep their own existing sandbox and cancellation policies. |
 | Hosted context/preparation/history (`kwsh.rb`, `prompt_session.rb`) | 32,000-byte last-output context and prepared-command bound; default 1,000 history entries | Host/UI policies, not standalone shell-language limits. History remains configurable as documented below. |
@@ -827,6 +829,20 @@ You can use functions, `if`, `eval`, and other supported native syntax, but not 
 To include a file, use `source "$HOME/.kward/kwsh-aliases"` or the POSIX spelling `. "$HOME/.kward/kwsh-aliases"`. If you used `source extra.rc` to load a file beside your rc, update it to an explicit path: native `source` searches `PATH` for a bare filename, and `source ./extra.rc` uses the current directory, not the rc file’s directory.
 
 If you set `ENV` before launching `kward shell`, it selects a separate startup file that runs after both rc files. Assigning `ENV` inside `kwshrc` does not select that file. Non-interactive invocations load neither `kwshrc` nor `ENV`.
+
+### Initialize rbenv
+
+If `rbenv` is already on the launch `PATH`, add this to `~/.kwshrc`:
+
+```sh
+if command -v rbenv >/dev/null 2>&1; then
+  eval "$(rbenv init - bash)"
+fi
+```
+
+If you launch from a GUI and the command is missing, add your Homebrew `bin` directory (typically `/opt/homebrew/bin` on Apple Silicon) to `PATH` before this block. With rbenv 1.3.2, `rbenv shell` and `rbenv rehash` work through the generated wrapper. In the default editor, try `rbenv shell ` and press **Tab** to complete installed versions. If you only want the shims, put `export PATH="${RBENV_ROOT:-$HOME/.rbenv}/shims:$PATH"` in your rc file instead.
+
+This is not general support for `bash-completion`. Native `complete -F function command` registers a function, and `compgen -W wordlist -- prefix` filters a quote-aware list without evaluating it as shell source. The callback receives literal command words through the cursor in `COMP_WORDS`, the current index in `COMP_CWORD`, and returns candidates in `COMPREPLY`. Only the default standalone editor invokes these callbacks. A callback runs with your privileges in a separate process without terminal input; shell-state changes don’t persist, but filesystem or network effects can. Register only trusted functions. **Ctrl+C** cancels a running callback without clearing the draft, and `history pause` disables callbacks entirely. Tab never evaluates the draft itself.
 
 ### Hosted shell configuration
 

@@ -28,10 +28,12 @@ module Kward
         @streams = { input: input, output: output, error: error }
         @left = @frame_rows = @cursor_row = @draft_top = 0
         @active_line = nil
+        @completion_byte = nil
         controls = control_characters(source)
         callbacks = { get: method(:character), changed: method(:redraw), alert: method(:alert) }
         if @bracketed_paste
           callbacks.merge!(get: method(:key), paste: method(:read_paste), clear: method(:clear_screen),
+                           completion_cancel: -> { cancel_completion?(controls.fetch(:interrupt)) },
                            suggestions: ANSI.enabled?(error, env: @runtime.variables) && @runtime.variables["KWSH_AUTOSUGGEST"] != "0")
         end
         result = source.raw(intr: false) do
@@ -119,7 +121,22 @@ module Kward
         nil
       end
 
+      def cancel_completion?(interrupt)
+        return true if @completion_byte
+        return false unless IO.select([@source], nil, nil, 0)
+
+        byte = @source.readpartial(1)
+        @completion_byte = byte unless byte == interrupt
+        true
+      rescue EOFError
+        true
+      end
+
       def read_byte(timeout: nil)
+        if @completion_byte
+          byte, @completion_byte = @completion_byte, nil
+          return byte
+        end
         loop do
           return @source.readpartial(1) if IO.select([@source], nil, nil, timeout || 0.1)
           return if timeout

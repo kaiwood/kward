@@ -923,6 +923,14 @@ module Kward
             words << take
           end
         end
+        if text == "(" && words.first&.literal == "local" && words.last&.assignment
+          name, value = words.last.assignment
+          unless words.length == 2 && name.is_a?(String) && value.parts.all? { |part| part.kind == :literal && part.text.empty? }
+            error("local array declaration requires name=(...)")
+          end
+          result = node(:local_array, name, array_elements)
+          return redirects.empty? ? result : node(:redirect, result, redirects)
+        end
         if text == "(" && words.first&.literal == "declare" && words.last&.assignment
           error("array declaration requires -a or -A") unless words.length == 3 && %w[-a -A].include?(words[1].literal)
           name, value = words.last.assignment
