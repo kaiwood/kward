@@ -17,6 +17,18 @@ class TestPtyTranscriptNormalizer < KwardTestCase
     assert_equal "abcXYZ", Kward::PtyTranscriptNormalizer.normalize("abcdef\e[3DXYZ")
   end
 
+  def test_cursor_positions_clamp_to_screen_width
+    assert_equal "ok     X", Kward::PtyTranscriptNormalizer.normalize("ok\e[1000GX", columns: 8)
+    assert_equal "ok     X", Kward::PtyTranscriptNormalizer.normalize("ok\e[1000CX", columns: 8)
+    assert_equal "Xk", Kward::PtyTranscriptNormalizer.normalize("ok\e[1000DX", columns: 8)
+  end
+
+  def test_expanded_rows_respect_the_transcript_byte_budget
+    output = "\e[80GX\n" * 2
+
+    assert_nil Kward::PtyTranscriptNormalizer.normalize(output, max_bytes: 100)
+  end
+
   def test_static_lines_preserve_sgr_and_remove_terminal_modes
     output = "\e[?2026h\e[32mdone\e[0m\e[?2026l"
 

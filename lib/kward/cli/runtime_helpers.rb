@@ -483,8 +483,8 @@ module Kward
         return if sink&.truncated?
 
         text = ANSI.normalize_transcript_encoding(sink&.captured_output.to_s).gsub("\r\n", "\n")
-        sanitized = PtyTranscriptNormalizer.normalize(text)
-        return if sanitized.empty?
+        sanitized = PtyTranscriptNormalizer.normalize(text, columns: TTY::Screen.width, max_bytes: MAX_TRANSIENT_TERMINAL_OUTPUT_BYTES)
+        return if sanitized.nil? || sanitized.empty?
         return if ANSI.strip_control_sequences(sanitized).match?(UNSAFE_TRANSCRIPT_CONTROL_PATTERN)
 
         sanitized
@@ -520,14 +520,14 @@ module Kward
         return if text.empty?
 
         if normalize_line_controls
-          sanitized = PtyTranscriptNormalizer.normalize(text)
+          sanitized = PtyTranscriptNormalizer.normalize(text, columns: TTY::Screen.width, max_bytes: MAX_TRANSIENT_TERMINAL_OUTPUT_BYTES)
         else
           return if text.include?("\r")
 
           sanitized = ANSI.sanitize_transcript(text)
           return unless sanitized == text
         end
-        return if sanitized.empty?
+        return if sanitized.nil? || sanitized.empty?
         return if ANSI.strip_control_sequences(sanitized).match?(UNSAFE_TRANSCRIPT_CONTROL_PATTERN)
 
         sanitized

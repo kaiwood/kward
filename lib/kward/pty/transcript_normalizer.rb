@@ -6,21 +6,30 @@ module Kward
   class PtyTranscriptNormalizer
     HORIZONTAL_REDRAW_PATTERN = /\r|\e\[[0-9;]*[CDGK`]/.freeze
 
-    def self.normalize(text)
-      text.split("\n", -1).map do |line|
-        if line.match?(HORIZONTAL_REDRAW_PATTERN)
-          Line.new(line).render
+    MAX_SCREEN_COLUMNS = 4096
+
+    def self.normalize(text, columns: 80, max_bytes: nil)
+      columns = columns.to_i.clamp(1, MAX_SCREEN_COLUMNS)
+      output = +""
+      text.each_line do |line|
+        body = line.delete_suffix("\n")
+        output << if body.match?(HORIZONTAL_REDRAW_PATTERN)
+          Line.new(body, columns).render
         else
-          ANSI.sanitize_transcript(line)
+          ANSI.sanitize_transcript(body)
         end
-      end.join("\n")
+        output << "\n" if line.end_with?("\n")
+        return nil if max_bytes && output.bytesize > max_bytes
+      end
+      output
     end
 
     # Applies the horizontal cursor controls accepted by AdaptivePtyOutputSink
     # without modeling a complete terminal screen.
     class Line
-      def initialize(text)
+      def initialize(text, columns)
         @text = text
+        @last_column = columns - 1
         @cells = []
         @cursor = 0
       end
@@ -43,19 +52,18 @@ module Kward
       end
 
       def set_column(sequence)
-        @cursor = [parameter(sequence, default: 1), 1].max - 1
+        @cursor = (parameter(sequence, default: 1) - 1).clamp(0, @last_column)
       end
 
       def move_cursor(sequence, direction)
         distance = [parameter(sequence, default: 1), 1].max
-        @cursor = [@cursor + (distance * direction), 0].max
+        @cursor = (@cursor + (distance * direction)).clamp(0, @last_column)
       end
 
       def erase_line(sequence)
         case parameter(sequence, default: 0)
         when 1
-          fill_to_cursor
-          0.upto(@cursor) { |index| @cells[index] = " " }
+          0.upto([@cursor, @cells.length - 1].min) { |index| @cells[index] = " " }
         when 2
           @cells.clear
         else
@@ -76,7 +84,7 @@ module Kward
           when "\b"
             @cursor = [@cursor - 1, 0].max
           when "\t"
-            @cursor = ((@cursor / 8) + 1) * 8
+            @cursor = [((@cursor / 8) + 1) * 8, @last_column].min
           else
             fill_to_cursor
             @cells[@cursor] = character
