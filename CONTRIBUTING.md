@@ -23,7 +23,7 @@ Run the CLI from the checkout with:
 
 ```bash
 ruby lib/main.rb
-ruby lib/main.rb "Explain this project"
+ruby lib/main.rb prompt "Explain this project"
 ```
 
 See [Platform support](doc/platform-support.md) for operating-system and terminal expectations.

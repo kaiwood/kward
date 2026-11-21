@@ -95,7 +95,7 @@ Run the CLI locally:
 
 ```bash
 ruby lib/main.rb
-ruby lib/main.rb "Explain this project"
+ruby lib/main.rb prompt "Explain this project"
 ```
 
 Benchmark composer hot paths:
