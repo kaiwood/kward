@@ -9,6 +9,8 @@ All notable changes to Kward will be documented in this file.
 - Require `kward prompt <text>` for one-shot model prompts and add `kward filter <instruction>` for explicit stdin filtering; unknown CLI arguments now fail instead of being sent to the model.
 - Initialize the model client before launching interactive chat so the configured model catalog and picker are available at startup.
 
+- Merge opt-in shell history across terminals and browse matching commands with Up/Down after typing a prefix.
+
 ### Added
 
 - Added `kward shell` to run native kwsh directly in your terminal without starting the agent or composer at launch. Use `?` to ask the same shell agent as `/shell` about recent output, run an explicit command, or prefill an editable command draft. Interactive sessions load `kwshrc` aliases and exports. The standalone prompt has Tab completion, arrow-key history and editing, bracketed paste, and native job control.

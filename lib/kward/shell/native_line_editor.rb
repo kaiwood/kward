@@ -30,8 +30,11 @@ module Kward
           @locale = locale
           @line = draft.to_s.b.force_encoding(encoding).scrub
           @position = @line.length
-          @entries = @runtime.history.entries
+          @history = @runtime.history
+          @history.refresh
+          @entries = @history.entries
           @index = @entries.length
+          @history_prefix = nil
           @last_tab = false
           @continued_cut = false
           @undo = []
@@ -44,6 +47,8 @@ module Kward
             if HISTORY_SEARCH_KEYS.include?(key) && ![erase, kill, eof].include?(key)
               @last_tab = @continued_cut = false
               @last_yank = nil
+              refresh_history if @index == @entries.length
+              @history_prefix = nil
               key = search_history(key, get: get, changed: changed, alert: alert, clear: clear, erase: erase, interrupt: interrupt)
               return nil unless key
               next if key == :cancel_search
@@ -57,8 +62,10 @@ module Kward
             @continued_cut = false
             case key
             when *TerminalKeys::TAB then complete(changed, alert)
-            when *TerminalKeys::UP, TerminalKeys::CTRL_P then recall(-1)
-            when *TerminalKeys::DOWN, TerminalKeys::CTRL_N then recall(1)
+            when *TerminalKeys::UP then recall(-1, prefix: true)
+            when *TerminalKeys::DOWN then recall(1, prefix: true)
+            when TerminalKeys::CTRL_P then recall(-1)
+            when TerminalKeys::CTRL_N then recall(1)
             when *TerminalKeys::LEFT, TerminalKeys::CTRL_B then @position = [@position - 1, 0].max
             when *TerminalKeys::RIGHT, TerminalKeys::CTRL_F then @position = [@position + 1, @line.length].min
             when *TerminalKeys::HOME, TerminalKeys::CTRL_A then @position = 0
@@ -90,7 +97,7 @@ module Kward
           end
         end
       ensure
-        @locale = @line = @draft = @entries = @undo = @last_yank = nil
+        @locale = @line = @draft = @entries = @undo = @last_yank = @history_prefix = nil
       end
 
       private
@@ -174,6 +181,7 @@ module Kward
       def replace(start, length, text = "")
         removed = @line[start, length]
         if removed != text
+          @history_prefix = nil
           @undo << [start, text.length, removed, @position]
           @undo.shift if @undo.length > UNDO_LIMIT
           @line[start, length] = text
@@ -186,6 +194,7 @@ module Kward
         return unless change
 
         start, length, text, cursor = change
+        @history_prefix = nil
         @line[start, length] = text
         @position = cursor
       end
@@ -194,11 +203,28 @@ module Kward
         key.length == 1 && key.ord >= 32 && key.ord != 127
       end
 
-      def recall(direction)
-        index = @index + direction
-        return unless index.between?(0, @entries.length)
+      def refresh_history
+        @history.refresh
+        @entries = @history.entries
+        @index = @entries.length
+      end
 
-        select_history(index)
+      def recall(direction, prefix: false)
+        if @index == @entries.length
+          return if direction.positive?
+
+          refresh_history
+        end
+        @history_prefix = prefix ? (@history_prefix || @line.dup) : nil
+        index = @index + direction
+        while index.between?(0, @entries.length)
+          if index == @entries.length || !@history_prefix || history_text(index).start_with?(@history_prefix)
+            select_history(index)
+            @history_prefix = nil if index == @entries.length
+            return
+          end
+          index += direction
+        end
       end
 
       def search_history(key, get:, changed:, alert:, clear:, erase:, interrupt:)

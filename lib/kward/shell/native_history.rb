@@ -1,5 +1,6 @@
 require "json"
 require "tmpdir"
+require "tempfile"
 
 module Kward
   module NativeShell
@@ -16,7 +17,7 @@ module Kward
         @owner = Process.pid
         path = variables["HISTFILE"]
         @path = directory.resolve(path) if path && !path.empty?
-        load_entries
+        refresh
       rescue SystemCallError, IOError, ArgumentError
         @path = nil
       end
@@ -39,10 +40,22 @@ module Kward
 
       def add(text)
         return if text.strip.empty?
-        @entries << [@next_number, text.chomp]
-        @next_number += 1
-        @entries.shift while @entries.size > @size
-        persist
+        text = text.chomp
+        saved = with_lock do
+          entries = read_entries
+          number = [@next_number, entries.last&.first.to_i + 1].max
+          entries = (entries << [number, text]).last(@size)
+          persist(entries)
+          update_entries(entries, number + 1)
+        end
+        update_entries((@entries + [[@next_number, text]]).last(@size), @next_number + 1) unless saved
+      end
+
+      def refresh
+        with_lock do
+          entries = read_entries
+          update_entries(entries.last(@size), entries.last&.first.to_i + 1)
+        end
       end
 
       def select(first, last, listing:)
@@ -69,49 +82,63 @@ module Kward
         index.clamp(0, @entries.length - 1)
       end
 
-      def with_file
+      def with_lock
         return unless @path && Process.pid == @owner
+
         flags = File::RDWR | File::CREAT | File::NOFOLLOW | File::NONBLOCK
-        File.open(@path, flags, 0600) do |file|
-          stat = file.stat
-          unless stat.file? && stat.uid == Process.uid && stat.nlink == 1 && (stat.mode & 0777) == 0600
-            @path = nil
-            return
-          end
-          file.flock(File::LOCK_EX)
-          yield file
+        File.open("#{@path}.lock", flags, 0600) do |lock|
+          validate_file(lock)
+          lock.flock(File::LOCK_EX)
+          yield
         end
       rescue SystemCallError, IOError, ArgumentError, JSON::ParserError
         @path = nil
       end
 
-      def load_entries
-        with_file do |file|
-          file.each_line do |line|
-            entry = JSON.parse(line)
-            raise ArgumentError, "invalid history" unless entry.is_a?(Array) && entry.size == 2
-            if entry[1].is_a?(Hash) && entry[1].keys == ["bytes"] && entry[1]["bytes"].is_a?(String)
-              entry[1] = entry[1]["bytes"].unpack1("m0")
-            end
-            raise ArgumentError, "invalid history" unless entry[0].is_a?(Integer) && entry[0] >= @next_number && entry[1].is_a?(String)
-            @next_number = entry[0] + 1
-            @entries << entry
-            @entries.shift while @entries.length > @size
-          end
-        end
+      def validate_file(file)
+        stat = file.stat
+        return if stat.file? && stat.uid == Process.uid && stat.nlink == 1 && (stat.mode & 0777) == 0600
+
+        raise IOError, "unsafe history file"
       end
 
-      def persist
-        with_file do |file|
-          file.rewind
-          @entries.each do |number, text|
+      def read_entries
+        entries = []
+        File.open(@path, File::RDONLY | File::NOFOLLOW | File::NONBLOCK) do |file|
+          validate_file(file)
+          file.each_line do |line|
+            entry = JSON.parse(line)
+            if entry.is_a?(Array) && entry[1].is_a?(Hash) && entry[1].keys == ["bytes"] && entry[1]["bytes"].is_a?(String)
+              entry[1] = entry[1]["bytes"].unpack1("m0")
+            end
+            unless entry.is_a?(Array) && entry.size == 2 && entry[0].is_a?(Integer) && entry[0] > entries.last&.first.to_i && entry[1].is_a?(String)
+              raise ArgumentError, "invalid history"
+            end
+            entries << entry
+          end
+        end
+        entries
+      rescue Errno::ENOENT
+        []
+      end
+
+      def persist(entries)
+        Tempfile.create(".kwsh-history-", File.dirname(@path)) do |file|
+          entries.each do |number, text|
             value = text.dup.force_encoding(Encoding::UTF_8)
             value = { "bytes" => [text].pack("m0") } unless value.valid_encoding?
             file.puts(JSON.generate([number, value]))
           end
-          file.truncate(file.pos)
+          file.fsync
+          File.rename(file.path, @path)
         end
       end
+
+      def update_entries(entries, next_number)
+        @entries = entries
+        @next_number = [@next_number, next_number].max
+      end
+
     end
 
     module HistoryCommands

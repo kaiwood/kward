@@ -39,6 +39,8 @@ In the default editor, use **Option+Left/Right** (**Alt+Left/Right** on other ke
 
 **Ctrl+K** cuts to the end of the current line. **Ctrl+U** clears the whole draft. Use **Ctrl+Y** to insert the most recent cut at the cursor, even at the next prompt. Consecutive word cuts can be yanked together; nothing runs until you press **Enter**.
 
+Type a prefix and press **Up/Down** to browse matching commands. With an empty draft, the arrows browse all commands; **Ctrl+P/N** always browse without a prefix.
+
 Press **Ctrl+R** and type part of a command to find it in history. Press **Ctrl+R** again for older matches, or **Ctrl+S** to move toward newer matches. **Enter** runs a match, **Left/Right** returns to editing it, and **Ctrl+G** or **Esc** restores your original draft. If the search fails, use **Backspace** to shorten the query; Enter won’t run an earlier match by mistake.
 
 - **Ctrl+L** clears the visible screen and redraws the draft without clearing scrollback.
@@ -637,9 +639,9 @@ Set `MAIL` to a mailbox pathname, or `MAILPATH` to colon-separated `path%message
 
 In `kwsh -i`, use `fc -l` to list recent commands, `fc -s old=new` to run the previous command with one replacement, or `fc -e vi` to edit and execute it. Numbers, negative offsets and command prefixes select entries; `fc -lnr 1 10` lists a reversed range without numbers. Replayed commands use the native interpreter, with the same assignments and redirections as `fc`.
 
-History defaults to **512 entries in memory**. For persistence, set `HISTFILE` to a private file before the first prompt (for example in your `ENV` startup file). `HISTSIZE` is a decimal entry count. Both are read once when history is first used; later changes do not reconfigure it. No file is created implicitly under `HOME`. History can contain secrets: do not enable persistence for sensitive sessions.
+History defaults to **512 entries in memory**. For persistence, set `HISTFILE` to a private file before the first prompt (for example `export HISTFILE="$HOME/.kwsh_history"` in `~/.kwshrc` for `kward shell`). `HISTSIZE` is a decimal entry count. Both are read once when history is first used; later changes do not reconfigure it. No file is created implicitly under `HOME`. History can contain secrets: do not enable persistence for sensitive sessions.
 
-History files use private JSONL records with stable, increasing numbers and lossless storage of non-UTF-8 command bytes. The byte encoding is not encryption. New files are mode 0600; existing files must be regular, owned by the current user, mode 0600, and have one hard link. Symlinks and unsafe/inaccessible files fall back to memory without modifying their permissions. Updates are locked, but simultaneous shells can overwrite each other's snapshots; use separate files for independent terminals. Forked environments do not write their parent's history.
+History files use private JSONL records with stable, increasing numbers and lossless storage of non-UTF-8 command bytes. The byte encoding is not encryption. New files are mode 0600; existing files must be regular, owned by the current user, mode 0600, and have one hard link. Symlinks and unsafe/inaccessible files fall back to memory without modifying their permissions. Shells using the same file merge each new entry under a separate `.lock` file and replace the history file atomically. The default `kward shell` editor refreshes when you start browsing or searching from a fresh draft. Use separate files for independent history, and use the same `HISTSIZE` across shells sharing a file. Forked environments do not write their parent's history.
 
 `FCEDIT` is parameter-expanded and names one executable (default `ed`), not shell source or a command plus arguments. Explicit `fc -e editor` overrides it. Edited commands live in a mode-0600 file inside a private temporary directory, removed on completion, failure, or cancellation. A failed/cancelled editor never executes its buffer or adds it to history. As with other temporary files, an uncatchable process kill can leave a private directory behind.
 

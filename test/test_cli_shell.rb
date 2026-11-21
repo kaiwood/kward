@@ -228,6 +228,41 @@ class TestCLIShell < KwardTestCase
     end
   end
 
+  def test_open_shells_merge_history_and_find_new_entries_by_prefix
+    Dir.mktmpdir do |dir|
+      env = { "HISTFILE" => File.join(dir, "history") }
+      with_terminal(env) do |first, first_input, first_pid|
+        with_terminal(env) do |second, second_input, second_pid|
+          read_until(first, PROMPT)
+          read_until(second, PROMPT)
+          first_input.write("echo match-first\n")
+          read_until(first, "\r\nmatch-first\r\n")
+          read_until(first, PROMPT)
+          second_input.write("echo match-second\n")
+          read_until(second, "\r\nmatch-second\r\n")
+          read_until(second, PROMPT)
+          second_input.write("echo unrelated\n")
+          read_until(second, "\r\nunrelated\r\n")
+          read_until(second, PROMPT)
+          first_input.write("echo match\e[A")
+          read_until(first, "\r#{PROMPT}echo match-second\e[K")
+          first_input.write("\e[A")
+          read_until(first, "\r#{PROMPT}echo match-first\e[K")
+          first_input.write("\e[B\e[B\n")
+          read_until(first, "\r\nmatch\r\n")
+          read_until(first, PROMPT)
+          second_input.write("\x12echo match")
+          read_until(second, "(reverse-i-search: echo match): echo match\e[K")
+          second_input.write("\x07exit\n")
+          first_input.write("exit\n")
+          assert_equal 0, wait_for_exit(second_pid).exitstatus
+          assert_equal 0, wait_for_exit(first_pid).exitstatus
+        end
+      end
+      assert_equal 0600, File.stat(env.fetch("HISTFILE")).mode & 0777
+    end
+  end
+
   def test_incremental_history_search_moves_in_both_directions_and_can_restore_the_draft
     with_terminal do |reader, writer, pid|
       read_until(reader, PROMPT)
