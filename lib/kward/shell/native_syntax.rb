@@ -903,7 +903,7 @@ module Kward
         if ["<<", "<<-"].include?(operator)
           raw = @tokens[@index - 1].source
           delimiter = Shellwords.split(raw).join
-          target = HereDocument.new(delimiter: delimiter, strip_tabs: operator == "<<-", expand: !raw.match?(/["'\\\\]/))
+          target = HereDocument.new(delimiter: delimiter, strip_tabs: operator == "<<-", expand: !raw.match?(/["'\\]/))
           @lexer.queue_heredoc(target)
         end
         [descriptor, operator, target]
