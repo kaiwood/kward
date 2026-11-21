@@ -41,6 +41,8 @@ In the default editor, use **Option+Left/Right** (**Alt+Left/Right** on other ke
 
 Type a prefix and press **Up/Down** to browse matching commands. With an empty draft, the arrows browse all commands; **Ctrl+P/N** always browse without a prefix.
 
+While you type at the end of a fresh, single-line draft, the shell can show a matching history suffix in dim text. Press **Right Arrow** to insert it. **Enter** submits only the actual draft. Suggestions run locally, require terminal styling, and can be disabled with `export KWSH_AUTOSUGGEST=0` in `~/.kwshrc`.
+
 Press **Ctrl+R** and type part of a command to find it in history. Press **Ctrl+R** again for older matches, or **Ctrl+S** to move toward newer matches. **Enter** runs a match, **Left/Right** returns to editing it, and **Ctrl+G** or **Esc** restores your original draft. If the search fails, use **Backspace** to shorten the query; Enter won’t run an earlier match by mistake.
 
 - **Ctrl+L** clears the visible screen and redraws the draft without clearing scrollback.

@@ -25,7 +25,7 @@ module Kward
         @locale.encoding
       end
 
-      def read(get:, paste:, changed:, alert:, clear:, erase:, kill:, eof:, interrupt:, draft: nil)
+      def read(get:, paste:, changed:, alert:, clear:, erase:, kill:, eof:, interrupt:, suggestions: false, draft: nil)
         Locale.with(@runtime.variables) do |locale|
           @locale = locale
           @line = draft.to_s.b.force_encoding(encoding).scrub
@@ -42,7 +42,8 @@ module Kward
           @undo = []
           @last_yank = nil
           loop do
-            draw(changed)
+            suggestion = suggestion_for_draft if suggestions
+            draw(changed, suggestion)
             key = get.call
             return nil unless key
             raise Interrupt if key == interrupt
@@ -56,7 +57,10 @@ module Kward
               return nil unless key
               next if key == :cancel_search
             end
-            return @line + "\n" if TerminalKeys::RETURN.include?(key)
+            if TerminalKeys::RETURN.include?(key)
+              draw(changed, nil) if suggestion
+              return @line + "\n"
+            end
             return nil if key == eof && @line.empty?
 
             @vertical_column = nil unless (TerminalKeys::UP + TerminalKeys::DOWN).include?(key)
@@ -71,7 +75,9 @@ module Kward
             when TerminalKeys::CTRL_P then recall(-1)
             when TerminalKeys::CTRL_N then recall(1)
             when *TerminalKeys::LEFT, TerminalKeys::CTRL_B then @position = [@position - 1, 0].max
-            when *TerminalKeys::RIGHT, TerminalKeys::CTRL_F then @position = [@position + 1, @line.length].min
+            when *TerminalKeys::RIGHT
+              suggestion ? insert(suggestion) : move_right
+            when TerminalKeys::CTRL_F then move_right
             when *TerminalKeys::HOME, TerminalKeys::CTRL_A then @position = line_start
             when *TerminalKeys::END_KEY, TerminalKeys::CTRL_E then @position = line_end
             when erase, *TerminalKeys::BACKSPACE
@@ -122,13 +128,31 @@ module Kward
         @last_tab = true
       end
 
-      def draw(changed)
-        return changed.call(@line, @position) unless @menu
+      def draw(changed, suggestion)
+        return changed.call(@line, @position, suggestion: suggestion) unless @menu
 
         text = @line.dup
         choice = @locale.text(@menu.choices.fetch(@menu_index))
         text[@menu.choice_range] = choice
         changed.call(text, @menu.choice_range.begin + choice.length, menu: [@menu.candidates, @menu_index])
+      end
+
+      def suggestion_for_draft
+        return if @menu || @line.empty? || @line.include?("\n") || @position != @line.length || @index != @entries.length
+
+        @entries.reverse_each do |_, entry|
+          next unless entry.b.start_with?(@line.b)
+
+          text = @locale.text(entry)
+          next unless text.valid_encoding? && text.length > @position && !text.match?(/[[:cntrl:]]/)
+
+          return text[@position..]
+        end
+        nil
+      end
+
+      def move_right
+        @position += 1 if @position < @line.length
       end
 
       def handle_menu(key)

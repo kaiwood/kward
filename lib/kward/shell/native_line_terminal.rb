@@ -1,5 +1,6 @@
 require "io/console"
 require_relative "../terminal/keys"
+require_relative "../terminal/ansi"
 require_relative "../terminal/sequences"
 require_relative "../terminal/locale_text"
 require_relative "native_prompt_format"
@@ -30,7 +31,8 @@ module Kward
         controls = control_characters(source)
         callbacks = { get: method(:character), changed: method(:redraw), alert: method(:alert) }
         if @bracketed_paste
-          callbacks.merge!(get: method(:key), paste: method(:read_paste), clear: method(:clear_screen))
+          callbacks.merge!(get: method(:key), paste: method(:read_paste), clear: method(:clear_screen),
+                           suggestions: ANSI.enabled?(error, env: @runtime.variables) && @runtime.variables["KWSH_AUTOSUGGEST"] != "0")
         end
         result = source.raw(intr: false) do
           begin
@@ -143,7 +145,7 @@ module Kward
         @error.flush
       end
 
-      def redraw(text, position, menu: nil)
+      def redraw(text, position, menu: nil, suggestion: nil)
         unless position
           @error.write("\r\n")
           text.lines(chomp: true).each { |line| @error.write(TerminalText.locale_cells(line).map(&:first).join + "\r\n") }
@@ -156,7 +158,7 @@ module Kward
         return redraw_single_line(text, position, columns) unless @bracketed_paste
 
         menu_lines = menu_rows(menu, columns, [height - 1, 6].min)
-        rows, cursor, column = draft_rows(text, position, columns, height - menu_lines.length)
+        rows, cursor, column = draft_rows(text, position, columns, height - menu_lines.length, suggestion: suggestion)
         render_frame(rows, menu_lines, cursor, column, height)
       end
 
@@ -165,7 +167,7 @@ module Kward
         write("\r" + row + TerminalSequences::ERASE_LINE_END + TerminalSequences.move_to_column(column))
       end
 
-      def draft_rows(text, position, columns, limit)
+      def draft_rows(text, position, columns, limit, suggestion:)
         before = text[0...position]
         index = before.count("\n")
         offset = position - (before.rindex("\n") || -1) - 1
@@ -178,14 +180,14 @@ module Kward
         @active_line = index
         column = nil
         rows = lines[@draft_top, limit].map.with_index(@draft_top) do |line, number|
-          row, cursor_column = format_row(line, number == index ? offset : nil, columns, prompt: number.zero?)
+          row, cursor_column = format_row(line, number == index ? offset : nil, columns, prompt: number.zero?, suggestion: suggestion)
           column = cursor_column if number == index
           row
         end
         [rows, index - @draft_top, column]
       end
 
-      def format_row(text, position, columns, prompt:)
+      def format_row(text, position, columns, prompt:, suggestion: nil)
         prefix = prompt ? fit(prompt_cells_for_redraw, columns / 2) : []
         prompt_text = prompt && @prompt.is_a?(PromptFormat) ? @prompt.render(prefix) : prefix.map(&:first).join
         width = prefix.sum(&:last)
@@ -203,7 +205,13 @@ module Kward
           @left = left
           column = width + consumed + 1
         end
-        [prompt_text + fit(cells[left..], available).map(&:first).join, column]
+        visible = fit(cells[left..], available)
+        row = prompt_text + visible.map(&:first).join
+        if suggestion
+          tail = fit(TerminalText.locale_cells(suggestion), available - visible.sum(&:last)).map(&:first).join
+          row += ANSI.colorize(tail, :dim, enabled: true) unless tail.empty?
+        end
+        [row, column]
       end
 
       def menu_rows(menu, columns, limit)

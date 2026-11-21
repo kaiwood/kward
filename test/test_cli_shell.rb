@@ -273,6 +273,42 @@ class TestCLIShell < KwardTestCase
     end
   end
 
+  def test_history_suggestions_are_visible_but_only_right_arrow_accepts_them
+    with_terminal do |reader, writer, pid|
+      read_until(reader, PROMPT)
+      writer.write("echo local-suggestion\n")
+      read_until(reader, "\r\nlocal-suggestion\r\n")
+      read_until(reader, PROMPT)
+      writer.write("echo local")
+      read_until(reader, "echo local\e[2m-suggestion\e[0m")
+      writer.write("\n")
+      read_until(reader, "\r\nlocal\r\n")
+      read_until(reader, PROMPT)
+      writer.write("echo local\e[C")
+      read_until(reader, "\r#{PROMPT}echo local-suggestion\e[K")
+      writer.write("\n")
+      read_until(reader, "\r\nlocal-suggestion\r\n")
+      read_until(reader, PROMPT)
+      writer.write("exit\n")
+      assert_equal 0, wait_for_exit(pid).exitstatus
+    end
+  end
+
+  def test_disabling_autosuggestions_also_disables_right_arrow_acceptance
+    with_terminal("KWSH_AUTOSUGGEST" => "0") do |reader, writer, pid|
+      read_until(reader, PROMPT)
+      writer.write("echo disable-suggestion\n")
+      read_until(reader, "\r\ndisable-suggestion\r\n")
+      read_until(reader, PROMPT)
+      writer.write("echo disable\e[C\n")
+      output = read_until(reader, "\r\ndisable\r\n")
+      refute_includes output, "\e[2m"
+      read_until(reader, PROMPT)
+      writer.write("exit\n")
+      assert_equal 0, wait_for_exit(pid).exitstatus
+    end
+  end
+
   def test_incremental_history_search_moves_in_both_directions_and_can_restore_the_draft
     with_terminal do |reader, writer, pid|
       read_until(reader, PROMPT)
