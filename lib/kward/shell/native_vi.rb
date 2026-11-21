@@ -23,7 +23,7 @@ module Kward
         @locale.encoding
       end
 
-      def read(get:, changed:, alert:, erase: TerminalKeys::BACKSPACE.last, kill: TerminalKeys::CTRL_U, eof: TerminalKeys::CTRL_D, interrupt: TerminalKeys::CTRL_C)
+      def read(get:, changed:, alert:, erase: TerminalKeys::BACKSPACE.last, kill: TerminalKeys::CTRL_U, eof: TerminalKeys::CTRL_D, interrupt: TerminalKeys::CTRL_C, draft: nil)
         @get, @changed, @alert = get, changed, alert
         @erase, @kill, @eof, @interrupt = erase, kill, eof, interrupt
         @line, @draft, @original = +"", +"", +""
@@ -36,7 +36,8 @@ module Kward
         @macro_bytes = 0
         Locale.with(@runtime.variables) do |locale|
           @locale = locale
-          @line.force_encoding(locale.encoding)
+          @line = draft.to_s.b.force_encoding(locale.encoding).scrub
+          @position = @line.length
           loop do
             @changed.call(@line, @position)
             key = input

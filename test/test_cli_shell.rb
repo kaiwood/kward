@@ -268,11 +268,132 @@ class TestCLIShell < KwardTestCase
     end
   end
 
+  def test_shell_question_receives_the_last_stderr_and_exit_status_and_prepares_an_editable_draft
+    client = <<~'CODE'
+      def chat(messages, **)
+        prompt = messages.reverse.find { |message| (message[:role] || message["role"]) == "user" }
+        text = (prompt[:content] || prompt["content"]).to_s
+        if text.include?("prepare a command")
+          tool_result(messages) ? answer("Prepared a draft") : tool("prepare_shell_command", command: "/bin/echo draft")
+        elsif text.include?("Last exit status: 23") && text.include?("<shell_output>\nfixture failure\n")
+          answer("The last error was fixture failure.")
+        else
+          answer("Incorrect context: #{text}")
+        end
+      end
+    CODE
+    with_shell_agent(client) do |reader, writer, pid|
+      read_until(reader, PROMPT)
+      writer.write("/bin/sh -c 'echo fixture failure >&2; exit 23'\n")
+      read_until(reader, "\r\nfixture failure\r\n")
+      read_until(reader, PROMPT)
+      writer.write("? what was the last error message?\n")
+      read_until(reader, "\r\nThe last error was fixture failure.\r\n")
+      read_until(reader, PROMPT)
+      writer.write("? prepare a command\n\n")
+      read_until(reader, "\r\nPrepared a draft\r\n")
+      before_enter = read_until(reader, "ready> /bin/echo draft")
+      refute_includes before_enter, "\r\ndraft\r\n"
+      writer.write("-edited\n")
+      read_until(reader, "\r\ndraft-edited\r\n")
+      read_until(reader, PROMPT)
+      writer.write("exit 17\n")
+      assert_equal 17, wait_for_exit(pid).exitstatus
+    end
+  end
+
+  def test_shell_agent_runs_explicit_commands_in_the_live_shell_and_omits_output_after_input
+    client = <<~'CODE'
+      def chat(messages, **)
+        result = tool_result(messages)
+        if result
+          answer("Tool result: #{result[:content] || result["content"]}")
+        elsif messages.last.to_s.include?("interactive-secret")
+          answer("Leaked interactive input")
+        else
+          tool("run_shell_command", command: "export VIA_AGENT=live; /bin/echo tool-output")
+        end
+      end
+    CODE
+    with_shell_agent(client) do |reader, writer, pid|
+      read_until(reader, PROMPT)
+      writer.write("/bin/sh -c 'echo waiting; read -r value; echo \"$value\"'\n")
+      read_until(reader, "\r\nwaiting\r\n")
+      writer.write("interactive-secret\n")
+      read_until(reader, "\r\ninteractive-secret\r\n")
+      read_until(reader, PROMPT)
+      writer.write("? set VIA_AGENT to live\n")
+      output = read_until(reader, "Tool result: Exit status: 0")
+      refute_includes output, "\r\ntool-output\r\n"
+      read_until(reader, "\r\ntool-output\r\n")
+      read_until(reader, PROMPT)
+      writer.write("/bin/echo \"$VIA_AGENT\"\n")
+      read_until(reader, "\r\nlive\r\n")
+      read_until(reader, PROMPT)
+      writer.write("exit\n")
+      assert_equal 0, wait_for_exit(pid).exitstatus
+    end
+  end
+
+  def test_shell_agent_command_times_out_without_ending_the_live_shell
+    client = <<~'CODE'
+      def chat(messages, **)
+        result = tool_result(messages)
+        return answer((result[:content] || result["content"]).to_s) if result
+
+        tool("run_shell_command", command: "/bin/sleep 20", timeout_seconds: 1)
+      end
+    CODE
+    with_shell_agent(client) do |reader, writer, pid|
+      read_until(reader, PROMPT)
+      writer.write("? run a sleep command with a timeout\n")
+      read_until(reader, "\r\nExit status: 124\r\n")
+      read_until(reader, PROMPT)
+      writer.write("/bin/echo still-live\n")
+      read_until(reader, "\r\nstill-live\r\n")
+      read_until(reader, PROMPT)
+      writer.write("exit\n")
+      assert_equal 0, wait_for_exit(pid).exitstatus
+    end
+  end
+
   private
 
-  def with_terminal(env = {})
+  def with_shell_agent(client_code)
+    lib = File.expand_path("../lib", __dir__)
+    code = <<~RUBY_CODE
+      require "kward/shell/standalone_agent"
+      require "kward/entrypoint"
+      class ShellTestClient
+        def current_provider = "Codex"
+        def current_model = "fake-model"
+        def current_reasoning_effort = "medium"
+        def current_context_window = 200_000
+
+        def tool(name, **arguments)
+          { "role" => "assistant", "tool_calls" => [{ "id" => "call_1", "type" => "function",
+            "function" => { "name" => name, "arguments" => JSON.generate(arguments) } }] }
+        end
+
+        def tool_result(messages) = messages.reverse.find { |message| (message[:role] || message["role"]) == "tool" }
+        def answer(text) = { "role" => "assistant", "content" => text }
+        #{client_code}
+      end
+      class Kward::StandaloneAgent
+        def self.new = super(client: ShellTestClient.new)
+      end
+      exit Kward::Entrypoint.run
+    RUBY_CODE
+    Dir.mktmpdir do |home|
+      with_terminal({ "HOME" => home, "KWARD_CONFIG_PATH" => nil, "KWARD_CONFIG_DIR" => nil },
+                    command: ["-I", lib, "-e", code, "--"]) { |*pty| yield(*pty) }
+    end
+  end
+
+
+  def with_terminal(env = {}, command: [EXECUTABLE], **env_options)
     defaults = { "ENV" => nil, "HISTFILE" => "", "PS1" => PROMPT, "PS2" => "more> ", "TERM" => "xterm" }
-    PTY.spawn(defaults.merge(env), RbConfig.ruby, EXECUTABLE, "shell") do |reader, writer, pid|
+    PTY.spawn(defaults.merge(env, env_options), RbConfig.ruby, *command, "shell") do |reader, writer, pid|
       yield reader, writer, pid
     ensure
       # Close the PTY before reaping to release the terminal on macOS.

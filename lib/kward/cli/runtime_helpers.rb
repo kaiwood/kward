@@ -1,3 +1,5 @@
+require_relative "../shell/prompt_agent"
+
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # Command-line frontend that coordinates terminal interaction, sessions, tools, and model turns.
@@ -229,21 +231,13 @@ module Kward
 
       def build_shell_prompt_agent(active_agent)
         active_conversation = active_agent.conversation
-        config = ConfigFiles.read_config
-        configured_provider = ConfigFiles.shell_agent_provider(config)
-        conversation = Conversation.new(
-          system_message: ShellPrompt.system_message,
-          workspace_root: active_conversation.workspace_root,
-          provider: configured_provider || active_conversation.provider || current_model_provider,
-          model: ConfigFiles.shell_agent_model(config) || (configured_provider ? nil : active_conversation.model || current_model_id),
-          reasoning_effort: ConfigFiles.shell_agent_reasoning_effort(config) || (configured_provider ? nil : active_conversation.reasoning_effort || current_reasoning_effort)
-        )
-        Agent.new(
+        ShellPromptAgent.build(
           client: @client,
-          tool_registry: active_agent.tool_registry,
-          conversation: conversation,
-          strict_provider: !configured_provider.nil?,
-          warning_sink: ConfigFiles.warning_sink
+          registry: active_agent.tool_registry,
+          workspace_root: active_conversation.workspace_root,
+          provider: active_conversation.provider || current_model_provider,
+          model: active_conversation.model || current_model_id,
+          reasoning_effort: active_conversation.reasoning_effort || current_reasoning_effort
         )
       end
 

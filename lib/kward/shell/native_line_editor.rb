@@ -14,11 +14,11 @@ module Kward
         @locale.encoding
       end
 
-      def read(get:, paste:, changed:, alert:, erase:, kill:, eof:, interrupt:)
+      def read(get:, paste:, changed:, alert:, erase:, kill:, eof:, interrupt:, draft: nil)
         Locale.with(@runtime.variables) do |locale|
           @locale = locale
-          @line = +"".encode(encoding)
-          @position = 0
+          @line = draft.to_s.b.force_encoding(encoding).scrub
+          @position = @line.length
           @entries = @runtime.history.entries
           @index = @entries.length
           @last_tab = false

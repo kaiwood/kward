@@ -1,6 +1,6 @@
 # Standalone and embedded shell
 
-Use `kward shell` to run Kward’s native shell directly in your terminal, without starting the coding agent. If you’re already in Kward’s interactive TUI, choose the workflow that matches what you are doing:
+Use `kward shell` to run Kward’s native shell in your terminal. The shell starts without the agent or composer; use `?` when you want the agent. If you’re already in Kward’s interactive TUI, choose the workflow that matches what you are doing:
 
 - **For one quick command, use `!command`.** It runs from the active workspace and returns you to the normal composer when it finishes.
 - **For a longer stretch of shell work, use `/shell`.** It keeps its directory, environment, aliases, and history between commands.
@@ -17,7 +17,7 @@ Run this from the directory you want to work in. No Kward login or agent configu
 kward shell
 ```
 
-Output scrolls normally, and foreground programs such as `less` and Vim get the terminal directly. After a program exits, the shell prints its next prompt. Use **Up/Down** to recall history, **Left/Right** or **Home/End** to move, and **Backspace/Delete** to edit. Press **Tab** to complete a command, alias, function, or path. Tab extends a common prefix; press it again to list choices when there’s no more text to insert. After `cd`, it suggests directories only. In a terminal that supports bracketed paste, pasted commands stay in the draft until you press **Enter**, even if they span several lines. **Ctrl+C** cancels the draft, and **Ctrl+D** on an empty prompt (or `exit`) leaves the shell.
+Output scrolls normally, and foreground programs such as `less` and Vim own the shell’s terminal while they run. After a program exits, the shell prints its next prompt. Use **Up/Down** to recall history, **Left/Right** or **Home/End** to move, and **Backspace/Delete** to edit. Press **Tab** to complete a command, alias, function, or path. Tab extends a common prefix; press it again to list choices when there’s no more text to insert. After `cd`, it suggests directories only. In a terminal that supports bracketed paste, pasted commands stay in the draft until you press **Enter**, even if they span several lines. **Ctrl+C** cancels the draft, and **Ctrl+D** on an empty prompt (or `exit`) leaves the shell.
 
 Use `kward shell -o vi` or `set -o vi` to switch to native vi editing. `set +o vi` returns to the default editor. `TERM=dumb` falls back to plain input. Piping input runs the shell non-interactively unless you pass `-i`. History is in memory by default; see [standalone history](#standalone-command-history) for persistence and replay.
 
@@ -31,7 +31,23 @@ printf 'printf "hello\\n"\n' | kward shell
 
 Interactive `kward shell` reads the same [declarative kwshrc files](#configure-kwsh) as `/shell`. Use them for aliases and exported variables; non-interactive commands, scripts, and pipelines do not read them.
 
-From a checkout, use `ruby exe/kward shell`. This is a traditional terminal frontend for **kwsh**, not Bash or Zsh; their startup files, programmable completions, and language extensions don’t carry over. The hosted composer, shell assistant, and `/shell` shortcuts are not part of this mode. It isn’t an RPC or Pan session capability: it needs a local terminal for interactive editing and job control.
+From a checkout, use `ruby exe/kward shell`. This is a traditional terminal frontend for **kwsh**, not Bash or Zsh; their startup files, programmable completions, and language extensions don’t carry over. The hosted composer and `/shell` shortcuts are not part of this mode. It isn’t an RPC or Pan session capability: it needs a local terminal for interactive editing and job control.
+
+### Ask the shell agent
+
+At an interactive `kward shell` prompt, ask about the last command just as you would in `/shell`:
+
+```text
+$ ls ./missing-directory
+ls: ./missing-directory: No such file or directory
+$ ? what was the last error message?
+```
+
+The first question loads your configured Kward model and credentials. The agent sees the last command, its exit status, the current directory, and a bounded portion of plain terminal output from before you supplied interactive input. Full-screen output is not sent. Ordinary shell use does not send output to a model.
+
+Ask explicitly to run a command or change shell state and the agent works in the same live shell. Ask it to **prepare** a command and it puts a draft in the native editor without running it; edit it or press **Enter** to run it. With `TERM=dumb` the suggestion is printed instead. Commands needing terminal input or foreground ownership should be prepared, not run by the agent. **Ctrl+C** cancels a question.
+
+This uses a local PTY supervised by `kward`; the interpreter owns the PTY and its foreground jobs. The `?` prompt is not available with redirected standard streams, in scripts, in `kwsh` itself, or over RPC or Pan.
 
 ## Run a one-off command
 
@@ -748,7 +764,7 @@ The hosted `/shell` and interactive `kward shell` load these optional rc files i
 ~/.kwshrc
 ```
 
-When `KWARD_CONFIG_PATH` selects another main config file, Kward reads the first file beside that config file instead. The later file overrides earlier aliases and exported variables with the same names. The rc format supports declarative `alias`, `export`, and `source` directives. Interactive `kward shell` reads them without loading Kward’s JSON config. The separate `kwsh` executable does not automatically load them. An `ENV` assignment in `kwshrc` is exported but does not select an executable startup file for that session; set `ENV` in the parent environment for that.
+When `KWARD_CONFIG_PATH` selects another main config file, Kward reads the first file beside that config file instead. The later file overrides earlier aliases and exported variables with the same names. The rc format supports declarative `alias`, `export`, and `source` directives. Interactive `kward shell` reads them without loading Kward’s JSON config at startup; `?` loads the agent configuration on demand. The separate `kwsh` executable does not automatically load them. An `ENV` assignment in `kwshrc` is exported but does not select an executable startup file for that session; set `ENV` in the parent environment for that.
 
 ```sh
 alias ll='ls -la'

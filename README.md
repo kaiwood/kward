@@ -95,7 +95,7 @@ Everyday workflows:
 - [Project files](doc/files.md): browse, search, mention, open, and edit workspace files.
 - [Integrated editor](doc/editor.md): open files from the shell or composer, edit in-place, and choose editor keybindings.
 - [Git](doc/git.md): review changes, use the diff viewer, stage files, and commit from the interactive TUI.
-- [Shell](doc/shell.md): run `kward shell` for a standalone shell without logging in, or use `/shell` for the embedded shell with aliases, completion, and per-tab state.
+- [Shell](doc/shell.md): run `kward shell` for a standalone shell without logging in, or use `/shell` for the embedded shell with per-tab state. In either shell, start a line with `?` to ask the agent about your last command.
 - [Memory](doc/memory.md): opt-in core, soft, and session memory.
 - [Personas](doc/personas.md): configure Kward's tone and role by default, workspace, model, reasoning effort, time, and weekday.
 - [Skills](doc/skills.md): add reusable instructions that load only for matching tasks.

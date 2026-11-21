@@ -1,47 +1,24 @@
 require_relative "native_runtime"
+require_relative "native_invocation"
 require_relative "native_vi_terminal"
 require_relative "native_line_editor"
 require_relative "kwshrc"
 
 module Kward
   module NativeShell
-    # Standalone entrypoint: no agent, UI, auth, plugins, or implicit system shell.
+    # Interpreter entrypoint. Optional shell-agent requests go to the launcher.
     module ScriptRunner
       module_function
 
-      def run(arguments, input: $stdin, output: $stdout, error: $stderr, name: nil, descriptors: {}, own_descriptors: false, hosted: false, process_owned: false, program: "kwsh", edit_lines: false, load_rc: false)
-        args = arguments.dup
-        options = []
-        mode = nil
-        interactive = false
-        while args.first&.start_with?("-", "+") && args.first != "-"
-          option = args.shift
-          break if option == "--"
-          if option == "--help"
-            output.puts("Usage: #{program} [-i] [shell-options] [-c command [name [args...]] | -s [args...] | file [args...]]")
-            return 0
-          end
-          option[1..].each_char do |flag|
-            case flag
-            when "c", "s"
-              raise ArgumentError, "-c and -s are mutually exclusive" if mode && mode != flag
-              raise ArgumentError, "+#{flag} is not supported" if option.start_with?("+")
-              mode = flag
-            when "i" then interactive = option.start_with?("-")
-            when "o"
-              raise ArgumentError, "#{option} requires an option name" if args.empty?
-              options.concat(["#{option[0]}o", args.shift])
-            else options << "#{option[0]}#{flag}"
-            end
-          end
+      def run(arguments, input: $stdin, output: $stdout, error: $stderr, name: nil, descriptors: {}, own_descriptors: false, hosted: false, process_owned: false, program: "kwsh", edit_lines: false, load_rc: false, shell_link: nil)
+        invocation = Invocation.parse(arguments)
+        if invocation.help
+          output.puts("Usage: #{program} [-i] [shell-options] [-c command [name [args...]] | -s [args...] | file [args...]]")
+          return 0
         end
-        args.shift if args.first == "-"
-        command = args.shift if mode == "c"
-        raise ArgumentError, "-c requires a command" if mode == "c" && !command
-        file = args.shift unless mode || args.empty?
-        command_name = args.shift if mode == "c"
+        options, args, file, command, command_name = invocation.deconstruct
         name ||= command_name || file || $0
-        interactive ||= !hosted && !command && !file && input.tty? && error.tty?
+        interactive = invocation.interactive || !hosted && invocation.prompt?(input, error)
         env = ENV.to_h
         config = load_rc && interactive && !hosted ? read_rc(env, error: error) : {}
         runtime = Runtime.new(arguments: args, name: name, replace_process: !hosted,
@@ -66,7 +43,7 @@ module Kward
                 end
               end
             elsif interactive
-              run_interactive(runtime, input, input: input, output: output, error: error, edit_lines: edit_lines && !hosted)
+              run_interactive(runtime, input, input: input, output: output, error: error, edit_lines: edit_lines && !hosted, shell_link: shell_link)
             else
               runtime.run_input(input, input: input, output: output, error: error)
             end
@@ -105,8 +82,9 @@ module Kward
         error.puts("kwsh: ENV: #{e.message}")
       end
 
-      def run_interactive(runtime, source_input, input:, output:, error:, edit_lines:)
+      def run_interactive(runtime, source_input, input:, output:, error:, edit_lines:, shell_link: nil)
         source = +"".b
+        draft = nil
         terminals = { vi: ViTerminal.new(runtime) }
         terminals[:line] = LineTerminal.new(runtime, LineEditor.new(runtime), bracketed_paste: true) if edit_lines
         runtime.with_signals do
@@ -117,8 +95,9 @@ module Kward
                 prompt = source.empty? ? "PS1" : "PS2"
                 runtime.check_mail(error) if source.empty?
                 text = runtime.prompt_text(prompt, error: error)
-                read_prompt_line(runtime, source_input, terminals, prompt: text, input: input, output: output, error: error)
+                read_prompt_line(runtime, source_input, terminals, prompt: text, input: input, output: output, error: error, draft: draft)
               end
+              draft = nil
               edited = false
               if line.is_a?(ViEditor::Result)
                 if line.external
@@ -140,9 +119,19 @@ module Kward
                 runtime.run(source, input: input, output: output, error: error) unless source.empty? || runtime.exited
                 break
               end
+              if shell_link && source.empty? && line.start_with?("?")
+                instruction = line.delete_prefix("?").strip
+                if instruction.empty?
+                  error.puts("Shell prompt instruction required after ?")
+                else
+                  draft = shell_link.ask(instruction, runtime, input: input, output: output, error: error)
+                end
+                next
+              end
               source << line
               text = source.dup.force_encoding(Encoding::UTF_8)
               text.force_encoding(Encoding::BINARY) unless text.valid_encoding?
+              capture = shell_link && !text.strip.empty?
               begin
                 Parser.parse(text, aliases: runtime.aliases, eof: edited)
               rescue IncompleteInput
@@ -151,7 +140,9 @@ module Kward
                 # Runtime owns the diagnostic, status, and interactive recovery.
               end
               runtime.with_history_entry(text) do
+                shell_link.begin_command(text, input: input) if capture
                 runtime.run(text, input: input, output: output, error: error)
+                shell_link.finish_command(runtime.status) if capture
               end
               source.clear
             rescue Interrupt
@@ -163,18 +154,19 @@ module Kward
         end
       end
 
-      def read_prompt_line(runtime, source, terminals, prompt:, input:, output:, error:)
+      def read_prompt_line(runtime, source, terminals, prompt:, input:, output:, error:, draft: nil)
         if source.tty? && error.tty? && runtime.variables["TERM"] != "dumb"
           style = runtime.option_enabled?("vi") ? :vi : :line
           if (terminal = terminals[style])
             begin
-              return terminal.read(source, prompt: prompt, input: input, output: output, error: error)
+              return terminal.read(source, prompt: prompt, input: input, output: output, error: error, draft: draft)
             rescue ExecutionError, SystemCallError, IOError => e
               terminals.delete(style)
               error.puts("kwsh: line editing disabled: #{e.message}")
             end
           end
         end
+        error.puts("Prepared shell command:\n#{draft}") if draft
         error.write(prompt)
         error.flush
         read_line(source, runtime, input: input, output: output, error: error)

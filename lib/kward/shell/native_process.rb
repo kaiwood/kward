@@ -47,8 +47,9 @@ module Kward
         end
       end
 
-      def self.standalone(arguments, name:, program: "kwsh", edit_lines: false, load_rc: false)
+      def self.standalone(arguments, name:, program: "kwsh", edit_lines: false, load_rc: false, shell_agent: false)
         inherited = inherited_descriptors
+        relay = shell_agent && standalone_terminal?(arguments)
         # Ruby owns private wake-up descriptors before this script starts.
         # Re-exec the trusted VM with 3–9 occupied so its new private handles
         # cannot collide with shell redirections. PID and user IOs are retained.
@@ -71,13 +72,32 @@ module Kward
             end
           end
           $0 = ARGV.shift
+          link = if #{relay.inspect}
+            require #{File.expand_path("standalone_link", __dir__).inspect}
+            Kward::NativeShell::StandaloneLink.new(30)
+          end
           exit Kward::NativeShell::ScriptRunner.run(ARGV, descriptors: descriptors, own_descriptors: true, process_owned: true,
-                                                   program: #{program.inspect}, edit_lines: #{edit_lines.inspect}, load_rc: #{load_rc.inspect})
+                                                   program: #{program.inspect}, edit_lines: #{edit_lines.inspect}, load_rc: #{load_rc.inspect}, shell_link: link)
         RUBY
         mappings = (3..9).to_h { |fd| [fd, inherited.fetch(fd) { [File::NULL, File::RDWR] }] }
         # Only the trusted Ruby executable uses Ruby's exec API; user programs
         # still go through execve and the native-only ENOEXEC path below.
-        Kernel.exec(RbConfig.ruby, "--disable=gems,rubyopt", "-e", bootstrap, "--", inherited.keys.join(","), name, *arguments, **mappings)
+        ruby_arguments = [RbConfig.ruby, "--disable=gems,rubyopt", "-e", bootstrap, "--", inherited.keys.join(","), name, *arguments]
+        if relay
+          require_relative "standalone_terminal"
+          exit StandaloneTerminal.new.run(ruby_arguments, mappings)
+        end
+        Kernel.exec(*ruby_arguments, **mappings)
+      end
+
+      def self.standalone_terminal?(arguments)
+        return false unless $stdin.tty? && $stdout.tty? && $stderr.tty?
+        return false unless Process.uid == Process.euid && Process.gid == Process.egid
+
+        require_relative "native_invocation"
+        Invocation.parse(arguments).prompt?($stdin, $stderr)
+      rescue ArgumentError
+        false # Let ScriptRunner report invocation errors as usual.
       end
 
       def self.ignored_signals

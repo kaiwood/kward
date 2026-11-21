@@ -19,7 +19,7 @@ module Kward
         @bracketed_paste = bracketed_paste
       end
 
-      def read(source, prompt:, input:, output:, error:)
+      def read(source, prompt:, input:, output:, error:, draft: nil)
         @source, @prompt, @error = source, prompt, error
         @streams = { input: input, output: output, error: error }
         @left = 0
@@ -29,7 +29,7 @@ module Kward
         result = source.raw(intr: false) do
           begin
             write(TerminalSequences::BRACKETED_PASTE_ENABLE) if @bracketed_paste
-            @editor.read(**callbacks, **controls)
+            @editor.read(**callbacks, **controls, draft: draft)
           ensure
             write(TerminalSequences::BRACKETED_PASTE_RESTORE) if @bracketed_paste
           end

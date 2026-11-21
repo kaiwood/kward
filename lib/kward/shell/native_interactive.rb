@@ -4,6 +4,28 @@ module Kward
   module NativeShell
     # Prompt-time state only. Hosted shells keep their composer and notifications.
     module Interactive
+      class AgentCommandTimeout < StandardError; end
+
+      def run_shell_agent_command(command, timeout:, output:, error:)
+        require "timeout"
+        @shell_agent_command = true
+        previous = Signal.trap("INT") { raise Interrupt }
+        File.open(File::NULL) do |input|
+          Timeout.timeout(timeout, AgentCommandTimeout) do
+            yield
+            with_pager_suppressed { run(command, input: input, output: output, error: error) }
+          end
+        end
+      rescue AgentCommandTimeout
+        error.puts("kwsh: shell agent command timed out")
+        @status = 124
+      rescue Interrupt
+        @status = 130
+      ensure
+        Signal.trap("INT", previous) if previous
+        @shell_agent_command = false
+      end
+
       def option_enabled?(name)
         @options.include?(name)
       end

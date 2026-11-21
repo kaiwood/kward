@@ -4,7 +4,7 @@ module Kward
     def self.run(arguments = ARGV, name: $PROGRAM_NAME)
       if arguments.first == "shell"
         require_relative "shell/native_process"
-        NativeShell::NativeProcess.standalone(arguments.drop(1), name: "#{name} shell", program: "kward shell", edit_lines: true, load_rc: true)
+        NativeShell::NativeProcess.standalone(arguments.drop(1), name: "#{name} shell", program: "kward shell", edit_lines: true, load_rc: true, shell_agent: true)
       else
         require_relative "../kward"
         CLI.new(argv: arguments).run

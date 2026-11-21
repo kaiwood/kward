@@ -139,7 +139,7 @@ module Kward
 
       def foreground_job(job, streams, gate: nil)
         # A command may redirect stdin and still open /dev/tty (for example less).
-        terminal = [streams[0], $stdin].compact.find(&:tty?) if job.group
+        terminal = [streams[0], $stdin].compact.find(&:tty?) if job.group && !@shell_agent_command
         previous_ttou = Signal.trap("TTOU", "IGNORE") if terminal
         shell_mode = terminal.console_mode if terminal
         if terminal && TCSETPGRP.call(terminal.fileno, job.pid) < 0
@@ -155,8 +155,14 @@ module Kward
         job.terminal_mode = terminal.console_mode if terminal && job.state == :stopped
         @pending_signals << "INT" if result == 130 && @traps.key?("INT")
         result
-      rescue Interrupt
-        signal_job(job, "INT")
+      rescue Interrupt, Interactive::AgentCommandTimeout
+        if @shell_agent_command
+          signal_job(job, "KILL")
+          Process.waitpid(job.pid) rescue nil
+          @jobs.delete(job.id)
+        else
+          signal_job(job, "INT")
+        end
         raise
       ensure
         if terminal
@@ -197,6 +203,8 @@ module Kward
       end
 
       def resume_job(args, streams, foreground:)
+        raise ExecutionError, "fg: needs a user-driven terminal" if foreground && @shell_agent_command
+
         args.shift if args.first == "--"
         raise ExecutionError, "job control is disabled; use set -m" unless @options.include?("monitor")
         raise ExecutionError, "expected at most one job ID" if args.length > 1

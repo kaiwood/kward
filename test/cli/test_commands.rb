@@ -64,7 +64,7 @@ class TestCLICommands < KwardTestCase
 
     output = prompt.output.join("\n")
     assert_includes output, "Usage\n  kward shell"
-    assert_includes output, "Does not start the agent or composer."
+    assert_includes output, "The agent loads only when you use ?"
   end
 
   def test_command_help_option_prints_command_help

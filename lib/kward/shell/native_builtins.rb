@@ -87,6 +87,8 @@ module Kward
       end
 
       def exec_builtin(args, streams)
+        raise ExecutionError, "exec: needs a user-driven terminal" if @shell_agent_command
+
         clear = false
         argv0 = nil
         login = false
