@@ -65,6 +65,36 @@ class TestNativeShellInvocation < KwardTestCase
     assert_equal command, type
   end
 
+  def test_which_reports_live_aliases_before_path_and_keeps_other_matches
+    Dir.mktmpdir do |dir|
+      executable = File.join(dir, "sample")
+      File.write(executable, "#!/bin/sh\nexit 0\n")
+      File.chmod(0o755, executable)
+      output, error, status = invoke("-c", <<~'SHELL', env: { "PATH" => dir })
+        alias sample='/checkout/exe/sample --flag'
+        helper() { :; }
+        which sample helper cd
+        unalias sample
+        which sample kwsh-not-found
+      SHELL
+      assert_equal 1, status.exitstatus
+      assert_empty error
+      assert_equal ["sample: aliased to /checkout/exe/sample --flag", "helper: function", "cd: shell builtin", executable], output.lines(chomp: true)
+    end
+  end
+
+  def test_which_passes_platform_options_to_the_path_utility
+    Dir.mktmpdir do |dir|
+      executable = File.join(dir, "which")
+      File.write(executable, "#!/bin/sh\nprintf '<%s>\\n' \"$@\"\n")
+      File.chmod(0o755, executable)
+      output, error, status = invoke("-c", "which -a sample", env: { "PATH" => dir })
+      assert status.success?, error
+      assert_empty error
+      assert_equal "<-a>\n<sample>\n", output
+    end
+  end
+
   def test_xtrace_expands_assignments_once_before_execution_and_uses_redirected_stderr
     Dir.mktmpdir("native-trace") do |dir|
       output, error, status = invoke("-c", <<~'SHELL', chdir: dir)

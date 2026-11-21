@@ -50,7 +50,7 @@ module Kward
 
       UNSUPPORTED = %w[typeset builtin].freeze
       SPECIAL = %w[export readonly eval . source unset exit return break continue shift set exec trap times :].freeze
-      BUILTINS = (SPECIAL + %w[true false cd pwd alias unalias read getopts command shopt local declare complete compgen umask ulimit kwsh jobs fg bg wait kill hash type fc]).freeze
+      BUILTINS = (SPECIAL + %w[true false cd pwd alias unalias read getopts command shopt local declare complete compgen umask ulimit kwsh jobs fg bg wait kill hash type which fc]).freeze
 
       attr_reader :variables, :aliases, :status, :exited
 
@@ -492,6 +492,7 @@ module Kward
         when "type"
           raise ExecutionError, "type: expected a name" if args.empty?
           command_builtin(["-V", "--", *args], streams)
+        when "which" then which_builtin(args, streams)
         when "hash" then hash_builtin(args, streams)
         when "fc" then fc_builtin(args, streams)
         when "times" then times_builtin(args, streams)

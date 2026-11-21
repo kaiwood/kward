@@ -361,38 +361,57 @@ module Kward
         saved_hash, saved_hash_path = @command_hash.dup, @hash_path
         @variables["PATH"] = Etc.confstr(Etc::CS_PATH) || "/usr/bin:/bin" if flags.include?("p")
         return 0 if args.empty?
-        if mode
-          result = 0
-          args.each do |name|
-            kind = if Parser::RESERVED.include?(name)
-              "keyword"
-            elsif self.class::SPECIAL.include?(name)
-              "shell builtin"
-            elsif @functions.key?(name)
-              "function"
-            elsif self.class::BUILTINS.include?(name)
-              "shell builtin"
-            end
-            if @aliases.key?(name)
-              write_line(streams, "alias #{name}=#{Shellwords.escape(@aliases[name])}")
-              next
-            end
-            path = kind ? name : executable_path(name)
-            path = nil if !kind && path && (!File.file?(path) || !File.executable?(path))
-            if path
-              write_line(streams, mode == "V" ? "#{name} is #{kind || path}" : path)
-            else
-              result = 1
-            end
-          end
-          return result
-        end
+        return describe_commands(args, streams, mode) if mode
         dispatch(args, streams, functions: false)
       ensure
         if flags&.include?("p")
           old_path ? @variables["PATH"] = old_path : @variables.delete("PATH")
           @command_hash, @hash_path = saved_hash, saved_hash_path
         end
+      end
+
+      def which_builtin(args, streams)
+        # Preserve the platform utility's options (for example, macOS -a and -s).
+        return external(["which", *args], streams) if args.empty? || (args.first.match?(/\A-.+/) && args.first != "--")
+
+        args.shift if args.first == "--"
+        return 1 if args.empty?
+
+        describe_commands(args, streams, "which")
+      end
+
+      def describe_commands(names, streams, mode)
+        result = 0
+        names.each do |name|
+          if @aliases.key?(name)
+            replacement = @aliases.fetch(name)
+            text = mode == "which" ? "#{name}: aliased to #{replacement}" : "alias #{name}=#{Shellwords.escape(replacement)}"
+            write_line(streams, text)
+            next
+          end
+
+          kind = if Parser::RESERVED.include?(name)
+            "keyword"
+          elsif self.class::SPECIAL.include?(name)
+            "shell builtin"
+          elsif @functions.key?(name)
+            "function"
+          elsif self.class::BUILTINS.include?(name)
+            "shell builtin"
+          end
+          path = kind ? name : executable_path(name)
+          if path && (kind || File.file?(path) && File.executable?(path))
+            text = case mode
+            when "V" then "#{name} is #{kind || path}"
+            when "which" then kind ? "#{name}: #{kind}" : path
+            else path
+            end
+            write_line(streams, text)
+          else
+            result = 1
+          end
+        end
+        result
       end
 
       def getopts(args, streams)
