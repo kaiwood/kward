@@ -270,22 +270,29 @@ module Kward
         return [] unless @git_state
 
         help = git_composing? ? "Type commit message · Enter commit · Tab overlay · Esc cancel" : "↑/↓/j/k select · Enter diff · s stage/unstage · Tab message · Esc cancel"
-        lines = [overlay_text_line(help, :muted), overlay_blank_line]
         status_lines = @git_state[:status_lines]
         status_lines = ["No uncommitted changes."] if status_lines.empty?
-        max_status_rows = [max_overlay_list_rows(height), 1].max
+        content_budget = [composer_overlay_row_budget(height) - 2, 1].max
+        max_status_rows = [max_overlay_list_rows(height), status_lines.length, content_budget].min
+        show_overflow = max_status_rows < status_lines.length && content_budget >= 3
+        indicator_rows = show_overflow ? 2 : 0
+        max_status_rows = [max_status_rows, content_budget - indicator_rows].min
+        lines = if max_status_rows + indicator_rows + 2 <= content_budget
+          [overlay_text_line(help, :muted), overlay_blank_line]
+        else
+          []
+        end
         selected_index = @git_state[:selected_index].to_i
         start_index = centered_list_window_start(selected_index, status_lines.length, max_status_rows)
         visible_status_lines = status_lines[start_index, max_status_rows] || []
-        lines << overlay_text_line("… #{start_index} above", :muted) if start_index.positive?
+        lines << overlay_text_line("… #{start_index} above", :muted) if show_overflow && start_index.positive?
         visible_status_lines.each_with_index do |line, offset|
           index = start_index + offset
-          marker = index == selected_index ? "› " : "  "
-          lines << overlay_text_line("#{marker}#{line}")
+          lines << overlay_choice_line(line, selected: index == selected_index)
         end
         hidden_below = status_lines.length - start_index - visible_status_lines.length
-        lines << overlay_text_line("… #{hidden_below} more", :muted) if hidden_below.positive?
-        overlay_card_rows("Git", lines, width)
+        lines << overlay_text_line("… #{hidden_below} more", :muted) if show_overflow && hidden_below.positive?
+        overlay_card_rows("Git", lines, width, height: height)
       end
     end
   end

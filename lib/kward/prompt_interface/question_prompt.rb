@@ -309,33 +309,24 @@ module Kward
       end
 
       def question_composer_layout(width, height = screen_height)
-        content_width = [width - 4, 1].max
-        overlay_rows = active_overlay_rows(width, height: height)
-        return question_custom_composer_layout(width, height, overlay_rows, content_width) if selected_question_choice&.fetch(:custom, false)
+        overlay_rows = question_overlay_rows(width, height: height)
+        available_rows = composer_row_budget(height) - overlay_rows.length
+        return compact_composer_layout(width, overlay_rows) if available_rows < 3
 
-        rows = overlay_rows + [top_border(width), box_content_row("", content_width)]
-        rows.concat(question_bottom_border_rows(width))
-        [rows, overlay_rows.length + 1, 2]
+        content_width = width - 4
+        bottom_rows = composer_bottom_rows(width, available_rows - 2)
+        if selected_question_choice&.fetch(:custom, false)
+          max_input_rows = [COMPOSER_MAX_INPUT_ROWS, available_rows - 1 - bottom_rows.length].min
+          input_rows, cursor_row, cursor_col = visible_composer_input(content_width, max_input_rows)
+        else
+          input_rows = [box_content_row("", content_width)]
+          cursor_row, cursor_col = 0, 2
+        end
+        rows = overlay_rows + [top_border(width)] + input_rows + bottom_rows
+        [rows, overlay_rows.length + 1 + cursor_row, cursor_col]
       end
 
-      def question_custom_composer_layout(width, height, overlay_rows, content_width)
-        input_layout_rows, input_cursor_row, input_cursor_col = input_layout(content_width)
-        max_input_rows = max_visible_input_rows(0, overlay_rows.length, 0, height: height)
-        visible_start = [[input_cursor_row - max_input_rows + 1, 0].max, [input_layout_rows.length - max_input_rows, 0].max].min
-        visible_rows = input_layout_rows[visible_start, max_input_rows] || [""]
-        rows = overlay_rows + [top_border(width)]
-        rows.concat(visible_rows.map { |row| box_content_row(row, content_width) })
-        rows.concat(question_bottom_border_rows(width))
-        cursor_row = overlay_rows.length + 1 + input_cursor_row - visible_start
-        cursor_col = 2 + [input_cursor_col, content_width - 1].min
-        [rows, cursor_row, cursor_col]
-      end
-
-      def question_bottom_border_rows(width)
-        @tabs.empty? ? [bottom_border(width)] : tab_border_rows(width)
-      end
-
-      def question_overlay_rows(width)
+      def question_overlay_rows(width, height: screen_height)
         title = "Question #{@question_state[:index]}/#{@question_state[:total]} · #{@question_state[:header]}"
         content_width = [overlay_card_width(width) - 4, 1].max
         lines = question_text_rows(@question_state[:question], content_width, :bold)
@@ -347,7 +338,7 @@ module Kward
           selected = index == question_selection_index
           lines << overlay_choice_line(choice_text(choice, selected: selected), selected: selected)
         end
-        overlay_card_rows(title, lines, width)
+        overlay_card_rows(title, lines, width, height: height)
       end
 
       def question_text_rows(text, width, style)

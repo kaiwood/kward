@@ -58,6 +58,7 @@ All notable changes to Kward will be documented in this file.
 ### Fixed
 
 - Keep busy composer headers on one line in narrow panes, dropping the cancel hint before clipping the activity text.
+- Keep the draft and cursor visible in short panes by collapsing tabs, footers, and overlays as space runs out, while leaving room for transcript scrolling.
 - Keep the composer cursor steady during spinner and status redraws, and refresh the header and footer even when the spinner is paused or the composer is idle.
 - Prevent standalone modifier presses, such as Cmd or Shift, from printing escape sequences while an interactive shell command runs.
 - Keep pending terminal image previews available when a queued follow-up starts before the preview opens.

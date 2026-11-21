@@ -14,29 +14,29 @@ module Kward
         return compact_composer_layout(width) if width < 5 || height < 4
         return question_composer_layout(width, height) if @question_state
 
-        content_width = [width - 4, 1].max
-        input_layout_rows, input_cursor_row, input_cursor_col = input_layout(content_width)
-        attachment_rows = attachment_badge_rows(content_width)
         overlay_rows = active_overlay_rows(width, height: height)
-        footer_text = footer_text()
-        max_input_rows = max_visible_input_rows(attachment_rows.length, overlay_rows.length, footer_text.empty? ? 0 : 1, height: height)
-        visible_start = [[input_cursor_row - max_input_rows + 1, 0].max, [input_layout_rows.length - max_input_rows, 0].max].min
-        visible_rows = input_layout_rows[visible_start, max_input_rows] || [""]
-        rows = overlay_rows + [top_border(width)]
-        rows.concat(attachment_rows)
-        rows.concat(visible_rows.map { |row| box_content_row(row, content_width) })
-        rows << footer_row(content_width, footer_text) unless footer_text.empty?
-        if @tabs.empty?
-          rows << bottom_border(width)
-        else
-          rows.concat(tab_border_rows(width))
-        end
-        cursor_row = overlay_rows.length + 1 + attachment_rows.length + input_cursor_row - visible_start
-        cursor_col = 2 + [input_cursor_col, content_width - 1].min
-        [rows, cursor_row, cursor_col]
+        available_rows = composer_row_budget(height) - overlay_rows.length
+        return compact_composer_layout(width, overlay_rows) if available_rows < 3
+
+        content_width = width - 4
+        # Reserve the borders and the draft's cursor row before adding optional chrome.
+        extra_rows = available_rows - 3
+        attachment_rows = attachment_badge_rows(content_width).first(extra_rows)
+        extra_rows -= attachment_rows.length
+        footer = footer_row(content_width) if extra_rows.positive?
+        extra_rows -= 1 if footer
+        bottom_rows = composer_bottom_rows(width, 1 + extra_rows)
+        input_cap = [COMPOSER_MAX_INPUT_ROWS - attachment_rows.length, 1].max
+        max_input_rows = [input_cap, 2 + extra_rows - bottom_rows.length].min
+        input_rows, cursor_row, cursor_col = visible_composer_input(content_width, max_input_rows)
+
+        rows = overlay_rows + [top_border(width)] + attachment_rows + input_rows
+        rows << footer if footer
+        rows.concat(bottom_rows)
+        [rows, overlay_rows.length + 1 + attachment_rows.length + cursor_row, cursor_col]
       end
 
-      def compact_composer_layout(width)
+      def compact_composer_layout(width, overlay_rows = [])
         lines, cursor_line, cursor_col = @composer.lines_and_cursor
         prefix = "#{@prompt_label} "
         prefix_width = TerminalText.width(prefix)
@@ -46,7 +46,14 @@ module Kward
         layout = TerminalText.wrap(line, width: input_width, cursor: cursor_col)
         visible = layout[:rows][layout[:cursor_row]].to_s
         row = visible_ljust(TerminalText.truncate("#{prefix}#{visible}", width), width)
-        [[row], 0, [prefix_width + layout[:cursor_col], width - 1].min]
+        [overlay_rows + [row], overlay_rows.length, [prefix_width + layout[:cursor_col], width - 1].min]
+      end
+
+      def visible_composer_input(content_width, max_rows)
+        rows, cursor_row, cursor_col = input_layout(content_width)
+        start = [[cursor_row - max_rows + 1, 0].max, [rows.length - max_rows, 0].max].min
+        visible = rows[start, max_rows].map { |row| box_content_row(row, content_width) }
+        [visible, cursor_row - start, 2 + [cursor_col, content_width - 1].min]
       end
 
       def input_layout(content_width)
@@ -325,9 +332,10 @@ module Kward
         []
       end
 
-      def max_visible_input_rows(attachment_count, overlay_count, footer_count, height: screen_height)
-        input_cap = [COMPOSER_MAX_INPUT_ROWS - attachment_count, 1].max
-        [[input_cap, height - 3 - overlay_count - footer_count - attachment_count].min, 1].max
+      def composer_bottom_rows(width, max_rows)
+        return [bottom_border(width)] if @tabs.empty? || max_rows < 3
+
+        tab_border_rows(width)
       end
 
       def input_prefix(_index)
@@ -342,26 +350,31 @@ module Kward
 
       def image_viewer_rows(width, height: screen_height)
         content_width = [width - 4, 1].max
-        preview_rows = image_viewer_preview_rows(height, width: width)
-        title = visible_truncate(" Image: #{@image_viewer_state[:display_path]} ", content_width)
         state = @image_viewer_state
-        rows = [colored("╭", :primary_green) + title + colored("─" * [width - TerminalText.width(ANSI.strip(title)) - 2, 0].max, :primary_green) + colored("╮", :primary_green)]
+        title = "Image: #{state[:display_path]}"
+        footer_rows = if state[:generated]
+          generated_image_footer_rows(content_width)
+        else
+          zoom = (image_viewer_zoom * 100).round
+          [footer_row(content_width, "Read-only image preview · #{zoom}% · +/- zoom · Esc/Q close")]
+        end
+        preview_budget = composer_overlay_row_budget(height) - 2 - footer_rows.length
+        if preview_budget < (state[:directory_picker] ? 0 : 1)
+          message = overlay_text_line("Pane too short for image preview · Esc back", :muted)
+          return overlay_card_rows(title, [message], width, height: height)
+        end
+
+        rows = [overlay_top_border(title, width)]
         if state[:directory_picker]
           # The picker owns the overlay while active; don't draw under its input.
         elsif state[:preview_error]
           rows << box_content_row("Preview unavailable: #{state[:preview_error]}", content_width)
         else
-          rows << image_viewer_graphic_row(width, image_viewer_sequence(width, height))
-          rows.concat(Array.new([preview_rows - 1, 0].max) { box_content_row("", content_width) })
+          preview_rows = [image_viewer_preview_rows(height, width: width), preview_budget].min
+          rows << image_viewer_graphic_row(width, image_viewer_sequence(width, preview_rows))
+          rows.concat(Array.new(preview_rows - 1) { box_content_row("", content_width) })
         end
-        if state[:generated]
-          rows.concat(generated_image_footer_rows(content_width))
-        else
-          zoom = (image_viewer_zoom * 100).round
-          rows << footer_row(content_width, "Read-only image preview · #{zoom}% · +/- zoom · Esc/Q close")
-        end
-        rows << bottom_border(width)
-        rows
+        rows.concat(footer_rows) << bottom_border(width)
       end
 
       def image_viewer_graphic_row(width, sequence)

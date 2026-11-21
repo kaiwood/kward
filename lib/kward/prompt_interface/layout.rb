@@ -18,8 +18,14 @@ module Kward
         [height - @reserved_rows + 1, 1].max
       end
 
+      def composer_row_budget(height)
+        [height - 2, 1].max
+      end
+
       def transcript_bottom_row(height = screen_height)
-        [height - @reserved_rows - TRANSCRIPT_COMPOSER_GAP_ROWS, 1].max
+        available = height - @reserved_rows
+        # A scroll region needs two rows; give up the gap before the second row.
+        [available - TRANSCRIPT_COMPOSER_GAP_ROWS, [available, 2].min, 1].max
       end
 
     end

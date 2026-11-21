@@ -2503,6 +2503,55 @@ class TestPromptInterface < KwardTestCase
     TTY::Screen.define_singleton_method(:height, original_height) if original_height
   end
 
+  def test_short_composer_preserves_draft_and_valid_scroll_region_during_resize
+    output = StringIO.new
+    height = 20
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, footer: -> { "Plugin footer" })
+    prompt.define_singleton_method(:screen_width) { 80 }
+    prompt.define_singleton_method(:screen_height) { height }
+    prompt.update_tabs(labels: ["Main", "Other"])
+    prompt.begin_busy_input
+    prompt.send(:replace_input, "next draft")
+    prompt.send(:render_prompt_locked)
+    prompt.start_stream_block("Assistant")
+    output.truncate(0)
+    output.rewind
+
+    height = 6
+    prompt.write_delta("reply")
+
+    assert_includes output.string, Kward::TerminalSequences.scroll_region(1, 2)
+    assert_includes strip_ansi(output.string), "next draft"
+    assert_includes strip_ansi(output.string), "Plugin footer"
+    refute_includes strip_ansi(output.string), "2 Other"
+    assert output.string.scan(/\e\[(\d+);\d+H/).flatten.all? { |row| row.to_i <= height }
+    assert_includes output.string, "reply"
+    assert_order output.string.partition("reply").last,
+      Kward::TerminalSequences.move_to(4, 13), Kward::PromptInterface::SYNCHRONIZED_OUTPUT_DISABLE
+
+    output.truncate(0)
+    output.rewind
+    height = 20
+    prompt.write_delta(" continues")
+
+    assert_includes strip_ansi(output.string), "2 Other"
+    assert_includes strip_ansi(output.string), "next draft"
+  end
+
+  def test_short_composer_keeps_selected_overlay_item_and_input_visible
+    commands = %w[alpha bravo charlie].map { |name| { name: name, description: "Command #{name}" } }
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, slash_commands: commands)
+    prompt.send(:replace_input, "/")
+    prompt.send(:handle_key, "\e[B")
+    prompt.send(:handle_key, "\e[B")
+
+    rows, cursor_row, cursor_col = prompt.send(:composer_layout, 48, 6)
+
+    assert_operator rows.length, :<=, 4
+    assert_match(/› \/charlie/, strip_ansi(rows.join("\n")))
+    assert_includes rows.fetch(cursor_row)[0...cursor_col], "/"
+  end
+
   def test_prompt_interface_uses_compact_composer_on_tiny_screens
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     original_height = TTY::Screen.method(:height)

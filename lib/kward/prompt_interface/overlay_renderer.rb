@@ -9,7 +9,7 @@ module Kward
       private
 
       def active_overlay_rows(width, height: screen_height)
-        return question_overlay_rows(width) if @question_state
+        return question_overlay_rows(width, height: height) if @question_state
         return selection_overlay_rows(width, height: height) if @select_state
         return git_overlay_rows(width, height: height) if @git_state
         return image_viewer_rows(width, height: height) if image_viewer_active?
@@ -29,13 +29,13 @@ module Kward
         rows = (candidates[start, max_rows] || []).each_with_index.map do |candidate, offset|
           overlay_choice_line(candidate, selected: start + offset == selected)
         end
-        overlay_card_rows("Completions", rows, width)
+        overlay_card_rows("Completions", rows, width, height: height)
       end
 
       def history_search_overlay_rows(width, height: screen_height)
         matches = history_search_matches
         if matches.empty?
-          return overlay_card_rows("History", [overlay_text_line("No matching history", :muted)], width)
+          return overlay_card_rows("History", [overlay_text_line("No matching history", :muted)], width, height: height)
         end
 
         max_rows = max_overlay_list_rows(height)
@@ -44,16 +44,33 @@ module Kward
         rows = (matches[start, max_rows] || []).each_with_index.map do |value, offset|
           overlay_choice_line(value, selected: start + offset == selected)
         end
-        overlay_card_rows("History", rows, width)
+        overlay_card_rows("History", rows, width, height: height)
       end
 
-      def overlay_card_rows(title, content_rows, width)
+      def overlay_card_rows(title, content_rows, width, height: screen_height)
+        max_rows = composer_overlay_row_budget(height)
+        return [] if max_rows.zero?
+
         card_width = overlay_card_width(width)
         inner_width = [card_width - 4, 1].max
-        rows = [overlay_top_border(title, card_width)]
-        rows.concat(content_rows.map { |row| overlay_content_row(row, inner_width) })
-        rows << overlay_bottom_border(card_width)
+        top = overlay_top_border(title, card_width)
+        bottom = overlay_bottom_border(card_width)
+        content_budget = [max_rows - 2, 1].max
+        if content_rows.length > content_budget
+          focus = content_rows.index { |row| row[:selected] } || 0
+          start = centered_list_window_start(focus, content_rows.length, content_budget)
+          content_rows = content_rows.slice(start, content_budget)
+        end
+        rows = content_rows.map { |row| overlay_content_row(row, inner_width) }
+        rows.unshift(top) if rows.empty? || max_rows >= 2
+        rows << bottom if rows.length < max_rows
         rows.map { |row| align_overlay_row(row, width) }
+      end
+
+      def composer_overlay_row_budget(height)
+        budget = composer_row_budget(height)
+        # Keep an overlay choice visible even if the draft must use a compact row.
+        [[budget - 3, 2].max, budget - 1].min
       end
 
       def overlay_card_width(width)

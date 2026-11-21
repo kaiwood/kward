@@ -667,7 +667,7 @@ module Kward
       end
 
       def selection_overlay_rows(width, height: screen_height)
-        return selection_confirmation_rows(width) if select_confirmation_active?
+        return selection_confirmation_rows(width, height: height) if select_confirmation_active?
 
         matches = selection_matches
         lines = [overlay_text_line(selection_overlay_help_text, :muted), overlay_blank_line]
@@ -677,7 +677,7 @@ module Kward
           else
             lines << overlay_text_line("No matches", :muted)
           end
-          return overlay_card_rows(selection_overlay_title, lines, width)
+          return overlay_card_rows(selection_overlay_title, lines, width, height: height)
         end
 
         visible = visible_selection_matches(matches, height: height)
@@ -686,7 +686,7 @@ module Kward
           index = start_index + offset
           lines << overlay_choice_line(choice, selected: index == selection_index)
         end
-        overlay_card_rows(selection_overlay_title, lines, width)
+        overlay_card_rows(selection_overlay_title, lines, width, height: height)
       end
 
       def selection_overlay_help_text
@@ -706,13 +706,13 @@ module Kward
         title && !title.empty? ? title : "Sessions"
       end
 
-      def selection_confirmation_rows(width)
+      def selection_confirmation_rows(width, height:)
         title = @select_state[:confirm_title].to_s
         title = "Confirm" if title.empty?
         text = @select_state[:confirm_text].to_s
         text = "Press #{@select_state[:confirm_key]} again to confirm, Esc to cancel." if text.empty?
         lines = [overlay_text_line(text, :muted)]
-        overlay_card_rows(title, lines, width)
+        overlay_card_rows(title, lines, width, height: height)
       end
 
       def visible_selection_matches(matches, height: screen_height)

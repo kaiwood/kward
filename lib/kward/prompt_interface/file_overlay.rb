@@ -254,10 +254,10 @@ module Kward
 
         matches = file_overlay_matches
         if file_mention_discovery_loading?
-          return overlay_card_rows("Files", [overlay_text_line("Loading project files…", :muted)], width)
+          return overlay_card_rows("Files", [overlay_text_line("Loading project files…", :muted)], width, height: height)
         end
         if matches.empty?
-          return overlay_card_rows("Files", [overlay_text_line("No matching files", :muted)], width)
+          return overlay_card_rows("Files", [overlay_text_line("No matching files", :muted)], width, height: height)
         end
 
         visible = visible_file_overlay_matches(matches, height: height)
@@ -268,7 +268,7 @@ module Kward
           index = start_index + offset
           overlay_choice_line(path, selected: index == @file_selection_index)
         end)
-        overlay_card_rows(file_open_overlay_visible? ? "Open file" : "Files", lines, width)
+        overlay_card_rows(file_open_overlay_visible? ? "Open file" : "Files", lines, width, height: height)
       end
 
       def visible_file_overlay_matches(matches, height: screen_height)

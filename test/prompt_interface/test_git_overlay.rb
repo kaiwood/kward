@@ -22,7 +22,9 @@ class TestPromptInterfaceGitOverlay < KwardTestCase
     rows = prompt.send(:git_overlay_rows, 80, height: 15)
     rendered = strip_ansi(rows.join("\n"))
 
-    assert_includes rendered, "… 4 above"
+    assert_includes rendered, "… 6 above"
+    assert_includes rendered, "M file7.rb"
+    refute_includes rendered, "M file6.rb"
     assert_includes rendered, "›  M file11.rb"
     refute_includes rendered, " M file1.rb"
   end

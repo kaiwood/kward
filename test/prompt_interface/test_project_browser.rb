@@ -562,14 +562,14 @@ class TestPromptInterfaceProjectBrowser < KwardTestCase
         all_rows = prompt.send(:project_browser_visible_rows)
 
         visible = prompt.send(:visible_project_browser_rows, all_rows, height: 20)
-        assert_equal 12, visible[:rows].length
+        assert_equal 11, visible[:rows].length
         assert_equal "file00.rb", visible[:rows].first[:path]
 
         prompt.instance_variable_get(:@project_browser_state)[:selection_index] = 20
         visible = prompt.send(:visible_project_browser_rows, all_rows, height: 20)
 
-        assert_equal "file14.rb", visible[:rows].first[:path]
-        assert_equal "file20.rb", visible[:rows][6][:path]
+        assert_equal "file15.rb", visible[:rows].first[:path]
+        assert_equal "file20.rb", visible[:rows][5][:path]
       end
     end
   end
@@ -584,7 +584,7 @@ class TestPromptInterfaceProjectBrowser < KwardTestCase
 
         rows, = prompt.send(:composer_layout, 80, 20)
 
-        assert_equal 19, rows.length
+        assert_equal 18, rows.length # Leave two rows for the transcript scroll region.
         assert_equal prompt.send(:tab_border_rows, 80), rows.last(3)
       end
     end

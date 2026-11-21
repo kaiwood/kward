@@ -292,7 +292,7 @@ module Kward
         true
       end
 
-      def project_browser_delete_confirmation_rows(width)
+      def project_browser_delete_confirmation_rows(width, height:)
         confirmation = @project_browser_state[:delete_confirmation]
         path = confirmation[:path]
         lines = [overlay_text_line("Delete #{confirmation[:directory] ? "directory" : "file"}?"), overlay_blank_line]
@@ -303,7 +303,7 @@ module Kward
           lines << overlay_text_line(path)
           lines << overlay_text_line("Press Backspace again to confirm • Esc to cancel", :muted)
         end
-        overlay_card_rows("Confirm deletion", lines, width)
+        overlay_card_rows("Confirm deletion", lines, width, height: height)
       end
 
       def project_browser_name_entry_active?
@@ -727,9 +727,8 @@ module Kward
         [desired_columns, available_columns].min
       end
 
-      def image_viewer_sequence(width, height)
+      def image_viewer_sequence(width, rows)
         columns = image_viewer_columns(width)
-        rows = image_viewer_preview_rows(height, width: width)
         state = @image_viewer_state
         return state[:sequence] if state[:columns] == columns && state[:rows] == rows
 
@@ -856,7 +855,7 @@ module Kward
 
       def project_browser_rows(width, height: screen_height)
         return [] unless project_browser_visible?
-        return project_browser_delete_confirmation_rows(width) if project_browser_delete_confirmation_active?
+        return project_browser_delete_confirmation_rows(width, height: height) if project_browser_delete_confirmation_active?
 
         rows = project_browser_visible_rows
         lines = []
@@ -873,7 +872,7 @@ module Kward
         lines << overlay_text_line(@project_browser_state[:status], :muted) if @project_browser_state[:status]
         lines << overlay_blank_line
         lines << overlay_text_line(project_browser_help_text, :muted)
-        overlay_card_rows(title, lines, width)
+        overlay_card_rows(title, lines, width, height: height)
       end
 
       def project_browser_title
@@ -1120,7 +1119,8 @@ module Kward
         composer_bottom_rows = @tabs.empty? ? 1 : tab_border_rows(width).length
         footer_rows = footer_text.empty? ? 0 : 1
         attachment_rows = attachment_badge_texts.length
-        [height - 7 - composer_bottom_rows - footer_rows - attachment_rows, 4].max
+        status_rows = @project_browser_state&.[](:status) ? 1 : 0
+        [composer_row_budget(height) - 6 - composer_bottom_rows - footer_rows - attachment_rows - status_rows, 4].max
       end
 
       def default_project_browser_expanded_paths(paths)

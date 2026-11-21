@@ -105,7 +105,7 @@ module Kward
           description = command[:description].empty? ? "" : " — #{command[:description]}"
           overlay_choice_line("/#{command[:name]}#{hint}#{description}", selected: index == @slash_selection_index)
         end
-        overlay_card_rows("Slash commands", lines, width)
+        overlay_card_rows("Slash commands", lines, width, height: height)
       end
 
       def visible_slash_overlay_matches(matches, height: screen_height)
