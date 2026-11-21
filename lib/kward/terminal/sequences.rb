@@ -71,6 +71,10 @@ module Kward
       "\e[#{rows}A"
     end
 
+    def move_down(rows)
+      "\e[#{rows}B"
+    end
+
     def move_to_column(column)
       "\e[#{column}G"
     end

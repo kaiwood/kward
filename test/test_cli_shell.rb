@@ -230,7 +230,7 @@ class TestCLIShell < KwardTestCase
   def test_cut_to_end_of_line_keeps_later_lines_of_a_pasted_draft
     with_terminal do |reader, writer, pid|
       read_until(reader, PROMPT)
-      writer.write("\e[200~echo one discard\necho two\e[201~\x01\ef\ef\x0B\n")
+      writer.write("\e[200~echo one discard\necho two\e[201~\e[A\x0B\n")
       read_until(reader, "\r\none\r\ntwo\r\n")
       read_until(reader, PROMPT)
       writer.write("exit\n")
@@ -387,7 +387,7 @@ class TestCLIShell < KwardTestCase
       read_until(reader, PROMPT)
       writer.write("\e[20")
       writer.write("0~printf 'one\\n'\r\nprintf 'two\\n'\e[201~")
-      draft = read_until(reader, %q{printf 'one\n'^Jprintf 'two\n'})
+      draft = read_until(reader, "printf 'one\\n'\e[K\r\nprintf 'two\\n'\e[K")
       refute_includes draft, "\r\none\r\n"
       refute_includes draft, PASTE_OFF
       writer.write("\n")
@@ -398,6 +398,22 @@ class TestCLIShell < KwardTestCase
       read_until(reader, "\rmore> ")
       writer.write("printf 'continued\\n'; fi\n")
       read_until(reader, "\r\ncontinued\r\n")
+      read_until(reader, PROMPT)
+      writer.write("exit\n")
+      assert_equal 0, wait_for_exit(pid).exitstatus
+    end
+  end
+
+  def test_multiline_arrows_and_home_edit_the_selected_line
+    with_terminal do |reader, writer, pid|
+      read_until(reader, PROMPT)
+      writer.write("\e[200~echo AB\necho CD\e[201~\e[A\e[D" + "X\e[B\x01" + "printf '>' ; ")
+      read_until(reader, "printf '>' ; echo CD\e[K")
+      writer.write("\n")
+      read_until(reader, "\r\nAXB\r\n>CD\r\n")
+      read_until(reader, PROMPT)
+      writer.write("echo first\e[13;2uecho second\n")
+      read_until(reader, "\r\nfirst\r\nsecond\r\n")
       read_until(reader, PROMPT)
       writer.write("exit\n")
       assert_equal 0, wait_for_exit(pid).exitstatus

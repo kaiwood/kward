@@ -35,6 +35,7 @@ module Kward
           @entries = @history.entries
           @index = @entries.length
           @history_prefix = nil
+          @vertical_column = nil
           @menu = nil
           @last_tab = false
           @continued_cut = false
@@ -58,27 +59,28 @@ module Kward
             return @line + "\n" if TerminalKeys::RETURN.include?(key)
             return nil if key == eof && @line.empty?
 
+            @vertical_column = nil unless (TerminalKeys::UP + TerminalKeys::DOWN).include?(key)
             @last_tab = false unless TerminalKeys::TAB.include?(key)
             @last_yank = nil unless TerminalKeys::ALT_Y.include?(key)
             consecutive_cut = @continued_cut
             @continued_cut = false
             case key
             when *TerminalKeys::TAB then complete(alert)
-            when *TerminalKeys::UP then recall(-1, prefix: true)
-            when *TerminalKeys::DOWN then recall(1, prefix: true)
+            when *TerminalKeys::UP then move_vertical(-1)
+            when *TerminalKeys::DOWN then move_vertical(1)
             when TerminalKeys::CTRL_P then recall(-1)
             when TerminalKeys::CTRL_N then recall(1)
             when *TerminalKeys::LEFT, TerminalKeys::CTRL_B then @position = [@position - 1, 0].max
             when *TerminalKeys::RIGHT, TerminalKeys::CTRL_F then @position = [@position + 1, @line.length].min
-            when *TerminalKeys::HOME, TerminalKeys::CTRL_A then @position = 0
-            when *TerminalKeys::END_KEY, TerminalKeys::CTRL_E then @position = @line.length
+            when *TerminalKeys::HOME, TerminalKeys::CTRL_A then @position = line_start
+            when *TerminalKeys::END_KEY, TerminalKeys::CTRL_E then @position = line_end
             when erase, *TerminalKeys::BACKSPACE
               replace(@position - 1, 1) if @position.positive?
             when kill then cut(0, @line.length)
             when eof, *TerminalKeys::DELETE then replace(@position, 1) if @position < @line.length
             when *TerminalKeys::ALT_LEFT, *TerminalKeys::ALT_B then @position = previous_word
             when *TerminalKeys::ALT_RIGHT, *TerminalKeys::ALT_F then @position = @line.match(WORD_START, @position).end(0)
-            when TerminalKeys::CTRL_K then cut(@position, line_end, consecutive_cut)
+            when TerminalKeys::CTRL_K then cut(@position, kill_line_end, consecutive_cut)
             when TerminalKeys::CTRL_W, *TerminalKeys::ALT_BACKSPACE then cut(previous_word, @position, consecutive_cut)
             when *TerminalKeys::ALT_D then cut(@position, @line.match(WORD_END, @position).end(0), consecutive_cut)
             when TerminalKeys::CTRL_Y then yank(0)
@@ -87,6 +89,7 @@ module Kward
             when TerminalKeys::CTRL_L then clear.call
             when TerminalKeys::CTRL_T, TerminalKeys::CTRL_T_CSI_U then transpose
             when TerminalKeys::CTRL_UNDERSCORE then undo
+            when *TerminalKeys::SHIFT_ENTER then insert("\n")
             when TerminalSequences::BRACKETED_PASTE_START
               text = paste.call
               return nil unless text
@@ -150,11 +153,28 @@ module Kward
         @position - @line[0, @position].reverse.match(WORD_END).end(0)
       end
 
-      def line_end
-        newline = @line.index("\n", @position)
-        return @line.length unless newline
+      def line_start(position = @position)
+        (@line[0...position].rindex("\n") || -1) + 1
+      end
 
-        newline == @position ? newline + 1 : newline
+      def line_end(position = @position)
+        @line.index("\n", position) || @line.length
+      end
+
+      def kill_line_end
+        finish = line_end
+        finish == @position && finish < @line.length ? finish + 1 : finish
+      end
+
+      def move_vertical(direction)
+        start = line_start
+        finish = line_end
+        return recall(direction, prefix: true) unless @line.include?("\n")
+        return if direction.negative? ? start.zero? : finish == @line.length
+
+        @vertical_column ||= @position - start
+        target = direction.negative? ? line_start(start - 1) : finish + 1
+        @position = [target + @vertical_column, line_end(target)].min
       end
 
       def cut(start, finish, consecutive = false)
