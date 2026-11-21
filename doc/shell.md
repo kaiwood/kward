@@ -33,11 +33,18 @@ Interactive `kward shell` reads the same [declarative kwshrc files](#configure-k
 
 From a checkout, use `ruby exe/kward shell`. This is a traditional terminal frontend for **kwsh**, not Bash or Zsh; their startup files, programmable completions, and language extensions don’t carry over. The hosted composer and `/shell` shortcuts are not part of this mode. It isn’t an RPC or Pan session capability: it needs a local terminal for interactive editing and job control.
 
-### Edit by word or line
+### Edit commands and search history
 
 In the default editor, use **Option+Left/Right** (**Alt+Left/Right** on other keyboards) or **Alt+B/F** to jump between words. **Option+Backspace** or **Ctrl+W** cuts backward by one word, and **Alt+D** cuts forward by one word.
 
 **Ctrl+K** cuts to the end of the current line. **Ctrl+U** clears the whole draft. Use **Ctrl+Y** to insert the most recent cut at the cursor, even at the next prompt. Consecutive word cuts can be yanked together; nothing runs until you press **Enter**.
+
+Press **Ctrl+R** and type part of a command to find it in history. Press **Ctrl+R** again for older matches, or **Ctrl+S** to move toward newer matches. **Enter** runs a match, **Left/Right** returns to editing it, and **Ctrl+G** or **Esc** restores your original draft. If the search fails, use **Backspace** to shorten the query; Enter won’t run an earlier match by mistake.
+
+- **Ctrl+L** clears the visible screen and redraws the draft without clearing scrollback.
+- **Ctrl+T** swaps adjacent characters. **Ctrl+_** undoes the last edit in the draft.
+- **Alt+.** inserts the final shell word from the previous history entry, preserving quotes.
+- **Alt+Y**, immediately after **Ctrl+Y**, cycles through older cuts. The cut ring is local to the shell and is not written to disk.
 
 If your Mac types special characters instead of sending the shortcuts, try **Terminal → Settings → Profiles → Keyboard → Use Option as Meta key**. **Ctrl+W** works without Option/Meta setup.
 

@@ -1,6 +1,7 @@
 require_relative "../terminal/keys"
 require_relative "../terminal/sequences"
 require_relative "native_locale"
+require_relative "native_syntax"
 
 module Kward
   module NativeShell
@@ -11,15 +12,20 @@ module Kward
       WORD_START = /\G[#{WORD_CHARACTERS}]*[^#{WORD_CHARACTERS}]*/
       WORD_END = /\G[^#{WORD_CHARACTERS}]*[#{WORD_CHARACTERS}]*/
 
+      HISTORY_SEARCH_KEYS = [TerminalKeys::CTRL_R, TerminalKeys::CTRL_S].freeze
+      CUT_LIMIT = 8
+      UNDO_LIMIT = 100
+
       def initialize(runtime)
         @runtime = runtime
+        @cuts = []
       end
 
       def encoding
         @locale.encoding
       end
 
-      def read(get:, paste:, changed:, alert:, erase:, kill:, eof:, interrupt:, draft: nil)
+      def read(get:, paste:, changed:, alert:, clear:, erase:, kill:, eof:, interrupt:, draft: nil)
         Locale.with(@runtime.variables) do |locale|
           @locale = locale
           @line = draft.to_s.b.force_encoding(encoding).scrub
@@ -28,15 +34,25 @@ module Kward
           @index = @entries.length
           @last_tab = false
           @continued_cut = false
+          @undo = []
+          @last_yank = nil
           loop do
             changed.call(@line, @position)
             key = get.call
             return nil unless key
             raise Interrupt if key == interrupt
+            if HISTORY_SEARCH_KEYS.include?(key) && ![erase, kill, eof].include?(key)
+              @last_tab = @continued_cut = false
+              @last_yank = nil
+              key = search_history(key, get: get, changed: changed, alert: alert, clear: clear, erase: erase, interrupt: interrupt)
+              return nil unless key
+              next if key == :cancel_search
+            end
             return @line + "\n" if TerminalKeys::RETURN.include?(key)
             return nil if key == eof && @line.empty?
 
             @last_tab = false unless TerminalKeys::TAB.include?(key)
+            @last_yank = nil unless TerminalKeys::ALT_Y.include?(key)
             consecutive_cut = @continued_cut
             @continued_cut = false
             case key
@@ -48,28 +64,33 @@ module Kward
             when *TerminalKeys::HOME, TerminalKeys::CTRL_A then @position = 0
             when *TerminalKeys::END_KEY, TerminalKeys::CTRL_E then @position = @line.length
             when erase, *TerminalKeys::BACKSPACE
-              @line.slice!(@position -= 1) if @position.positive?
+              replace(@position - 1, 1) if @position.positive?
             when kill then cut(0, @line.length)
-            when eof, *TerminalKeys::DELETE then @line.slice!(@position)
+            when eof, *TerminalKeys::DELETE then replace(@position, 1) if @position < @line.length
             when *TerminalKeys::ALT_LEFT, *TerminalKeys::ALT_B then @position = previous_word
             when *TerminalKeys::ALT_RIGHT, *TerminalKeys::ALT_F then @position = @line.match(WORD_START, @position).end(0)
             when TerminalKeys::CTRL_K then cut(@position, line_end, consecutive_cut)
             when TerminalKeys::CTRL_W, *TerminalKeys::ALT_BACKSPACE then cut(previous_word, @position, consecutive_cut)
             when *TerminalKeys::ALT_D then cut(@position, @line.match(WORD_END, @position).end(0), consecutive_cut)
-            when TerminalKeys::CTRL_Y then insert(@locale.text(@cut_buffer).scrub) if @cut_buffer
+            when TerminalKeys::CTRL_Y then yank(0)
+            when *TerminalKeys::ALT_Y then yank_pop
+            when *TerminalKeys::ALT_LAST_WORD then insert_last_word(alert)
+            when TerminalKeys::CTRL_L then clear.call
+            when TerminalKeys::CTRL_T, TerminalKeys::CTRL_T_CSI_U then transpose
+            when TerminalKeys::CTRL_UNDERSCORE then undo
             when TerminalSequences::BRACKETED_PASTE_START
               text = paste.call
               return nil unless text
               insert(text)
             else
-              insert(key) if key.length == 1 && key.ord >= 32 && key.ord != 127
+              insert(key) if printable_key?(key)
             end
           rescue EncodingError, ExpansionError
             alert.call
           end
         end
       ensure
-        @locale = @line = @draft = @entries = nil
+        @locale = @line = @draft = @entries = @undo = @last_yank = nil
       end
 
       private
@@ -79,8 +100,7 @@ module Kward
         return alert.call unless completion
 
         if @line[completion.range] != completion.replacement
-          @line[completion.range] = @locale.text(completion.replacement)
-          @position = completion.range.begin + completion.replacement.length
+          replace(completion.range.begin, completion.range.size, @locale.text(completion.replacement))
         elsif @last_tab && completion.candidates.length > 1
           changed.call(completion.candidates.join("\n"), nil)
         else
@@ -103,32 +123,156 @@ module Kward
       def cut(start, finish, consecutive = false)
         return if start == finish
 
-        text = @line.slice!(start...finish)
-        @cut_buffer = if !consecutive
-          text
-        elsif start < @position
-          text + @cut_buffer
+        text = @line[start...finish]
+        if consecutive
+          @cuts[0] = start < @position ? text + @cuts.first : @cuts.first + text
         else
-          @cut_buffer + text
+          @cuts.unshift(text)
+          @cuts.pop if @cuts.length > CUT_LIMIT
         end
-        @position = start
+        replace(start, finish - start)
         @continued_cut = true
       end
 
+      def yank(index, start = @position, length = 0)
+        return if @cuts.empty?
+
+        text = @locale.text(@cuts.fetch(index)).scrub
+        replace(start, length, text)
+        @last_yank = [index, start, text.length]
+      end
+
+      def yank_pop
+        return unless @last_yank && @cuts.length > 1
+
+        index, start, length = @last_yank
+        yank((index + 1) % @cuts.length, start, length)
+      end
+
+      def insert_last_word(alert)
+        return alert.call unless @index.positive?
+
+        word = Lexer.new(history_text(@index - 1)).tokens.reverse_each.find { |token| token.value.is_a?(Word) }
+        word ? insert(word.source) : alert.call
+      rescue SyntaxError
+        alert.call
+      end
+
+      def transpose
+        right = @position
+        right -= 1 if right == @line.length || @line[right] == "\n"
+        return unless right.positive?
+
+        pair = @line[right - 1, 2]
+        replace(right - 1, 2, pair.reverse) unless pair.include?("\n")
+      end
+
       def insert(text)
-        text = @locale.text(text)
-        @line.insert(@position, text)
-        @position += text.length
+        replace(@position, 0, @locale.text(text))
+      end
+
+      def replace(start, length, text = "")
+        removed = @line[start, length]
+        if removed != text
+          @undo << [start, text.length, removed, @position]
+          @undo.shift if @undo.length > UNDO_LIMIT
+          @line[start, length] = text
+        end
+        @position = start + text.length
+      end
+
+      def undo
+        change = @undo.pop
+        return unless change
+
+        start, length, text, cursor = change
+        @line[start, length] = text
+        @position = cursor
+      end
+
+      def printable_key?(key)
+        key.length == 1 && key.ord >= 32 && key.ord != 127
       end
 
       def recall(direction)
         index = @index + direction
         return unless index.between?(0, @entries.length)
 
+        select_history(index)
+      end
+
+      def search_history(key, get:, changed:, alert:, clear:, erase:, interrupt:)
+        query = "".force_encoding(encoding)
+        direction = history_direction(key)
+        anchor = @index
+        index = nil
+        failed = false
+        loop do
+          label = direction.negative? ? "reverse-i-search" : "forward-i-search"
+          label = "failed #{label}" if failed
+          prefix = "(#{label}: #{query}"
+          changed.call(prefix + "): " + (index ? history_text(index) : ""), prefix.length)
+          key = get.call
+          return nil unless key
+          raise Interrupt if key == interrupt
+
+          match = nil
+          case key
+          when TerminalKeys::CTRL_G, TerminalKeys::ESCAPE then return :cancel_search
+          when TerminalKeys::CTRL_L
+            clear.call
+            next
+          when *HISTORY_SEARCH_KEYS
+            direction = history_direction(key)
+            match = history_match(query, index ? index + direction : anchor, direction)
+            anchor = match if match
+          when erase, *TerminalKeys::BACKSPACE
+            query.chop!
+            index = nil if query.empty?
+            match = history_match(query, anchor, direction) unless query.empty?
+          else
+            if printable_key?(key)
+              query << key
+              match = history_match(query, anchor, direction)
+            elsif TerminalKeys::RETURN.include?(key) && (!index || failed)
+              alert.call
+              next
+            else
+              select_history(index) if index && !failed
+              return key
+            end
+          end
+          index = match if match
+          failed = match.nil? && !query.empty?
+        end
+      end
+
+      def history_direction(key)
+        key == TerminalKeys::CTRL_R ? -1 : 1
+      end
+
+      def history_match(query, start, direction)
+        fold = query == query.downcase
+        start = @entries.length - 1 if direction.negative? && start == @entries.length
+        while start.between?(0, @entries.length - 1)
+          text = history_text(start)
+          text = text.downcase if fold
+          return start if text.include?(query)
+          start += direction
+        end
+        nil
+      end
+
+      def select_history(index)
         @draft = @line.dup if @index == @entries.length
-        @line = index == @entries.length ? @draft.dup : @locale.text(@entries.fetch(index).last).dup
+        @line = index == @entries.length ? @draft.dup : history_text(index)
         @index = index
         @position = @line.length
+        @undo.clear
+      end
+
+      def history_text(index)
+        @locale.text(@entries.fetch(index).last).scrub
       end
     end
   end

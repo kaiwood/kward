@@ -17,6 +17,8 @@ All notable changes to Kward will be documented in this file.
 
 - Move and cut by word in `kward shell` with Option/Alt shortcuts and Ctrl+W. Ctrl+K cuts to the end of the line, and Ctrl+Y restores text cut by these shortcuts or Ctrl+U.
 
+- Search standalone shell history with Ctrl+R/Ctrl+S. The default editor also supports screen redraw, transpose, undo, inserting the previous command’s last word, and cycling through older cuts.
+
 - Generate images by asking in a Codex chat. Kward previews the result and can save it to Downloads or a project directory chosen with Tab completion. RPC clients can fetch, save, and discard previews.
 
 - Added Claude Fable 5.2, Mythos 5.2, Opus 5.5, Sonnet 5.5, and Haiku 5.5 to the Anthropic model picker.

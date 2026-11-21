@@ -5,6 +5,7 @@ module Kward
     ALERT = "\a".freeze
     CARRIAGE_RETURN = "\r".freeze
     ERASE_LINE_END = "\e[K".freeze
+    CLEAR_VISIBLE_SCREEN = "\e[2J\e[H".freeze
     KEYBOARD_PROTOCOL_ENABLE = "\e[>25u".freeze
     KEYBOARD_PROTOCOL_RESTORE = "\e[<u".freeze
     KEYBOARD_PROTOCOL_SET = "\e[=25u".freeze

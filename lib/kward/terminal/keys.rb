@@ -10,6 +10,7 @@ module Kward
     CTRL_D = "\x04".freeze
     CTRL_E = "\x05".freeze
     CTRL_F = "\x06".freeze
+    CTRL_G = "\x07".freeze
     CTRL_H = "\x08".freeze
     CTRL_J = "\x0A".freeze
     CTRL_K = "\x0B".freeze
@@ -27,6 +28,7 @@ module Kward
     CTRL_Y = "\x19".freeze
     CTRL_Z = "\x1A".freeze
     CTRL_PERIOD = "\x1E".freeze
+    CTRL_UNDERSCORE = "\x1F".freeze
 
     RETURN = ["\n", "\r"].freeze
     BACKSPACE = ["\b", "\x7F"].freeze
@@ -50,6 +52,8 @@ module Kward
     ALT_B = ["\eb", "\eB"].freeze
     ALT_D = ["\ed", "\eD"].freeze
     ALT_F = ["\ef", "\eF"].freeze
+    ALT_Y = ["\ey", "\eY"].freeze
+    ALT_LAST_WORD = ["\e.", "\e_"].freeze
     ALT_BACKSPACE = ["\e\b", "\e\x7F"].freeze
     ALT_LEFT = ["\e[1;3D", "\e[3D"].freeze
     ALT_RIGHT = ["\e[1;3C", "\e[3C"].freeze

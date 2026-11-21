@@ -228,6 +228,115 @@ class TestCLIShell < KwardTestCase
     end
   end
 
+  def test_incremental_history_search_moves_in_both_directions_and_can_restore_the_draft
+    with_terminal do |reader, writer, pid|
+      read_until(reader, PROMPT)
+      writer.write("echo Match-old\n")
+      read_until(reader, "\r\nMatch-old\r\n")
+      read_until(reader, PROMPT)
+      writer.write("echo Match-new\n")
+      read_until(reader, "\r\nMatch-new\r\n")
+      read_until(reader, PROMPT)
+
+      writer.write("echo AB\e[D\x12match")
+      read_until(reader, "(reverse-i-search: match): echo Match-new")
+      writer.write("\x12")
+      read_until(reader, "(reverse-i-search: match): echo Match-old")
+      writer.write("\x13")
+      read_until(reader, "(forward-i-search: match): echo Match-new")
+      writer.write("\x07X\n")
+      read_until(reader, "\r\nAXB\r\n")
+      read_until(reader, PROMPT)
+      writer.write("exit\n")
+      assert_equal 0, wait_for_exit(pid).exitstatus
+    end
+  end
+
+  def test_failed_history_search_does_not_submit_a_stale_match
+    with_terminal do |reader, writer, pid|
+      read_until(reader, PROMPT)
+      writer.write("echo found\n")
+      read_until(reader, "\r\nfound\r\n")
+      read_until(reader, PROMPT)
+      writer.write("\x12foundx")
+      read_until(reader, "(failed reverse-i-search: foundx): echo found")
+      writer.write("\n")
+      waiting = read_until(reader, "\a")
+      refute_includes waiting, PASTE_OFF
+      writer.write("\x7f")
+      read_until(reader, "(reverse-i-search: found): echo found")
+      writer.write("\n")
+      read_until(reader, "\r\nfound\r\n")
+      read_until(reader, PROMPT)
+      writer.write("exit\n")
+      assert_equal 0, wait_for_exit(pid).exitstatus
+    end
+  end
+
+  def test_clear_screen_redraws_the_draft_without_erasing_scrollback
+    with_terminal do |reader, writer, pid|
+      read_until(reader, PROMPT)
+      writer.write("echo AB\e[D\x0c")
+      redraw = read_until(reader, "\e[2J\e[H")
+      redraw << read_until(reader, "\r#{PROMPT}echo AB\e[K")
+      refute_includes redraw, "\e[3J"
+      writer.write("X\n")
+      read_until(reader, "\r\nAXB\r\n")
+      read_until(reader, PROMPT)
+      writer.write("exit\n")
+      assert_equal 0, wait_for_exit(pid).exitstatus
+    end
+  end
+
+  def test_transposition_and_undo_restore_text_and_cursor
+    with_terminal do |reader, writer, pid|
+      read_until(reader, PROMPT)
+      writer.write("echo teh\x14\n")
+      read_until(reader, "\r\nthe\r\n")
+      read_until(reader, PROMPT)
+      writer.write("echo abc\e[D\e[D\x14\x1fX\n")
+      read_until(reader, "\r\naXbc\r\n")
+      read_until(reader, PROMPT)
+      writer.write("echo keep discard\x17\x1f\n")
+      read_until(reader, "\r\nkeep discard\r\n")
+      read_until(reader, PROMPT)
+      writer.write("exit\n")
+      assert_equal 0, wait_for_exit(pid).exitstatus
+    end
+  end
+
+  def test_meta_period_inserts_the_previous_shell_word_with_quoting_intact
+    with_terminal do |reader, writer, pid|
+      read_until(reader, PROMPT)
+      writer.write("echo 'two words'\n")
+      read_until(reader, "\r\ntwo words\r\n")
+      read_until(reader, PROMPT)
+      writer.write("printf '<%s>\\n' \e.")
+      draft = read_until(reader, "printf '<%s>\\n' 'two words'\e[K")
+      refute_includes draft, PASTE_OFF
+      writer.write("\n")
+      read_until(reader, "\r\n<two words>\r\n")
+      read_until(reader, PROMPT)
+      writer.write("exit\n")
+      assert_equal 0, wait_for_exit(pid).exitstatus
+    end
+  end
+
+  def test_yank_pop_replaces_only_the_just_yanked_text_and_wraps
+    with_terminal do |reader, writer, pid|
+      read_until(reader, PROMPT)
+      writer.write("older\x15new\x15echo \x19\ey")
+      read_until(reader, "\r#{PROMPT}echo older\e[K")
+      writer.write("\eY")
+      read_until(reader, "\r#{PROMPT}echo new\e[K")
+      writer.write("\x1f!\ey\n")
+      read_until(reader, "\r\nolder!\r\n")
+      read_until(reader, PROMPT)
+      writer.write("exit\n")
+      assert_equal 0, wait_for_exit(pid).exitstatus
+    end
+  end
+
   def test_multiline_bracketed_paste_requires_enter_and_preserves_continuations
     with_terminal do |reader, writer, pid|
       read_until(reader, PROMPT)

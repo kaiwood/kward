@@ -13,7 +13,8 @@ module Kward
 
       MAX_ESCAPE_BYTES = 32
       MAX_PASTE_BYTES = 1_048_576
-      META_KEYS = (TerminalKeys::ALT_B + TerminalKeys::ALT_D + TerminalKeys::ALT_F + TerminalKeys::ALT_BACKSPACE).freeze
+      META_KEYS = (TerminalKeys::ALT_B + TerminalKeys::ALT_D + TerminalKeys::ALT_F +
+                   TerminalKeys::ALT_BACKSPACE + TerminalKeys::ALT_LAST_WORD + TerminalKeys::ALT_Y).freeze
 
       def initialize(runtime, editor, bracketed_paste: false)
         @runtime = runtime
@@ -27,7 +28,9 @@ module Kward
         @left = 0
         controls = control_characters(source)
         callbacks = { get: method(:character), changed: method(:redraw), alert: method(:alert) }
-        callbacks.merge!(get: method(:key), paste: method(:read_paste)) if @bracketed_paste
+        if @bracketed_paste
+          callbacks.merge!(get: method(:key), paste: method(:read_paste), clear: method(:clear_screen))
+        end
         result = source.raw(intr: false) do
           begin
             write(TerminalSequences::BRACKETED_PASTE_ENABLE) if @bracketed_paste
@@ -120,6 +123,10 @@ module Kward
         end
       rescue EOFError
         nil
+      end
+
+      def clear_screen
+        write(TerminalSequences::CLEAR_VISIBLE_SCREEN)
       end
 
       def alert
