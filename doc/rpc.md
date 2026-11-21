@@ -536,7 +536,7 @@ Examples:
 
 | Method | Parameters | Result |
 | --- | --- | --- |
-| `images/fetch` | `sessionId`, `imageId`, optional `offset` (default `0`) | Up to 256 KiB of image bytes, encoded as base64 in `data`, with `offset`, `nextOffset`, and image metadata. Follow `nextOffset` until it is `null`, decoding each chunk separately. |
+| `images/fetch` | `sessionId`, `imageId`, optional `offset` (default `0`) | Up to 256 KiB of image bytes, encoded as base64 in `data`, with `offset`, `nextOffset`, and image metadata. Follow `nextOffset` until it is `null`, decoding each chunk separately. An `offset` equal to `size` returns empty `data` and a `null` `nextOffset`; larger offsets are invalid. |
 | `images/saveToProject` | `sessionId`, `imageId`, optional `directory` (default `.`) | `path` of the saved file. The directory must exist inside the originating project. Files are never overwritten. |
 | `images/discard` | `sessionId`, `imageId` | `{ "discarded": true }`. Saved copies are not affected. |
 

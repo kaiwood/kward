@@ -24,7 +24,8 @@ class TestRPCGeneratedImages < KwardTestCase
       config = File.join(root, "config")
       FileUtils.mkdir_p(config)
       with_env("KWARD_CONFIG_DIR" => config, "KWARD_CONFIG_PATH" => File.join(config, "config.json")) do
-        server = Kward::RPC::Server.new(input: StringIO.new, output: StringIO.new, error_output: StringIO.new, client: ImageClient.new)
+        output = StringIO.new
+        server = Kward::RPC::Server.new(input: StringIO.new, output: output, error_output: StringIO.new, client: ImageClient.new)
         dispatch = ->(method, params) { server.send(:dispatch, method, params) }
         session = dispatch.call("sessions/create", "workspaceRoot" => root, "name" => "Origin")
         turn = dispatch.call("turns/start", "sessionId" => session[:id], "input" => "Draw a square")
@@ -37,6 +38,13 @@ class TestRPCGeneratedImages < KwardTestCase
         fetched = dispatch.call("images/fetch", args)
         assert_equal ImageClient::PNG, Base64.strict_decode64(fetched[:data])
         assert_nil fetched[:nextOffset]
+
+        size = ImageClient::PNG.bytesize
+        server.send(:handle_message, "jsonrpc" => "2.0", "id" => 1, "method" => "images/fetch", "params" => args.merge("offset" => size))
+        response = read_framed_messages(output).find { |message| message["id"] == 1 }.fetch("result")
+        assert_equal({ "offset" => size, "data" => "", "nextOffset" => nil }, response.slice("offset", "data", "nextOffset"))
+        assert_raises(ArgumentError) { dispatch.call("images/fetch", args.merge("offset" => size + 1)) }
+
         other = dispatch.call("sessions/create", "workspaceRoot" => root, "name" => "Other")
         assert_raises(ArgumentError) { dispatch.call("images/fetch", args.merge("sessionId" => other[:id])) }
         assert_raises(ArgumentError) { dispatch.call("images/saveToProject", args.merge("directory" => "..")) }

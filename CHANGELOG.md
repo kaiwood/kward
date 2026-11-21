@@ -58,6 +58,7 @@ All notable changes to Kward will be documented in this file.
 ### Fixed
 
 - Keep pending terminal image previews available when a queued follow-up starts before the preview opens.
+- Return an empty final chunk when an RPC image fetch starts exactly at the end of the image.
 - Native dot-sourcing now continues searching `PATH` when a matching file cannot be opened, selecting the first readable candidate as required.
 - Native `getopts` error diagnostics now identify the invoking shell, including for unknown options and missing option arguments.
 - Standalone `read` now displays the parameter-expanded `PS2` prompt on interactive backslash-newline continuations.

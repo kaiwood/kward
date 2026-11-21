@@ -56,8 +56,12 @@ module Kward
       @mutex.synchronize do
         entry = entry_for(owner, id)
         raise Error, "Invalid image offset." if offset > entry.preview.size
+        return [entry.preview, "".b] if offset == entry.preview.size
 
-        [entry.preview, File.binread(entry.path, FETCH_CHUNK_BYTES, offset)]
+        bytes = File.binread(entry.path, FETCH_CHUNK_BYTES, offset)
+        raise Error, "Image preview is unavailable or has been discarded." unless bytes
+
+        [entry.preview, bytes]
       end
     rescue SystemCallError
       raise Error, "Image preview is unavailable or has been discarded."
