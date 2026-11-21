@@ -147,7 +147,7 @@ class TestGeneratedImages < KwardTestCase
     end
   end
 
-  def test_background_image_waits_for_its_tab_and_survives_switching_away
+  def test_background_image_survives_turn_history_reset_and_tab_switches
     with_images do |images, root|
       owner = Kward::Conversation.new(workspace_root: root)
       image = images.add(owner, PNG)
@@ -157,13 +157,18 @@ class TestGeneratedImages < KwardTestCase
       cli.instance_variable_set(:@generated_images, images)
       tab_type = Kward::CLI::Tabs::TabRuntime
       active = tab_type.new(label: "Active", event_history: [], status: "idle")
-      background = tab_type.new(label: "Background", event_history: [event], status: "idle", agent: Struct.new(:conversation).new(owner))
+      background = tab_type.new(label: "Background", event_history: [], status: "idle", agent: Struct.new(:conversation).new(owner))
+      background.record_event(event)
       cli.instance_variable_set(:@tabs, [active, background])
       cli.instance_variable_set(:@active_tab_index, 0)
       assert_equal "Background · image", cli.send(:tab_labels).last[:name]
       cli.send(:offer_tab_images, background)
       prompt.poll_input
       refute prompt.send(:image_viewer_active?)
+
+      # A follow-up can reset render history before the image was ever shown.
+      background.event_history.clear
+      assert_equal "Background · image", cli.send(:tab_labels).last[:name]
 
       cli.instance_variable_set(:@active_tab_index, 1)
       cli.send(:offer_tab_images, background)

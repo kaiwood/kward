@@ -46,10 +46,16 @@ module Kward
         :local_busy_activity,
         :pending_runtime_outputs,
         :image_offers,
-        :offered_image_ids,
         keyword_init: true
       ) do
         TRANSIENT_SHELL_OUTPUT_LIMIT = 200_000
+
+        attr_reader :pending_images
+
+        def initialize(**attributes)
+          super
+          @pending_images = Queue.new
+        end
 
         def running?
           %w[queued running waiting_for_question].include?(status.to_s)
@@ -70,6 +76,7 @@ module Kward
 
         def record_event(event)
           event_history << event
+          pending_images << event.image if event.is_a?(Events::ImageReady)
         end
 
         def append_transient_shell_entry(text)
@@ -830,6 +837,7 @@ module Kward
         service_background_tab_runs
         tab = active_tab
         unless tab&.running? || tab&.local_busy?
+          offer_tab_images(tab) if tab
           input = @prompt.ask("You>")
           return { tab_action: :close } if input.nil? && tab && @tabs.length > 1
 
@@ -856,6 +864,7 @@ module Kward
             sleep 0.01
             next
           end
+          offer_tab_images(tab)
           poll_result = @prompt.poll_input
           case poll_result
           when Hash
@@ -1005,7 +1014,6 @@ module Kward
           elsif plugin_tab_type_for(driver)&.transcript_events
             notify_plugin_tab_transcript_event(event, driver)
           end
-          offer_tab_images(tab, events: [event]) if event.is_a?(Events::ImageReady)
           handle_interactive_event(event, tab.markdown_chunks, tab.stream_state)
           flush_interactive_markdown_deltas(tab.markdown_chunks, tab.stream_state)
         rescue StandardError => e
@@ -1013,19 +1021,17 @@ module Kward
         end
       end
 
-      def offer_tab_images(tab, events: tab.event_history)
+      def offer_tab_images(tab)
         return unless tab.equal?(active_tab) && tab.agent && @prompt.respond_to?(:offer_generated_images)
+        return unless tab_image_waiting?(tab)
 
         offers = tab.image_offers || []
         tab.image_offers = nil
-        offered = tab.offered_image_ids ||= {}
-        events.each do |event|
-          next unless event.is_a?(Events::ImageReady) && !offered[event.image.id]
-
-          offered[event.image.id] = true
-          offers << { store: @generated_images, owner: tab.agent.conversation, image: event.image }
+        # Only the input thread drains the queue; the turn worker can only append.
+        tab.pending_images.size.times do
+          offers << { store: @generated_images, owner: tab.agent.conversation, image: tab.pending_images.pop }
         end
-        @prompt.offer_generated_images(offers) unless offers.empty?
+        @prompt.offer_generated_images(offers)
       end
 
       def suspend_tab_images(tab)
@@ -1039,7 +1045,7 @@ module Kward
 
         suspend_tab_images(tab)
         tab.image_offers = nil
-        tab.offered_image_ids = nil
+        tab.pending_images.clear
         @generated_images.discard_owner(tab.agent.conversation)
       end
 
@@ -1077,11 +1083,7 @@ module Kward
       end
 
       def tab_image_waiting?(tab)
-        return true if tab.image_offers && !tab.image_offers.empty?
-
-        Array(tab.event_history).reverse_each.any? do |event|
-          event.is_a?(Events::ImageReady) && !tab.offered_image_ids&.key?(event.image.id)
-        end
+        !tab.pending_images.empty? || (tab.image_offers && !tab.image_offers.empty?)
       end
 
       def tab_label_color(tab)
