@@ -443,7 +443,7 @@ module Kward
         transcript_output
       end
 
-      def flush_background_tab_output(tab, state, result: nil)
+      def flush_background_tab_output(tab, state, result: nil, complete: false)
         sink = state[:run].sink
         output = sink&.captured_output.to_s
         return if output.empty?
@@ -451,10 +451,17 @@ module Kward
         transcript_output = if state[:output_kind] == :streamed
           background_stream_transcript_output(sink)
         else
-          transcript_result = result || InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: false)
+          transcript_result = result if result.respond_to?(:input_forwarded)
+          transcript_result ||= InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: false)
           background_shell_transcript_output(sink, transcript_result)
         end
         return unless transcript_output
+
+        unless complete
+          # Transcript entries finish on a new line; keep a partial PTY row buffered.
+          newline = transcript_output.rindex("\n")
+          transcript_output = newline ? transcript_output[0..newline] : ""
+        end
 
         rendered_output = state[:rendered_output].to_s
         if transcript_output.start_with?(rendered_output)

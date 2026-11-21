@@ -57,6 +57,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Keep detached shell output on the same line across PTY reads.
 - Restore the current terminal size on new shell PTYs, including after a `/shell` worker restarts.
 - Preserve wide characters, combining accents, and backspace redraws in shell transcript replay.
 - Bound the size of shell transcript replay when a command uses cursor movement.

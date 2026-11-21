@@ -724,7 +724,7 @@ module Kward
           complete = state[:run].complete?
           result = state[:run].result if complete
           if state[:output_kind] && respond_to?(:flush_background_tab_output, true)
-            flush_background_tab_output(tab, state, result: result)
+            flush_background_tab_output(tab, state, result: result, complete: complete)
           end
           next unless complete
 

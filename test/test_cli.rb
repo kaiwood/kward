@@ -1716,6 +1716,26 @@ class TestCLI < KwardTestCase
     assert_equal [["Enumerating objects: 3, done.\nWriting objects: 100%\nDone\n", false]], recorded_output
   end
 
+  def test_detached_pty_output_holds_partial_rows_until_newline_or_completion
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    tab = Object.new
+    cli.define_singleton_method(:active_tab) { tab }
+    sink = Kward::BufferedPtyOutputSink.new(max_capture_bytes: 1024)
+    state = { run: Struct.new(:sink).new(sink), output_kind: :pty, rendered_output: "" }
+
+    sink.write("Starting\r\ndown")
+    cli.send(:flush_background_tab_output, tab, state)
+    assert_equal "Starting\n", prompt.tab_view_snapshot[:transcript_buffer].to_s
+
+    sink.write("load complete\r\nfinal status")
+    cli.send(:flush_background_tab_output, tab, state)
+    assert_equal "Starting\ndownload complete\n", prompt.tab_view_snapshot[:transcript_buffer].to_s
+
+    cli.send(:flush_background_tab_output, tab, state, complete: true)
+    assert_equal "Starting\ndownload complete\nfinal status\n", prompt.tab_view_snapshot[:transcript_buffer].to_s
+  end
+
   def test_terminal_transcript_output_rejects_truncated_output
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
     result = Kward::InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: false)
