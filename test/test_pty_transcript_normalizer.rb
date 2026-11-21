@@ -39,6 +39,12 @@ class TestPtyTranscriptNormalizer < KwardTestCase
     assert_equal "e\u0301Y", Kward::PtyTranscriptNormalizer.normalize("e\e[31m\u0301X\e[2GY")
   end
 
+  def test_combining_marks_after_controls_modify_one_cell_at_a_time
+    output = "\e[4GX\e[3G" + "\e[31m\u0301" * 10
+
+    assert_equal "  #{"\u0301" * 10} X", Kward::PtyTranscriptNormalizer.normalize(output)
+  end
+
   def test_overwriting_or_erasing_one_half_of_a_wide_grapheme_clears_both
     assert_equal " YX", Kward::PtyTranscriptNormalizer.normalize("好X\e[2GY")
     assert_equal "", Kward::PtyTranscriptNormalizer.normalize("好X\e[2G\e[K")

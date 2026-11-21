@@ -29,6 +29,7 @@ module Kward
     # without modeling a complete terminal screen.
     class Line
       WideGlyph = Struct.new(:text, :column, :width)
+      BLANK_CELL = " ".freeze
 
       def initialize(text, columns)
         @text = text
@@ -106,7 +107,8 @@ module Kward
           if previous.is_a?(WideGlyph)
             previous.text << grapheme
           elsif previous
-            @cells[@cursor - 1] = previous + grapheme
+            previous = previous.dup if previous.frozen?
+            @cells[@cursor - 1] = previous << grapheme
           end
           return
         end
@@ -121,14 +123,14 @@ module Kward
       def clear_cell(column)
         cell = @cells[column]
         if cell.is_a?(WideGlyph)
-          @cells.fill(" ", cell.column, cell.width)
+          @cells.fill(BLANK_CELL, cell.column, cell.width)
         elsif cell
-          @cells[column] = " "
+          @cells[column] = BLANK_CELL
         end
       end
 
       def fill_to_cursor
-        @cells.concat([" "] * (@cursor - @cells.length)) if @cursor > @cells.length
+        @cells.concat([BLANK_CELL] * (@cursor - @cells.length)) if @cursor > @cells.length
       end
     end
   end
