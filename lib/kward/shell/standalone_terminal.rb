@@ -2,6 +2,7 @@ require "io/console"
 require "pty"
 require "json"
 require "socket"
+require_relative "../terminal/ansi"
 require_relative "../terminal/keys"
 require_relative "../pty/adaptive_output_sink"
 require_relative "../pty/transcript_normalizer"
@@ -23,7 +24,7 @@ module Kward
         @null = File.open(File::NULL, "w")
         @channel, child = UNIXSocket.pair
         @channel.sync = true
-        @reader, @writer, @pid = PTY.spawn(*ruby_arguments, descriptors.merge(CHANNEL_FD => child))
+        @reader, @writer, @pid = PTY.spawn(color_defaults, *ruby_arguments, descriptors.merge(CHANNEL_FD => child))
         child.close
         @writer.sync = true
         @reader.console_mode = $stdin.console_mode
@@ -53,6 +54,16 @@ module Kward
       end
 
       private
+
+      def color_defaults
+        return {} if ENV["TERM"] == "dumb" || !ANSI.enabled?
+
+        defaults = {}
+        defaults["CLICOLOR"] = "1" unless ENV.key?("CLICOLOR")
+        defaults["COLORTERM"] = "truecolor" unless ENV.key?("COLORTERM")
+        defaults["TERM"] = "xterm-256color" if ENV["TERM"].to_s.empty?
+        defaults
+      end
 
       def relay
         loop do

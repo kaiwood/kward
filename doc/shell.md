@@ -897,7 +897,7 @@ In standalone `kward shell`, agent-run commands also default to a 300-second tim
 
 `export` values from rc files are applied when `/shell` starts and are also available to leading-`!` commands. Keys must be valid environment-variable names; invalid keys are ignored. Values support shell quoting and simple `$VAR`/`${VAR}` expansion.
 
-Kward also supplies conservative terminal defaults:
+For `/shell` and leading-`!` commands, Kward supplies these terminal defaults:
 
 ```sh
 export CLICOLOR=1
@@ -905,7 +905,9 @@ export COLORTERM=truecolor
 export TERM=xterm-256color  # only when TERM is missing or dumb
 ```
 
-It does not force color. Set `FORCE_COLOR`, `CLICOLOR_FORCE`, or a command-specific option such as `--color=always` when needed.
+On a real terminal, interactive `kward shell` also defaults to `CLICOLOR=1` and `COLORTERM=truecolor` when color isn't disabled, and uses `TERM=xterm-256color` if `TERM` is unset or empty. It preserves `TERM=dumb` for plain input. Startup scripts can override these defaults. Noninteractive invocations and the separate `kwsh` executable don't add them.
+
+These defaults don't force color. Set `FORCE_COLOR`, `CLICOLOR_FORCE`, or a command-specific option such as `--color=always` when needed.
 
 When rbenv is available, Kward adds its shims and bin directories to `PATH` and supplies `RBENV_ROOT` if it was missing before starting `/shell`. The configured interactive shell may also load its normal startup files.
 

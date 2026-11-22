@@ -40,6 +40,39 @@ class TestCLIShell < KwardTestCase
     assert_includes output, "Usage: kward shell"
   end
 
+  def test_interactive_shell_exports_color_defaults_without_overriding_terminal_settings
+    cases = [
+      [{}, "1:truecolor:xterm"],
+      [{ "TERM" => nil }, "1:truecolor:xterm-256color"],
+      [{ "CLICOLOR" => "2", "COLORTERM" => "24bit" }, "2:24bit:xterm"],
+      [{ "CLICOLOR" => "0" }, "0:unset:xterm"],
+      [{ "NO_COLOR" => "1" }, "unset:unset:xterm"],
+      [{ "TERM" => "dumb" }, "unset:unset:dumb"]
+    ]
+    Dir.mktmpdir do |home|
+      cases.each do |settings, expected|
+        env = { "HOME" => home, "KWARD_CONFIG_PATH" => File.join(home, "config.json"), "COLORTERM" => nil }
+        with_terminal(env.merge(settings)) do |reader, writer, pid|
+          read_until(reader, PROMPT)
+          writer.write(<<~'SH')
+            /bin/sh -c 'printf "%s:%s:%s\n" "${CLICOLOR-unset}" "${COLORTERM-unset}" "$TERM"'
+          SH
+          read_until(reader, "\r\n#{expected}\r\n")
+          read_until(reader, PROMPT)
+          writer.write("exit\n")
+          assert wait_for_exit(pid).success?
+        end
+      end
+    end
+  end
+
+  def test_noninteractive_shell_does_not_set_color_defaults
+    output, error, status = Open3.capture3({ "CLICOLOR" => nil, "COLORTERM" => nil, "TERM" => "xterm" },
+      RbConfig.ruby, EXECUTABLE, "shell", "-c", 'printf "%s:%s:%s\n" "${CLICOLOR-unset}" "${COLORTERM-unset}" "$TERM"')
+    assert status.success?, error
+    assert_equal "unset:unset:xterm\n", output
+  end
+
   def test_interactive_kwshrc_executes_native_code_in_order_without_reading_json
     Dir.mktmpdir do |home|
       config = File.join(home, "shell settings")

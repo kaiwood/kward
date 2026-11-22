@@ -6,6 +6,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Enable automatic color for commands such as macOS `ls` in interactive `kward shell`, without overriding `TERM=dumb` or changing script environments.
+
 - Execute interactive `kward shell` startup files as native shell scripts. The native `source` builtin works like `.`, while hosted `/shell` configuration and its top-level `source` command remain declarative.
 
 - Require `kward prompt <text>` for one-shot model prompts and add `kward filter <instruction>` for explicit stdin filtering; unknown CLI arguments now fail instead of being sent to the model.
