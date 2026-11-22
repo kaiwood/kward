@@ -12,6 +12,11 @@ class TestNativeShellInvocation < KwardTestCase
                   RbConfig.ruby, EXECUTABLE, *args, **options)
   end
 
+  def invoke_with_shell_path(path, script)
+    # Keep Git available while Bundler loads the checkout's gemspec.
+    invoke("-c", "export PATH=#{Shellwords.escape(path)}\n#{script}")
+  end
+
   def test_source_is_an_executable_alias_for_dot_in_native_scripts
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "library"), 'value=$1; helper() { printf "%s" "$value"; }; return 7; printf unreachable')
@@ -25,7 +30,7 @@ class TestNativeShellInvocation < KwardTestCase
       assert_equal "7:outer:inner", output
       assert_empty error
 
-      output, error, status = invoke("-c", "source no-such-file; printf unreachable", env: { "PATH" => dir })
+      output, error, status = invoke_with_shell_path(dir, "source no-such-file; printf unreachable")
       assert_equal 2, status.exitstatus
       assert_empty output
       assert_includes error, "source: file not found: no-such-file"
@@ -70,7 +75,7 @@ class TestNativeShellInvocation < KwardTestCase
       executable = File.join(dir, "sample")
       File.write(executable, "#!/bin/sh\nexit 0\n")
       File.chmod(0o755, executable)
-      output, error, status = invoke("-c", <<~'SHELL', env: { "PATH" => dir })
+      output, error, status = invoke_with_shell_path(dir, <<~'SHELL')
         alias sample='/checkout/exe/sample --flag'
         helper() { :; }
         which sample helper cd
@@ -88,7 +93,7 @@ class TestNativeShellInvocation < KwardTestCase
       executable = File.join(dir, "which")
       File.write(executable, "#!/bin/sh\nprintf '<%s>\\n' \"$@\"\n")
       File.chmod(0o755, executable)
-      output, error, status = invoke("-c", "which -a sample", env: { "PATH" => dir })
+      output, error, status = invoke_with_shell_path(dir, "which -a sample")
       assert status.success?, error
       assert_empty error
       assert_equal "<-a>\n<sample>\n", output

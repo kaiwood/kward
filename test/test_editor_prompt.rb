@@ -105,11 +105,9 @@ class TestEditorPrompt < KwardTestCase
 
     assert prompt.send(:editor_visible?)
     status = strip_ansi(output.string)
-    assert_includes status, "Agent is working", -> { 'Expected "Agent is working" in the editor footer' }
-    assert_includes status, "· ·", -> {
-      footer = status.scan(/Agent is working[^│\n]{0,64}/).last&.rstrip
-      %(Expected "· ·" in the editor footer; got #{footer.inspect})
-    }
+    footer = status.scan(/Agent is working[^│\n]{0,64}/).last&.rstrip
+    frames = Regexp.union(Kward::PromptInterface::SPINNER_FRAMES)
+    assert_match(/\AAgent is working · Ctrl\+C cancels · #{frames}\z/, footer)
     prompt.send(:handle_key, "i")
     assert_equal "old", editor.buffer
   end
