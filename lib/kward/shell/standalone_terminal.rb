@@ -24,7 +24,7 @@ module Kward
         @null = File.open(File::NULL, "w")
         @channel, child = UNIXSocket.pair
         @channel.sync = true
-        @reader, @writer, @pid = PTY.spawn(color_defaults, *ruby_arguments, descriptors.merge(CHANNEL_FD => child))
+        @reader, @writer, @pid = PTY.spawn(terminal_defaults, *ruby_arguments, descriptors.merge(CHANNEL_FD => child))
         child.close
         @writer.sync = true
         @reader.console_mode = $stdin.console_mode
@@ -54,6 +54,13 @@ module Kward
       end
 
       private
+
+      def terminal_defaults
+        defaults = color_defaults
+        # Git's default LESS=FRX disables alternate-screen restoration (-X).
+        defaults["LESS"] = "FR" unless ENV.key?("LESS") || ENV["TERM"] == "dumb"
+        defaults
+      end
 
       def color_defaults
         return {} if ENV["TERM"] == "dumb" || !ANSI.enabled?

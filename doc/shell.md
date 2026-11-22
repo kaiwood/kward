@@ -33,6 +33,8 @@ Interactive `kward shell` executes `~/.kward/kwshrc` and then `~/.kwshrc` in the
 
 From a checkout, use `ruby exe/kward shell`. This is a traditional terminal frontend for **kwsh**, not Bash or Zsh; their startup files and extensions don’t generally carry over. A small Bash-style completion subset supports rbenv. The hosted composer and `/shell` shortcuts are not part of this mode. It isn’t an RPC or Pan session capability: it needs a local terminal for interactive editing and job control.
 
+`kward edit <file>` restores the previous shell screen when you quit. The standalone shell defaults `LESS` to `FR` when unset on a capable terminal, so long Git logs restore the screen on quit and short logs still print normally. Your own `LESS` and pager settings take precedence; use `LESS=FRX` if you prefer to leave the log on screen.
+
 ### Edit commands and search history
 
 In the default editor, use **Option+Left/Right** (**Alt+Left/Right** on other keyboards) or **Alt+B/F** to jump between words. **Option+Backspace** or **Ctrl+W** cuts backward by one word, and **Alt+D** cuts forward by one word.

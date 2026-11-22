@@ -85,6 +85,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Restore the previous terminal screen after `kward edit` and after leaving full-screen Git logs in `kward shell` with the default pager settings.
 - Use every terminal row in the editor, both inside chat and when launched with `kward edit`.
 - Show the active alias in kwsh’s `which` output instead of reporting the shadowed executable.
 - Return to the shell prompt below the Kward transcript on exit, rather than jumping to the top of the screen.

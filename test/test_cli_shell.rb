@@ -1,5 +1,6 @@
 require_relative "test_helper"
 require "fiddle"
+require "io/console"
 require "open3"
 require "pty"
 require "shellwords"
@@ -71,6 +72,73 @@ class TestCLIShell < KwardTestCase
       RbConfig.ruby, EXECUTABLE, "shell", "-c", 'printf "%s:%s:%s\n" "${CLICOLOR-unset}" "${COLORTERM-unset}" "$TERM"')
     assert status.success?, error
     assert_equal "unset:unset:xterm\n", output
+  end
+
+  def test_standalone_editor_restores_the_shell_screen_on_quit
+    Dir.mktmpdir do |home|
+      path = File.join(home, "example.txt")
+      File.write(path, "editor-buffer-marker\n")
+      with_terminal("HOME" => home, "KWARD_CONFIG_DIR" => nil, "KWARD_CONFIG_PATH" => nil) do |reader, writer, pid|
+        reader.winsize = [24, 80]
+        read_until(reader, PROMPT)
+        writer.write("printf 'previous-screen-marker\\n'\n")
+        read_until(reader, "\r\nprevious-screen-marker\r\n")
+        read_until(reader, PROMPT)
+
+        command = Shellwords.join([RbConfig.ruby, EXECUTABLE, "--skip-config", "edit", path])
+        writer.write(command + "\n")
+        assert_includes read_until(reader, "editor-buffer-marker"), "\e[?1049h"
+        writer.write("\x11") # Ctrl+Q
+        restored = read_until(reader, PASTE_ON + "\r" + PROMPT)
+        assert_match(/#{Regexp.escape(PASTE_OFF)}.*\e\[\?1049l/m, restored)
+        refute_includes restored.split("\e[?1049l", 2).last, "\e[2J"
+        writer.write("exit\n")
+        assert wait_for_exit(pid).success?
+      end
+    end
+  end
+
+  def test_colorized_git_log_alias_restores_the_shell_screen_on_quit
+    %w[git less].each do |program|
+      skip "#{program} is not installed" unless system(program, "--version", out: File::NULL, err: File::NULL)
+    end
+
+    Dir.mktmpdir do |home|
+      env = { "HOME" => home, "KWARD_CONFIG_DIR" => nil, "GIT_CONFIG_GLOBAL" => File::NULL,
+              "GIT_CONFIG_NOSYSTEM" => "1", "GIT_PAGER" => "less", "LESS" => nil }
+      assert system(env, "git", "init", "-q", home)
+      assert system(env, "git", "-C", home, "-c", "user.name=Test", "-c", "user.email=test@example.org",
+                    "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "Test")
+      File.write(File.join(home, ".kwshrc"), <<~SH)
+        cd "$HOME"
+        alias glog='git log -1 --format=%Credpager-line%Creset#{"%nmore" * 30}'
+      SH
+
+      with_terminal(env) do |reader, writer, pid|
+        reader.winsize = [24, 80]
+        read_until(reader, PROMPT)
+        writer.write("glog\n")
+        assert_includes read_until(reader, "\e[31mpager-line"), "\e[?1049h"
+        writer.write("q")
+        assert_includes read_until(reader, PASTE_ON + "\r" + PROMPT), "\e[?1049l"
+        writer.write("exit 0\n")
+        assert wait_for_exit(pid).success?
+      end
+    end
+  end
+
+  def test_pager_default_preserves_explicit_less_settings_and_skips_dumb_terminals
+    Dir.mktmpdir do |home|
+      [{ "LESS" => "FRX" }, { "LESS" => "" }, { "LESS" => nil, "TERM" => "dumb" }].each do |settings|
+        with_terminal({ "HOME" => home, "KWARD_CONFIG_DIR" => nil }.merge(settings)) do |reader, writer, pid|
+          read_until(reader, PROMPT)
+          writer.write(%q{printf '<%s>\n' "${LESS-unset}"} + "\n")
+          read_until(reader, "\r\n<#{settings['LESS'] || 'unset'}>\r\n")
+          writer.write("exit\n")
+          assert wait_for_exit(pid).success?
+        end
+      end
+    end
   end
 
   def test_interactive_kwshrc_executes_native_code_in_order_without_reading_json

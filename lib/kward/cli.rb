@@ -4,6 +4,7 @@ require "thread"
 require "tty-prompt"
 require_relative "agent"
 require_relative "terminal/ansi"
+require_relative "terminal/sequences"
 require_relative "version"
 require_relative "model/client"
 require_relative "compactor"
@@ -413,6 +414,9 @@ module Kward
     end
 
     def edit_file_command(path)
+      terminal = $stdout if @stdin.tty? && $stdout.tty? && ENV["TERM"] != "dumb"
+      terminal&.write(TerminalSequences::ALTERNATE_SCREEN_ENTER)
+      terminal&.flush
       setup_interactive_prompt
       unless @prompt.respond_to?(:edit_file)
         raise ArgumentError, "The integrated editor requires an interactive terminal."
@@ -420,8 +424,13 @@ module Kward
 
       @prompt.edit_file(path, base_dir: Dir.pwd, allow_new: true)
     ensure
-      @prompt.close if @prompt.respond_to?(:close) && prompt_interface?
-      clear_interactive_warning_sink if respond_to?(:clear_interactive_warning_sink, true)
+      begin
+        @prompt.close if @prompt.respond_to?(:close) && prompt_interface?
+      ensure
+        terminal&.write(TerminalSequences::ALTERNATE_SCREEN_LEAVE)
+        terminal&.flush
+        clear_interactive_warning_sink if respond_to?(:clear_interactive_warning_sink, true)
+      end
     end
 
     def run_prompt_or_interactive
