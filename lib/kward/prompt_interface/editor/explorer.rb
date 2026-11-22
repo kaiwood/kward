@@ -21,7 +21,7 @@ module Kward
       end
 
       def editor_explorer_snapshot(state = @editor_explorer)
-        state&.merge(expanded: state[:expanded].dup, selected: state[:selected].dup)
+        state&.except(:motion_prefix)&.merge(expanded: state[:expanded].dup, selected: state[:selected].dup)
       end
 
       def editor_explorer_header_label(width)
@@ -101,6 +101,7 @@ module Kward
 
       def toggle_editor_explorer
         restore_editor_explorer unless @editor_explorer
+        @editor_explorer.delete(:motion_prefix)
         visible = @editor_explorer[:visible] = !@editor_explorer[:visible]
         @editor_explorer[:focused] = visible && editor_explorer_width.zero?
         load_editor_explorer_tree if visible
@@ -176,7 +177,7 @@ module Kward
         tree = @editor_explorer[:tree].rows(@editor_explorer[:expanded]).map do |row|
           kind = row[:directory] ? :directory : :file
           prefix = row[:directory] ? (row[:expanded] ? "▾ " : "▸ ") : "  "
-          { key: [kind, row[:path]], label: "#{'  ' * row[:depth]}#{prefix}#{row[:name]}", active: kind == :file && row[:path] == active_path }
+          { key: [kind, row[:path]], label: "#{'  ' * row[:depth]}#{prefix}#{row[:name]}", expanded: row[:expanded], active: kind == :file && row[:path] == active_path }
         end
         [{ label: "Open Editors" }, *buffers, { label: "Workspace" }, *tree]
       end
@@ -197,8 +198,8 @@ module Kward
         lines = [editor_pane_top_border(colored(EXPLORER_TOGGLE, heading), width)]
         [height - 2, 0].max.times do |index|
           row = rows[index]
-          label = row ? "#{row[:active] ? '•' : ' '} #{row[:label]}" : ""
-          label = ANSI.strip(label.scrub).gsub(/[[:cntrl:]]/, " ")
+          label = editor_explorer_row_label(row)
+          label = TerminalText.drop_cells(label, @editor_explorer[:horizontal_offset].to_i) if row&.[](:key)
           selected = row && row[:key] && row[:key] == @editor_explorer[:selected] && @editor_explorer[:focused]
           text = visible_ljust(visible_truncate(label, columns), columns)
           text = "#{TerminalSequences::SGR_INVERSE}#{text}#{TerminalSequences::SGR_INVERSE_OFF}" if selected
@@ -206,6 +207,13 @@ module Kward
         end
         lines << bottom_border(width) if height > 1
         lines
+      end
+
+      def editor_explorer_row_label(row)
+        return "" unless row
+
+        label = "#{row[:active] ? '•' : ' '} #{row[:label]}"
+        ANSI.strip(label.scrub).gsub(/[[:cntrl:]]/, " ")
       end
 
       def editor_explorer_body_height(height = screen_height, width = screen_width)
@@ -229,6 +237,8 @@ module Kward
       def handle_editor_explorer_mouse(event)
         return false unless editor_explorer_available?
         return false if @editor_mouse_dragging && (event[:drag] || event[:release])
+
+        @editor_explorer&.delete(:motion_prefix) if editor_explorer_click?(event)
 
         width = editor_explorer_width
         focused = editor_explorer_focused?
@@ -275,6 +285,7 @@ module Kward
       def handle_editor_explorer_key(key)
         return false unless editor_explorer_focused?
         if (paste = read_bracketed_paste(key))
+          @editor_explorer.delete(:motion_prefix)
           queue_pending_keys(paste[:remaining])
           return true
         end
@@ -282,26 +293,125 @@ module Kward
 
         sequence = parse_csi_u_key(key)
         queue_pending_keys(sequence[:remaining]) if sequence && !sequence[:remaining].to_s.empty?
+        return true if sequence&.[](:event_type) == 3
+
         name = { 13 => :enter, 27 => :escape }[sequence&.[](:code)] || key_name_for(key)
         rows = editor_explorer_rows
         index = rows.index { |row| row[:key] && row[:key] == @editor_explorer[:selected] }
+        return true if @editor_state.vibe? && handle_vibe_explorer_motion(key, sequence, rows, index)
+
         case name
         when :up, :down
-          indices = rows.each_index.select { |candidate| rows[candidate][:key] }
-          target = if name == :up
-                     indices.reverse.find { |candidate| !index || candidate < index }
-                   else
-                     indices.find { |candidate| !index || candidate > index }
-                   end
-          if target
-            @editor_explorer[:selected] = rows[target][:key]
-            count = [editor_explorer_body_height - 2, 1].max
-            @editor_explorer[:offset] = @editor_explorer[:offset].clamp([target - count + 1, 0].max, target)
-          end
+          target = editor_explorer_step(rows, index, name)
+          select_editor_explorer_row(rows, target)
         when :enter, :return
           editor_explorer_activate_row(rows[index], keyboard: true) if index
         when :escape
           @editor_explorer[:focused] = false
+        end
+        true
+      end
+
+      def editor_explorer_step(rows, index, direction)
+        if direction == :up
+          start = (index || rows.length) - 1
+          start.downto(0).find { |candidate| rows[candidate][:key] }
+        else
+          start = index ? index + 1 : 0
+          (start...rows.length).find { |candidate| rows[candidate][:key] }
+        end
+      end
+
+      def select_editor_explorer_row(rows, index)
+        return unless index
+
+        @editor_explorer[:selected] = rows[index][:key]
+        count = [editor_explorer_body_height - 2, 1].max
+        @editor_explorer[:offset] = @editor_explorer[:offset].clamp([index - count + 1, 0].max, index)
+      end
+
+      def handle_vibe_explorer_motion(key, sequence, rows, index)
+        motion = sequence ? vibe_explorer_printable_key(sequence) : key
+        prefix = @editor_explorer.delete(:motion_prefix)
+        if prefix == "z"
+          return scroll_vibe_explorer(motion, rows, index)
+        elsif prefix == "g" && motion == "g"
+          select_editor_explorer_row(rows, editor_explorer_step(rows, nil, :down))
+          @editor_explorer[:offset] = 0
+          return true
+        end
+
+        case motion
+        when "g", "z"
+          @editor_explorer[:motion_prefix] = motion unless sequence&.[](:event_type) == 2
+        when "j", "k"
+          direction = motion == "j" ? :down : :up
+          select_editor_explorer_row(rows, editor_explorer_step(rows, index, direction))
+        when "G"
+          select_editor_explorer_row(rows, editor_explorer_step(rows, nil, :up))
+        when "H", "M", "L"
+          select_vibe_explorer_viewport_row(motion, rows)
+        when "h", "l"
+          move_vibe_explorer_folder(motion, rows, index) if index
+        else
+          return false
+        end
+        true
+      end
+
+      def select_vibe_explorer_viewport_row(motion, rows)
+        window = editor_explorer_window(rows, editor_explorer_body_height)
+        entries = window.each_index.select { |index| window[index][:key] }
+        target = case motion
+                 when "H" then entries.first
+                 when "M" then entries.min_by { |index| (index - window.length / 2).abs }
+                 when "L" then entries.last
+                 end
+        select_editor_explorer_row(rows, @editor_explorer[:offset] + target) if target
+      end
+
+      def vibe_explorer_printable_key(sequence)
+        modifiers = (sequence[:modifier] - 1) & ~192
+        return unless [0, 1].include?(modifiers)
+
+        text = csi_u_printable_text(sequence)
+        if modifiers == 1 && text&.match?(/\A[a-z]\z/)
+          text.upcase
+        else
+          text
+        end
+      end
+
+      def move_vibe_explorer_folder(motion, rows, index)
+        row = rows[index]
+        kind, path = row[:key]
+        expanded = @editor_explorer[:expanded]
+        if motion == "l"
+          expanded.add(path) if kind == :directory
+        elsif row[:expanded]
+          expanded.delete(path)
+        elsif kind != :buffer
+          parent = [:directory, File.dirname(path)]
+          select_editor_explorer_row(rows, rows.index { |candidate| candidate[:key] == parent })
+        end
+      end
+
+      def scroll_vibe_explorer(motion, rows, index)
+        case motion
+        when "z", "t", "b"
+          if index
+            height = [editor_explorer_body_height - 2, 1].max
+            above = { "z" => height / 2, "t" => 0, "b" => height - 1 }.fetch(motion)
+            @editor_explorer[:offset] = index - above
+          end
+        when "h", "l", "H", "L"
+          columns = [(editor_explorer_width.nonzero? || screen_width) - 4, 1].max
+          step = motion == motion.upcase ? [columns / 2, 1].max : 1
+          step = -step if motion.downcase == "h"
+          widest = rows.filter_map { |row| TerminalText.width(editor_explorer_row_label(row)) if row[:key] }.max.to_i
+          @editor_explorer[:horizontal_offset] = (@editor_explorer[:horizontal_offset].to_i + step).clamp(0, [widest - columns, 0].max)
+        else
+          return false
         end
         true
       end

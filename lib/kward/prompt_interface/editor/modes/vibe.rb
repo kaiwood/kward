@@ -62,6 +62,7 @@ module Kward
           end
         else
           @editor_state.vibe_pending = ""
+          @editor_explorer.delete(:motion_prefix)
           @vibe_pane_prefix_editor = @editor_state
         end
         true

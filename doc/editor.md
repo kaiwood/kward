@@ -89,6 +89,8 @@ Click a folder to expand or collapse it, or click a file to open it. Click back 
 
 **Open Editors** lists the buffers you've opened. A `*` marks unsaved changes. Switching files or hiding the sidebar keeps edits, cursor position, and undo history in memory. Save each changed file before quitting, or use your editor mode's explicit discard action to quit without saving. The Explorer opens text files; use `/files` for image previews and file management. There is no keyboard shortcut to show or hide the Explorer.
 
+When the Explorer has focus in Vibe mode, `j`/`k` move down/up, `l` expands a folder, and `h` collapses an expanded folder or moves to its parent. `gg` and `G` jump to the first and last entries. `H`, `M`, and `L` select an entry at the top, middle, or bottom of the visible pane without scrolling. `zz`, `zt`, and `zb` scroll to place the selection in the middle, at the top, or at the bottom where possible. `zh`/`zl` scroll left/right by one column; `zH`/`zL` scroll by half a pane. Press `Enter` to open a file.
+
 The Explorer remembers whether it was open, which folders were expanded, and where you left off in the tree for each workspace. On a narrow terminal, the file still opens first; click **[Explorer]** to return to the tree. This saves only sidebar preferences, not open buffers or unsaved edits.
 
 ## Example workflow

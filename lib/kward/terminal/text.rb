@@ -27,6 +27,21 @@ module Kward
       truncated
     end
 
+    def drop_cells(text, columns)
+      return text if columns <= 0
+      return text[columns..].to_s if text.ascii_only?
+
+      remaining = columns
+      offset = 0
+      text.each_grapheme_cluster do |grapheme|
+        cell_width = width(grapheme)
+        offset += grapheme.length
+        remaining -= cell_width
+        return (" " * -remaining) + text[offset..] if remaining <= 0
+      end
+      ""
+    end
+
     def wrap(text, width:, cursor: nil)
       string = text.to_s
       line_width = [width.to_i, 1].max

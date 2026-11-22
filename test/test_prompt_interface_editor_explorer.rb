@@ -232,7 +232,107 @@ class TestPromptInterfaceEditorExplorer < KwardTestCase
     end
   end
 
+  def test_vibe_explorer_moves_between_entries_and_expands_or_collapses_folders
+    with_editor(mode: "vibe") do |prompt, _root|
+      focus_explorer(prompt)
+      assert_match(/a\.txt/, selected_explorer_row(prompt))
+      key(prompt, "k")
+      assert_match(/▸ lib/, selected_explorer_row(prompt))
+      key(prompt, "l")
+      assert_match(/▾ lib/, selected_explorer_row(prompt))
+      key(prompt, "j")
+      assert_match(/b\.txt/, selected_explorer_row(prompt))
+      key(prompt, "h")
+      assert_match(/▾ lib/, selected_explorer_row(prompt))
+      key(prompt, "h")
+      assert_match(/▸ lib/, selected_explorer_row(prompt))
+      refute_match(/b\.txt/, frame(prompt).join)
+      assert_equal "alpha\n", editor(prompt).buffer
+    end
+  end
+
+  def test_vibe_explorer_jumps_to_the_first_and_last_entries
+    with_editor(mode: "vibe") do |prompt, root|
+      20.times { |index| File.write(File.join(root, format("file-%02d.txt", index)), "") }
+      focus_explorer(prompt)
+      key(prompt, "\e[103;2u")
+      assert_match(/file-19/, selected_explorer_row(prompt))
+      key(prompt, "\e[103;1:1u")
+      key(prompt, "\e[103;1:3u")
+      key(prompt, "g")
+      assert_match(/• a\.txt/, selected_explorer_row(prompt))
+      assert_equal 2, frame(prompt).count { |line| line.include?("Open Editors") || line.include?("Workspace") }
+    end
+  end
+
+  def test_vibe_explorer_selects_top_middle_and_bottom_visible_entries_without_scrolling
+    with_editor(mode: "vibe") do |prompt, root|
+      30.times { |index| File.write(File.join(root, format("file-%02d.txt", index)), "") }
+      focus_explorer(prompt)
+      key(prompt, "H")
+      assert_match(/• a\.txt/, selected_explorer_row(prompt))
+
+      key(prompt, "G")
+      viewport = frame(prompt)
+      { "H" => 1, "M" => 7, "L" => 12 }.each do |motion, expected_row|
+        key(prompt, motion)
+        assert viewport[expected_row].start_with?(selected_explorer_row(prompt))
+        assert_equal viewport, frame(prompt)
+      end
+    end
+  end
+
+  def test_vibe_explorer_repositions_the_selected_row_with_z_motions
+    with_editor(mode: "vibe") do |prompt, root|
+      30.times { |index| File.write(File.join(root, format("file-%02d.txt", index)), "") }
+      focus_explorer(prompt)
+      15.times { key(prompt, "j") }
+      selected = selected_explorer_row(prompt)
+      { "zt" => 1, "zz" => 7, "zb" => 12 }.each do |motion, expected_row|
+        motion.each_char { |character| key(prompt, character) }
+        assert_equal selected, selected_explorer_row(prompt)
+        assert_equal expected_row, frame(prompt).index { |row| row.start_with?(selected) }
+      end
+    end
+  end
+
+  def test_vibe_explorer_scrolls_horizontally_without_splitting_wide_names
+    with_editor(mode: "vibe") do |prompt, root|
+      filename = "界abcdefghijklmnopqrstuvwxyz-0123456789.txt"
+      File.write(File.join(root, filename), "")
+      focus_explorer(prompt)
+      key(prompt, "G")
+      initial = selected_explorer_row(prompt)
+      assert_includes initial, "界abcdef"
+
+      5.times { %w[z l].each { |character| key(prompt, character) } }
+      assert_match(/\A│  abcdef/, selected_explorer_row(prompt))
+      %w[z h].each { |character| key(prompt, character) }
+      assert_includes selected_explorer_row(prompt), "界abcdef"
+      %w[z L].each { |character| key(prompt, character) }
+      assert_includes selected_explorer_row(prompt), "0123"
+      %w[z L].each { |character| key(prompt, character) }
+      assert_includes selected_explorer_row(prompt), "6789.txt"
+      3.times { %w[z H].each { |character| key(prompt, character) } }
+      assert_equal initial, selected_explorer_row(prompt)
+    end
+  end
+
   private
+
+  def focus_explorer(prompt)
+    toggle(prompt)
+    key(prompt, "\x17")
+    key(prompt, "h")
+  end
+
+  def selected_explorer_row(prompt)
+    width, height = prompt.send(:screen_size)
+    rows, = prompt.send(:composer_layout, width, height)
+    selected = rows.find { |row| row.include?("\e[7m") }
+    refute_nil selected
+    Kward::TerminalText.truncate(strip_ansi(selected), width / 3)
+  end
 
   def with_editor(width: 80, mode: "modern")
     Dir.mktmpdir do |root|
