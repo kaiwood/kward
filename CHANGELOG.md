@@ -20,7 +20,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
-- Give the editor Explorer a rounded frame that matches the editor pane.
+- Use one rounded frame with a single divider between the Explorer and editor, both in Kward tabs and in standalone editing.
 
 ### Fixed
 

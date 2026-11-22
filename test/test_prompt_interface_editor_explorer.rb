@@ -1,18 +1,39 @@
 require_relative "test_helper"
 
 class TestPromptInterfaceEditorExplorer < KwardTestCase
-  def test_explorer_has_its_own_rounded_frame_aligned_with_the_editor
+  def test_standalone_editor_shares_one_frame_with_the_explorer
     with_editor do |prompt, _root|
       toggle(prompt)
       rows = frame(prompt)
-      assert_match(/\A╭ \[Explorer\] ─+╮╭ Edit /, rows.first)
-      assert_match(/\A│ +Open Editors +││/, rows[1])
-      assert_match(/\A╰─+╯╰─+╯\z/, rows.last)
+      assert_match(/\A╭ \[Explorer\] ─+┬─ Edit a\.txt ─+╮\z/, rows.first)
+      assert_includes rows[1], "Open Editors"
+      assert rows[1...-1].all? { |row| row.start_with?("│") && row.end_with?("│") && row[25, 2] == "│ " }
+      assert_match(/\A╰─+╯\z/, rows.last)
       assert rows.all? { |row| Kward::TerminalText.width(row) == 80 }
 
       closing_bracket = rows.first.index("]") + 1
       click(prompt, closing_bracket, 1)
       refute_match(/Open Editors/, frame(prompt).join)
+    end
+  end
+
+  def test_tabbed_editor_shares_one_frame_with_the_explorer
+    with_editor do |prompt, _root|
+      prompt.update_tabs(labels: ["Chat", "Edit"], active_index: 1)
+      prompt.instance_variable_set(:@color_enabled, true)
+      tab_border = frame(prompt).last(3)
+      toggle(prompt)
+      rows = frame(prompt)
+      body = rows[1...-3]
+      assert_match(/\A╭ \[Explorer\] ─+┬─ Edit a\.txt ─+╮\z/, rows.first)
+      assert_includes body.first, "Open Editors"
+      assert body.all? { |row| row.start_with?("│") && row.end_with?("│") && row[25, 2] == "│ " }
+      assert rows.all? { |row| Kward::TerminalText.width(row) == 80 }
+      assert_equal tab_border, rows.last(3)
+
+      click_row(prompt, /▸ lib/)
+      click_row(prompt, /b\.txt/)
+      assert_equal "beta\n", editor(prompt).buffer
     end
   end
 
@@ -22,13 +43,13 @@ class TestPromptInterfaceEditorExplorer < KwardTestCase
       toggle(prompt)
       assert_match(/Open Editors/, frame(prompt).join)
       click_row(prompt, /▸ lib/)
-      click_row(prompt, /^│\s+b\.txt\s+│/)
+      click_row(prompt, /^│\s+b\.txt\s/)
       assert_match(/Edit lib\/b.txt/, frame(prompt).first)
 
       toggle(prompt)
       refute_match(/Open Editors/, frame(prompt).join)
       toggle(prompt)
-      click_row(prompt, /a.txt \*\s+│/)
+      click_row(prompt, /a\.txt \*\s/)
       assert_match(/Xalpha/, frame(prompt).join)
       assert_equal [0, 1], editor(prompt).cursor_line_and_column
       assert_equal "alpha\n", File.read(File.join(root, "a.txt"))
@@ -62,7 +83,7 @@ class TestPromptInterfaceEditorExplorer < KwardTestCase
       key(prompt, "X")
       toggle(prompt)
       click_row(prompt, /▸ lib/)
-      click_row(prompt, /^│\s+b\.txt\s+│/)
+      click_row(prompt, /^│\s+b\.txt\s/)
       toggle(prompt)
       key(prompt, "\x11")
       assert prompt.editing_file?
@@ -79,12 +100,12 @@ class TestPromptInterfaceEditorExplorer < KwardTestCase
       key(prompt, "X")
       toggle(prompt)
       click_row(prompt, /▸ lib/)
-      click_row(prompt, /^│\s+b\.txt\s+│/)
+      click_row(prompt, /^│\s+b\.txt\s/)
       snapshot = prompt.tab_view_snapshot
       prompt.restore_tab_view_snapshot({})
       refute prompt.editing_file?
       prompt.restore_tab_view_snapshot(snapshot)
-      click_row(prompt, /a.txt \*\s+│/)
+      click_row(prompt, /a\.txt \*\s/)
       assert_equal "Xalpha\n", editor(prompt).buffer
     end
   end

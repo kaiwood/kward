@@ -23,10 +23,30 @@ module Kward
         if sidebar_width.positive?
           pane_height = editor_explorer_body_height(height, width)
           sidebar = editor_explorer_layout(sidebar_width, pane_height)
-          rows = sidebar.zip(rows).map { |left, right| left + right.to_s }
+          rows = join_editor_panes(sidebar, rows, sidebar_width, width)
           rows.concat(editor_bottom_rows(width)) unless @tabs.empty?
         end
         [rows.first(height), cursor_row, cursor_col + sidebar_width]
+      end
+
+      def join_editor_panes(sidebar, source, sidebar_width, width)
+        vertical = colored("│", :primary_green)
+        top_join = colored("┬─", :primary_green)
+        top_left = colored("╭", :primary_green)
+        top_right = colored("╮", :primary_green)
+
+        sidebar.each_with_index.map do |left, index|
+          right = source[index].to_s
+          if index.zero?
+            left.delete_suffix(top_right) + top_join + right.delete_prefix(top_left)
+          elsif index == sidebar.length - 1 && @tabs.empty?
+            bottom_border(width)
+          else
+            # In a tab, the sidebar ends at the editor status row, above the shared tab border.
+            left = vertical + (" " * (sidebar_width - 2)) + vertical if index == sidebar.length - 1
+            left + " " + right.delete_prefix(vertical)
+          end
+        end
       end
 
       def editor_source_layout(width, height)
