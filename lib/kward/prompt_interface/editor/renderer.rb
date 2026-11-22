@@ -7,8 +7,15 @@ module Kward
       private
 
       def editor_layout(width, height = screen_height)
-        return editor_split_layout(width, height) if editor_runner_output_visible?
+        rows, cursor_row, cursor_col = if editor_runner_output_visible?
+                                         editor_split_layout(width, height)
+                                       else
+                                         editor_source_layout(width, height)
+                                       end
+        [rows.first(height), cursor_row, cursor_col]
+      end
 
+      def editor_source_layout(width, height)
         content_width = [width - 4, 1].max
         visible_count = editor_visible_line_count(height: height, width: width)
         line_index, column = @editor_state.cursor_line_and_column
@@ -41,9 +48,7 @@ module Kward
       end
 
       def editor_split_visible_counts(height:, width:)
-        # Keep one row available above the composer, matching the normal editor layout.
-        available = height - editor_bottom_rows(width).length - 5
-        available = 2 if available < 2
+        available = [height - editor_bottom_rows(width).length - 4, 2].max
         source_count = (available + 1) / 2
         [source_count, available - source_count]
       end
@@ -177,9 +182,7 @@ module Kward
       end
 
       def editor_visible_line_count(height: screen_height, width: screen_width)
-        visible_count = [[height - 3 - editor_bottom_rows(width).length, 1].max, 1].max
-        visible_count = [visible_count, height - 4].min if height > 4
-        [visible_count, 1].max
+        [height - editor_bottom_rows(width).length - 2, 1].max
       end
 
       def editor_bottom_rows(width)

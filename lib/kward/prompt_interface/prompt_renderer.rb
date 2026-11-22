@@ -74,6 +74,8 @@ module Kward
         elsif @reserved_rows.zero?
           reserve_composer_region_locked(width: width, height: height)
         end
+        return if transcript_region_hidden?(height)
+
         hide_cursor_for_transcript_output_locked
         move_to_transcript_cursor_locked(width: width, height: height)
       end

@@ -666,7 +666,7 @@ module Kward
       end
 
       def editor_mouse_content_top_row
-        3
+        2
       end
 
       def handle_editor_shift_navigation_key(key)

@@ -398,14 +398,13 @@ class TestPromptInterfaceEditor < KwardTestCase
     assert prompt.send(:open_scratchpad, :ruby)
     editor = prompt.instance_variable_get(:@editor_state)
     editor.insert("puts 'output'\n")
-    normal_rows, = prompt.send(:editor_layout, 80, 12)
 
     prompt.send(:run_editor_buffer)
     wait_until { !prompt.instance_variable_get(:@editor_runner_state).running? }
     rows, = prompt.send(:editor_layout, 80, 12)
 
     rendered = strip_ansi(rows.join("\n"))
-    assert_equal normal_rows.length, rows.length
+    assert_equal 12, rows.length
     assert_operator rendered.index("Output"), :>, rendered.index("Edit")
     assert_includes rendered, "output"
     assert prompt.send(:editor_runner_output_visible?)
@@ -1348,7 +1347,7 @@ class TestPromptInterfaceEditor < KwardTestCase
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
 
-        prompt.send(:handle_editor_key, "\e[<0;12;4M")
+        prompt.send(:handle_editor_key, "\e[<0;12;3M")
 
         assert_equal [1, 2], editor.cursor_line_and_column
         refute editor.selection_active?
@@ -1364,9 +1363,9 @@ class TestPromptInterfaceEditor < KwardTestCase
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
 
-        prompt.send(:handle_editor_key, "\e[<0;11;3M")
-        prompt.send(:handle_editor_key, "\e[<32;14;3M")
-        prompt.send(:handle_editor_key, "\e[<0;14;3m")
+        prompt.send(:handle_editor_key, "\e[<0;11;2M")
+        prompt.send(:handle_editor_key, "\e[<32;14;2M")
+        prompt.send(:handle_editor_key, "\e[<0;14;2m")
 
         assert_equal "lph", editor.selected_text
       end
@@ -1381,8 +1380,8 @@ class TestPromptInterfaceEditor < KwardTestCase
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
 
-        prompt.send(:handle_editor_key, "\e[<0;16;3M")
-        prompt.send(:handle_editor_key, "\e[<0;16;3M")
+        prompt.send(:handle_editor_key, "\e[<0;16;2M")
+        prompt.send(:handle_editor_key, "\e[<0;16;2M")
 
         assert_equal "beta", editor.selected_text
       end
@@ -1397,9 +1396,9 @@ class TestPromptInterfaceEditor < KwardTestCase
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
 
-        prompt.send(:handle_editor_key, "\e[<0;16;3M")
-        prompt.send(:handle_editor_key, "\e[<0;16;3M")
-        prompt.send(:handle_editor_key, "\e[<32;14;4M")
+        prompt.send(:handle_editor_key, "\e[<0;16;2M")
+        prompt.send(:handle_editor_key, "\e[<0;16;2M")
+        prompt.send(:handle_editor_key, "\e[<32;14;3M")
 
         assert_equal "beta\ngamm", editor.selected_text
       end
@@ -1414,7 +1413,7 @@ class TestPromptInterfaceEditor < KwardTestCase
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
 
-        3.times { prompt.send(:handle_editor_key, "\e[<0;11;4M") }
+        3.times { prompt.send(:handle_editor_key, "\e[<0;11;3M") }
 
         assert_equal "bravo\n", editor.selected_text
       end
@@ -1429,8 +1428,8 @@ class TestPromptInterfaceEditor < KwardTestCase
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
 
-        3.times { prompt.send(:handle_editor_key, "\e[<0;11;4M") }
-        prompt.send(:handle_editor_key, "\e[<32;13;5M")
+        3.times { prompt.send(:handle_editor_key, "\e[<0;11;3M") }
+        prompt.send(:handle_editor_key, "\e[<32;13;4M")
 
         assert_equal "bravo\ncha", editor.selected_text
       end
@@ -1446,12 +1445,12 @@ class TestPromptInterfaceEditor < KwardTestCase
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
 
-        prompt.send(:handle_editor_key, "\e[<0;8;3M")
+        prompt.send(:handle_editor_key, "\e[<0;8;2M")
         prompt.send(:handle_editor_key, "\e[<32;8;13M")
 
         assert_equal 1, editor.viewport_row
         assert editor.selection_active?
-        assert_equal [10, 0], editor.cursor_line_and_column
+        assert_equal [11, 0], editor.cursor_line_and_column
       end
     end
   end
@@ -1465,7 +1464,7 @@ class TestPromptInterfaceEditor < KwardTestCase
         editor = prompt.instance_variable_get(:@editor_state)
         editor.viewport_column = 10
 
-        prompt.send(:handle_editor_key, "\e[<0;12;3M")
+        prompt.send(:handle_editor_key, "\e[<0;12;2M")
 
         assert_equal [0, 12], editor.cursor_line_and_column
       end
@@ -1477,7 +1476,7 @@ class TestPromptInterfaceEditor < KwardTestCase
     assert prompt.send(:open_diff_viewer, "notes.txt", "alpha\nbravo")
     editor = prompt.instance_variable_get(:@editor_state)
 
-    prompt.send(:handle_editor_key, "\e[<0;12;4M")
+    prompt.send(:handle_editor_key, "\e[<0;12;3M")
 
     assert_equal [1, 2], editor.cursor_line_and_column
   end
@@ -2269,7 +2268,7 @@ class TestPromptInterfaceEditor < KwardTestCase
         "five".each_char { |char| prompt.send(:handle_editor_key, char) }
 
         assert_equal [4, 0], editor.cursor_line_and_column
-        assert_operator editor.viewport_row, :>=, 3
+        assert_equal 2, editor.viewport_row
       end
     end
   end
@@ -2598,12 +2597,51 @@ class TestPromptInterfaceEditor < KwardTestCase
 
         rows, = prompt.send(:composer_layout, 80, 20)
 
-        assert_equal 19, rows.length
+        assert_equal 20, rows.length
         assert_includes strip_ansi(rows.first), "Edit notes.txt"
       end
     end
   ensure
     TTY::Screen.define_singleton_method(:height, original_height) if original_height
+  end
+
+  def test_fullscreen_editor_hides_transcript_until_it_closes
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "one\ntwo\n")
+      output = StringIO.new
+      height = 20
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, workspace_root: dir)
+      prompt.define_singleton_method(:screen_width) { 80 }
+      prompt.define_singleton_method(:screen_height) { height }
+      prompt.update_tabs(labels: ["Chat", "Other"], active_index: 0)
+      prompt.start
+      prompt.write_transcript("Earlier transcript")
+      assert prompt.send(:open_editor, "notes.txt")
+
+      offset = output.pos
+      prompt.send(:render_prompt_locked)
+      frame = output.string.byteslice(offset..)
+      assert_includes frame, "\e[1;1H╭ Edit notes.txt"
+      assert_includes frame, "\e[20;1H"
+
+      offset = output.pos
+      prompt.write_stream_block("Assistant", "Background transcript", finish: true)
+      height = 12
+      prompt.send(:render_prompt_locked)
+      resized_frame = output.string.byteslice(offset..)
+      assert_includes resized_frame, "\e[1;1H╭ Edit notes.txt"
+      assert_includes resized_frame, "\e[12;1H"
+      refute_includes resized_frame, "Earlier transcript"
+      refute_includes resized_frame, "Background transcript"
+
+      offset = output.pos
+      prompt.send(:close_editor)
+      prompt.send(:render_prompt_locked)
+      restored_frame = output.string.byteslice(offset..)
+      assert_includes restored_frame, "Earlier transcript"
+      assert_includes restored_frame, "Background transcript"
+      assert_includes restored_frame, "\e[1;6r"
+    end
   end
 
   def test_prompt_interface_editor_tab_keybindings_return_tab_actions

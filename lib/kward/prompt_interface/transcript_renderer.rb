@@ -31,8 +31,10 @@ module Kward
       def write_visual_transcript_text_locked(text)
         width, height = screen_size
         output_text = terminal_newlines(text.to_s)
-        advance_pending_stream_wrap_locked(output_text, width: width, height: height)
-        print_output_locked(output_text)
+        unless transcript_region_hidden?(height)
+          advance_pending_stream_wrap_locked(output_text, width: width, height: height)
+          print_output_locked(output_text)
+        end
         update_stream_position(output_text, width: width)
       end
 
@@ -51,7 +53,7 @@ module Kward
       end
 
       def redraw_transcript_locked(width: screen_width, height: screen_height)
-        return unless transcript_renderable?
+        return if transcript_region_hidden?(height) || !transcript_renderable?
 
         rows = transcript_viewport_rows(transcript_redraw_row_count(height), width)
         clear_screen_rows_locked(1, rows.length)
@@ -70,7 +72,7 @@ module Kward
       end
 
       def remember_transcript_viewport_locked(height = screen_height)
-        @transcript_viewport_rows = transcript_bottom_row(height)
+        @transcript_viewport_rows = transcript_bottom_row(height) unless transcript_region_hidden?(height)
       end
 
       def transcript_renderable?

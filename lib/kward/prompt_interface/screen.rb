@@ -111,7 +111,8 @@ module Kward
       end
 
       def ensure_scroll_region_locked(row_count, redraw_transcript: true, width: screen_width, height: screen_height)
-        new_reserved_rows = [[row_count, 1].max, [height - 1, 1].max].min
+        row_limit = editor_visible? ? height : height - 1
+        new_reserved_rows = row_count.clamp(1, row_limit)
         return if @reserved_rows == new_reserved_rows && @last_height == height
 
         old_reserved_rows = @reserved_rows
@@ -119,11 +120,16 @@ module Kward
         @reserved_rows = new_reserved_rows
         new_top = composer_top_row(height)
         new_bottom = transcript_bottom_row(height)
-        print_output_locked(TerminalSequences.scroll_region(1, new_bottom))
+        if transcript_region_hidden?(height)
+          @transcript_viewport_rows = 0
+          print_output_locked(TerminalSequences.restore_scroll_region)
+        else
+          print_output_locked(TerminalSequences.scroll_region(1, new_bottom))
+        end
         clear_screen_rows_locked(old_top, new_top - 1) if new_top > old_top
         clear_screen_rows_locked(new_bottom + 1, new_top - 1) if old_reserved_rows.positive? && new_bottom < new_top - 1
         @last_composer_rows = []
-        if redraw_transcript && @stream_state.block && new_reserved_rows > old_reserved_rows
+        if redraw_transcript && @stream_state.block && new_reserved_rows > old_reserved_rows && !transcript_region_hidden?(height)
           @transcript_viewport_rows = [@transcript_viewport_rows, new_bottom].min
         end
         should_redraw_transcript = redraw_transcript && (new_reserved_rows < old_reserved_rows || @stream_state.block)

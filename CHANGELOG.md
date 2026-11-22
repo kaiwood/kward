@@ -83,6 +83,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Use every terminal row in the editor, both inside chat and when launched with `kward edit`.
 - Show the active alias in kwsh’s `which` output instead of reporting the shadowed executable.
 - Return to the shell prompt below the Kward transcript on exit, rather than jumping to the top of the screen.
 - Keep interactive plugin games open when pressing Command or Shift. Only plain Esc exits by default; plugins can define additional quit keys.

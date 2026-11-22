@@ -238,7 +238,7 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
         assert_equal [10, 2], editor.cursor_line_and_column
 
         prompt.send(:handle_editor_key, "L")
-        assert_equal [14, 2], editor.cursor_line_and_column
+        assert_equal [15, 2], editor.cursor_line_and_column
 
         prompt.send(:handle_editor_key, "2")
         prompt.send(:handle_editor_key, "H")
@@ -246,7 +246,7 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
 
         prompt.send(:handle_editor_key, "2")
         prompt.send(:handle_editor_key, "L")
-        assert_equal [13, 2], editor.cursor_line_and_column
+        assert_equal [14, 2], editor.cursor_line_and_column
       end
     end
   end
@@ -288,10 +288,10 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
         editor = prompt.instance_variable_get(:@editor_state)
 
         prompt.send(:handle_editor_key, "\x06")
-        assert_equal [10, 0], editor.cursor_line_and_column
+        assert_equal [11, 0], editor.cursor_line_and_column
 
         prompt.send(:handle_editor_key, "\x15")
-        assert_equal [5, 0], editor.cursor_line_and_column
+        assert_equal [6, 0], editor.cursor_line_and_column
 
         prompt.send(:handle_editor_key, "\x02")
         assert_equal [0, 0], editor.cursor_line_and_column
@@ -2482,7 +2482,7 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
 
         prompt.send(:handle_editor_key, "z")
         prompt.send(:handle_editor_key, "b")
-        assert_equal 13, editor.viewport_row
+        assert_equal 12, editor.viewport_row
       end
     end
   end
@@ -2515,10 +2515,10 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
         prompt.define_singleton_method(:screen_height) { 12 }
 
         prompt.send(:handle_editor_key, "\e[102;5u")
-        assert_equal [8, 0], editor.cursor_line_and_column
+        assert_equal [9, 0], editor.cursor_line_and_column
 
         prompt.send(:handle_editor_key, "\e[117;5u")
-        assert_equal [4, 0], editor.cursor_line_and_column
+        assert_equal [5, 0], editor.cursor_line_and_column
 
         prompt.send(:handle_editor_key, "\e[98;5u")
         assert_equal [0, 0], editor.cursor_line_and_column

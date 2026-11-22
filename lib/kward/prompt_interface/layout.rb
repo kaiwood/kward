@@ -22,6 +22,10 @@ module Kward
         [height - 2, 1].max
       end
 
+      def transcript_region_hidden?(height = screen_height)
+        @reserved_rows >= height
+      end
+
       def transcript_bottom_row(height = screen_height)
         available = height - @reserved_rows
         # A scroll region needs two rows; give up the gap before the second row.
