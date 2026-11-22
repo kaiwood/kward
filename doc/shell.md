@@ -477,7 +477,7 @@ Actions execute as native source at interpreter safe points, preserving the inte
 
 Standalone interactive kwsh ignores `TERM` and `QUIT` by default. It also ignores `TTIN`, `TTOU`, and `TSTP` while monitoring jobs (and chooses to keep ignoring them with monitoring disabled). `INT` discards unfinished prompt input; while executing a command, an `INT` sent only to the shell does not interrupt that command. Terminal-generated Ctrl+C normally targets the foreground job, whose signal status is returned to the prompt. These shell-only defaults are reset for child commands, native scripts, and executable-text fallback; explicitly ignored signals remain ignored.
 
-In standalone `kwsh`, `exec program args...` uses direct `execve`: it preserves the PID, does not run an EXIT trap on success, and never falls back to `/bin/sh`. `exec -c` clears the child's environment; `-a name` selects argv[0], `-l` prefixes it with `-`, and `--` ends options. Without a program, redirections persist.
+In standalone `kwsh`, `exec program args...` uses direct `execve`: it preserves the PID, does not run an EXIT trap on success, and never falls back to `/bin/sh`. `exec -c` clears the child's environment; `-a name` selects `argv[0]`, `-l` prefixes it with `-`, and `--` ends options. Without a program, redirections persist.
 
 A failed `exec` in standalone interactive kwsh reports status 127 (not found) or 126 (other execution failure) and accepts a fresh submission. The failed submission may be abandoned. Successful redirections on that `exec` remain in effect, including input for the next submission; save descriptors first if you intend to restore them:
 
@@ -648,6 +648,7 @@ This is the native shell's vi command subset, not the full-screen Kward editor, 
 
 Set `MAIL` to a mailbox pathname, or `MAILPATH` to colon-separated `path%message` entries. `MAILPATH` takes precedence even when empty; `\%` represents a literal percent in a pathname. Before primary prompts, kwsh checks for creation or modification since the previous check. `MAILCHECK` defaults to 600 seconds; `0` checks at every primary prompt. Invalid intervals use the default. The first check establishes a baseline. Optional messages are parameter-expanded, never evaluated as commands; the default is `you have mail`. These notifications belong to standalone prompts, not the hosted composer.
 
+<a id="standalone-command-history"></a>
 ### Standalone command history
 
 In `kwsh -i`, use `fc -l` to list recent commands, `fc -s old=new` to run the previous command with one replacement, or `fc -e vi` to edit and execute it. Numbers, negative offsets and command prefixes select entries; `fc -lnr 1 10` lists a reversed range without numbers. Replayed commands use the native interpreter, with the same assignments and redirections as `fc`.

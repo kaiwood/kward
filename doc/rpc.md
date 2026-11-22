@@ -530,6 +530,7 @@ Examples:
 - `write_file`: `toolName: "write"`, `args: { "path": "...", "content": "..." }`.
 - `run_shell_command`: `toolName: "bash"`, `args: { "command": "...", "timeout": 30 }`.
 
+<a id="generated-image-previews"></a>
 ## Generated image previews
 
 `initialize` advertises `capabilities.generatedImages`. In a Codex turn, the model can call `generate_image` when the user asks for an image. Show indeterminate progress after its `toolCall` event, and clear progress at `toolResult` or when the turn ends. When a PNG is ready, `turn/event` emits `imageReady` with `id`, `toolCallId`, `filename`, `mimeType`, and `size` in its payload. Failed or cancelled generation does not produce a preview.
