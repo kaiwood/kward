@@ -79,6 +79,7 @@ module Kward
     CTRL_SHIFT_UP = ["\e[1;6A", "\e[6A"].freeze
     CTRL_SHIFT_DOWN = ["\e[1;6B", "\e[6B"].freeze
 
+    CTRL_N_MODIFY_OTHER_KEYS = "\e[27;5;110~".freeze
     CTRL_T_CSI_U = "\e[116;5u".freeze
     CTRL_SHIFT_T_CSI_U = ["\e[116;6u", "\e[84;6u"].freeze
     CTRL_W_CSI_U = "\e[119;5u".freeze

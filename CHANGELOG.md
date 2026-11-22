@@ -23,6 +23,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Press `Ctrl+N` in the chat composer to start a new conversation in the current tab, just like `/new`.
+
 - Press `Ctrl+Shift+T` to open a new tab immediately to the right of the current tab when using the Ctrl tab shortcuts in a terminal that reports the chord.
 
 - Support rbenv’s Bash initialization in interactive `kward shell`, with function-local variables and indexed arrays, `rbenv shell`, and programmable Tab completion.

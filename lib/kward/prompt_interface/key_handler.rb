@@ -597,6 +597,8 @@ module Kward
             kill_line_after_cursor
           when 108
             request_transcript_redraw
+          when 110
+            ((modifier - 1) & ~192) == 4 && submit_new_session_shortcut
           when 114
             start_history_search
           when 117
@@ -914,6 +916,8 @@ module Kward
           kill_line_after_cursor
         when TerminalKeys::CTRL_L
           request_transcript_redraw
+        when TerminalKeys::CTRL_N, TerminalKeys::CTRL_N_MODIFY_OTHER_KEYS
+          submit_new_session_shortcut
         when TerminalKeys::CTRL_U
           kill_line_before_cursor
         when TerminalKeys::CTRL_W
@@ -941,6 +945,14 @@ module Kward
         else
           handle_modified_ansi_key(key) || false
         end
+      end
+
+      def submit_new_session_shortcut
+        return false unless @prompt_label == "You>" && !@slash_overlay_disabled
+
+        @composer.clear_attachments
+        replace_input("/new")
+        submit_input
       end
 
       def parse_modified_ansi_key(key)

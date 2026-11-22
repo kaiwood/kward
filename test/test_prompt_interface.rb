@@ -1322,6 +1322,39 @@ class TestPromptInterface < KwardTestCase
     assert_equal "one -two", ask_prompt_with_input("one two\x17-\x19\r")
   end
 
+  def test_prompt_interface_ctrl_n_submits_new_session_without_enter
+    Timeout.timeout(1) do
+      assert_equal "/new", ask_prompt_with_input("\x0E")
+      assert_equal "/new", ask_prompt_with_input("draft\e[110;5u")
+      assert_equal "/new", ask_prompt_with_input("draft\e[27;5;110~")
+    end
+  end
+
+  def test_busy_ctrl_n_submits_only_new_session_command
+    input, writer = IO.pipe
+    writer.write("\e[200~draft and attachment\e[201~\x0E")
+    writer.close
+    parser = ->(_) { { text: "draft", attachments: [{ source_text: "attachment" }] } }
+    prompt = Kward::PromptInterface.new(input: input, output: StringIO.new, attachment_parser: parser)
+    prompt.begin_busy_input
+
+    result = poll_prompt_until(prompt) { |value| value.is_a?(String) }
+    assert_equal "/new", result
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_ctrl_n_does_not_submit_in_custom_prompt
+    input, writer = IO.pipe
+    writer.write("draft\x0E\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: StringIO.new)
+
+    assert_equal "draft", prompt.ask("Value>")
+  ensure
+    input&.close unless input&.closed?
+  end
+
   def test_prompt_interface_ctrl_l_redraws_without_changing_input
     input, writer = IO.pipe
     output = StringIO.new

@@ -40,6 +40,7 @@ The composer supports familiar line-editing keys:
 | `Ctrl+Y` | Yank the most recently killed composer text |
 | `Ctrl+L` | Redraw the terminal UI and remove transient current-view output |
 | `Ctrl+D` | Delete at the cursor, or exit when the composer is empty |
+| `Ctrl+N` | Start a new conversation in the current tab, just like `/new`; discards the current draft |
 
 These are composer bindings. The integrated editor, shell, Git view, file browser, and plugin interfaces have their own keymaps.
 
