@@ -21,7 +21,11 @@ module Kward
       end
 
       def editor_explorer_snapshot(state = @editor_explorer)
-        state&.except(:motion_prefix)&.merge(expanded: state[:expanded].dup, selected: state[:selected].dup)
+        return unless state
+
+        view = state.dig(:search, :origin) || state
+        state.except(:motion_prefix, :search).merge(expanded: state[:expanded].dup, selected: view[:selected].dup,
+                                                    offset: view[:offset], horizontal_offset: view[:horizontal_offset])
       end
 
       def editor_explorer_header_label(width)
@@ -69,7 +73,8 @@ module Kward
       end
 
       def editor_explorer_preferences
-        kind, path = @editor_explorer[:selected]
+        view = @editor_explorer.dig(:search, :origin) || @editor_explorer
+        kind, path = view[:selected]
         if kind == :buffer
           kind = :file
           path = editor_explorer_relative_path(path)
@@ -78,7 +83,7 @@ module Kward
           "visible" => @editor_explorer[:visible],
           "expanded" => @editor_explorer[:expanded].to_a.sort,
           "selection" => path && [kind.to_s, path],
-          "offset" => @editor_explorer[:offset]
+          "offset" => view[:offset]
         }
       end
 
@@ -97,11 +102,13 @@ module Kward
       def load_editor_explorer_tree
         paths = ProjectFiles.list(root: prompt_workspace_root, literal_names: true)
         @editor_explorer[:tree] = ProjectFileTree.new(paths)
+        @editor_explorer[:paths] = paths
       end
 
       def toggle_editor_explorer
         restore_editor_explorer unless @editor_explorer
         @editor_explorer.delete(:motion_prefix)
+        clear_editor_explorer_search
         visible = @editor_explorer[:visible] = !@editor_explorer[:visible]
         @editor_explorer[:focused] = visible && editor_explorer_width.zero?
         load_editor_explorer_tree if visible
@@ -169,6 +176,13 @@ module Kward
       end
 
       def editor_explorer_rows
+        if (search = @editor_explorer[:search])
+          active = editor_explorer_relative_path(@editor_state.path)
+          return [{ label: "No matching files" }] if search[:paths].empty?
+
+          return search[:paths].map { |path| { key: [:file, path], label: path, active: path == active } }
+        end
+
         buffers = ([@editor_state] + retained_editor_buffers).sort_by(&:path).map do |state|
           { key: [:buffer, state.path], label: "#{editor_explorer_relative_path(state.path) || state.path}#{' *' if state.dirty?}",
             active: state.equal?(@editor_state), state: state }
@@ -195,7 +209,12 @@ module Kward
         rows = editor_explorer_window(editor_explorer_rows, height)
         heading = @editor_explorer[:focused] ? :bold : :primary_green
         columns = width - 4
-        lines = [editor_pane_top_border(colored(EXPLORER_TOGGLE, heading), width)]
+        title = colored(EXPLORER_TOGGLE, heading)
+        if (search = @editor_explorer[:search])
+          marker = search[:direction] == :down ? "/" : "?"
+          title += " #{marker}#{search[:query]}"
+        end
+        lines = [editor_pane_top_border(title, width)]
         [height - 2, 0].max.times do |index|
           row = rows[index]
           label = editor_explorer_row_label(row)
@@ -228,6 +247,7 @@ module Kward
           expanded = @editor_explorer[:expanded]
           expanded.delete?(path) || expanded.add(path)
         else
+          @editor_explorer[:search][:editing] = false if @editor_explorer[:search]
           open_editor_explorer_file(path, state: row[:state])
           @editor_explorer[:focused] = false if keyboard || editor_explorer_width.zero?
         end
@@ -286,6 +306,10 @@ module Kward
         return false unless editor_explorer_focused?
         if (paste = read_bracketed_paste(key))
           @editor_explorer.delete(:motion_prefix)
+          if @editor_explorer.dig(:search, :editing)
+            text = ANSI.strip(paste[:content].scrub).gsub(/[[:cntrl:]]/, " ")
+            update_editor_explorer_query(@editor_explorer[:search][:query] + text)
+          end
           queue_pending_keys(paste[:remaining])
           return true
         end
@@ -296,6 +320,8 @@ module Kward
         return true if sequence&.[](:event_type) == 3
 
         name = { 13 => :enter, 27 => :escape }[sequence&.[](:code)] || key_name_for(key)
+        return true if @editor_state.vibe? && handle_vibe_explorer_search(key, sequence, name)
+
         rows = editor_explorer_rows
         index = rows.index { |row| row[:key] && row[:key] == @editor_explorer[:selected] }
         return true if @editor_state.vibe? && handle_vibe_explorer_motion(key, sequence, rows, index)
@@ -310,6 +336,73 @@ module Kward
           @editor_explorer[:focused] = false
         end
         true
+      end
+
+      def handle_vibe_explorer_search(key, sequence, name)
+        search = @editor_explorer[:search]
+        text = sequence ? vibe_explorer_printable_key(sequence) : key
+        if search && name == :escape
+          clear_editor_explorer_search
+        elsif search && search[:editing]
+          case name
+          when :return, :enter
+            if search[:query].empty?
+              clear_editor_explorer_search
+            else
+              search[:editing] = false
+            end
+          when :backspace, :delete
+            delete_editor_explorer_query_character
+          else
+            if [8, 127].include?(sequence&.[](:code)) || ["\b", "\x7f"].include?(key)
+              delete_editor_explorer_query_character
+            elsif printable_key?(text)
+              update_editor_explorer_query(search[:query] + text)
+            end
+          end
+        elsif ["/", "?"].include?(text) && !@editor_explorer[:motion_prefix]
+          origin = search ? search[:origin] : @editor_explorer.slice(:selected, :offset).merge(horizontal_offset: @editor_explorer[:horizontal_offset])
+          @editor_explorer[:search] = { origin: origin, direction: text == "/" ? :down : :up, editing: true }
+          update_editor_explorer_query("")
+        elsif search && ["n", "N"].include?(text) && !@editor_explorer[:motion_prefix]
+          rows = editor_explorer_rows
+          index = rows.index { |row| row[:key] == @editor_explorer[:selected] }
+          direction = search[:direction]
+          direction = direction == :down ? :up : :down if text == "N"
+          target = editor_explorer_step(rows, index, direction) || editor_explorer_step(rows, nil, direction)
+          select_editor_explorer_row(rows, target)
+        else
+          return false
+        end
+        true
+      end
+
+      def delete_editor_explorer_query_character
+        query = @editor_explorer[:search][:query]
+        update_editor_explorer_query(query[0...TerminalText.previous_grapheme_boundary(query, query.length)])
+      end
+
+      def update_editor_explorer_query(query)
+        search = @editor_explorer[:search]
+        search[:query] = query[0, 512]
+        needle = search[:query].downcase
+        pattern = TextMatcher.subsequence_pattern(needle)
+        kind, folder = search[:origin][:selected]
+        prefix = "#{folder}/" if kind == :directory
+        search[:paths] = @editor_explorer[:paths].select do |path|
+          (!prefix || path.start_with?(prefix)) && TextMatcher.subsequence?(path.scrub.downcase, needle, pattern)
+        end
+        @editor_explorer[:selected] = nil
+        @editor_explorer[:offset] = 0
+        @editor_explorer[:horizontal_offset] = 0
+        rows = editor_explorer_rows
+        select_editor_explorer_row(rows, editor_explorer_step(rows, nil, search[:direction]))
+      end
+
+      def clear_editor_explorer_search
+        return unless (search = @editor_explorer.delete(:search))
+
+        @editor_explorer.merge!(search[:origin])
       end
 
       def editor_explorer_step(rows, index, direction)
@@ -375,6 +468,8 @@ module Kward
         return unless [0, 1].include?(modifiers)
 
         text = csi_u_printable_text(sequence)
+        return "?" if modifiers == 1 && text == "/"
+
         if modifiers == 1 && text&.match?(/\A[a-z]\z/)
           text.upcase
         else

@@ -91,6 +91,8 @@ Click a folder to expand or collapse it, or click a file to open it. Click back 
 
 When the Explorer has focus in Vibe mode, `j`/`k` move down/up, `l` expands a folder, and `h` collapses an expanded folder or moves to its parent. `gg` and `G` jump to the first and last entries. `H`, `M`, and `L` select an entry at the top, middle, or bottom of the visible pane without scrolling. `zz`, `zt`, and `zb` scroll to place the selection in the middle, at the top, or at the bottom where possible. `zh`/`zl` scroll left/right by one column; `zH`/`zL` scroll by half a pane. Press `Enter` to open a file.
 
+With the Vibe Explorer focused, press `/` to search forward or `?` to search backward. Type a few characters to narrow the list, including files in collapsed folders. If a folder is selected when you start searching, only that folder and its subfolders are searched. Otherwise, the search covers the whole workspace. Fuzzy search matches characters in order, ignoring case and allowing gaps: `l/nt` matches `lib/first-note.txt`. `Enter` confirms the filter; `n` and `N` cycle through results in the search direction or the reverse direction. Press `Enter` again to open the selected file, or `Esc` to clear the filter and return to the tree.
+
 The Explorer remembers whether it was open, which folders were expanded, and where you left off in the tree for each workspace. On a narrow terminal, the file still opens first; click **[Explorer]** to return to the tree. This saves only sidebar preferences, not open buffers or unsaved edits.
 
 ## Example workflow

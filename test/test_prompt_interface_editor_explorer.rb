@@ -318,6 +318,90 @@ class TestPromptInterfaceEditorExplorer < KwardTestCase
     end
   end
 
+  def test_vibe_explorer_search_narrows_across_collapsed_folders_and_confirms_before_opening
+    with_editor(mode: "vibe") do |prompt, root|
+      File.write(File.join(root, "lib/first-note.txt"), "first\n")
+      File.write(File.join(root, "lib/last-note.txt"), "last\n")
+      focus_explorer(prompt)
+      key(prompt, "/")
+      "L/NT".each_char { |character| key(prompt, character) }
+      assert_match(%r{/L/NT}, frame(prompt).first)
+      assert_match(/first-note/, selected_explorer_row(prompt))
+      refute_match(/b\.txt|Open Editors/, frame(prompt).join)
+      key(prompt, "\r")
+      assert_equal "alpha\n", editor(prompt).buffer
+      key(prompt, "n")
+      assert_match(/last-note/, selected_explorer_row(prompt))
+      key(prompt, "n")
+      assert_match(/first-note/, selected_explorer_row(prompt))
+      key(prompt, "\r")
+      assert_equal "first\n", editor(prompt).buffer
+    end
+  end
+
+  def test_vibe_explorer_backward_search_reverses_repeat_and_escape_restores_tree
+    with_editor(mode: "vibe") do |prompt, root|
+      File.write(File.join(root, "one-note.txt"), "")
+      File.write(File.join(root, "two-note.txt"), "")
+      focus_explorer(prompt)
+      original = selected_explorer_row(prompt)
+      key(prompt, "\e[47:63;2u")
+      "noteq".each_char { |character| key(prompt, character) }
+      assert_match(/No matching files/, frame(prompt).join)
+      key(prompt, "\x7f")
+      assert_match(/two-note/, selected_explorer_row(prompt))
+      key(prompt, "\r")
+      key(prompt, "n")
+      assert_match(/one-note/, selected_explorer_row(prompt))
+      key(prompt, "N")
+      assert_match(/two-note/, selected_explorer_row(prompt))
+      key(prompt, "\e")
+      assert_equal original, selected_explorer_row(prompt)
+      assert_match(/▸ lib/, frame(prompt).join)
+    end
+  end
+
+  def test_vibe_explorer_search_from_a_folder_includes_only_its_descendants
+    with_editor(mode: "vibe") do |prompt, root|
+      FileUtils.mkdir_p(File.join(root, "lib/nested"))
+      FileUtils.mkdir_p(File.join(root, "library"))
+      File.write(File.join(root, "lib/note.txt"), "")
+      File.write(File.join(root, "lib/nested/note.txt"), "")
+      File.write(File.join(root, "library/note.txt"), "")
+      File.write(File.join(root, "outside-note.txt"), "")
+      focus_explorer(prompt)
+      2.times { key(prompt, "k") }
+      assert_match(/▸ lib /, selected_explorer_row(prompt))
+
+      key(prompt, "/")
+      %w[n t].each { |character| key(prompt, character) }
+      assert_match(%r{lib/nested/note}, selected_explorer_row(prompt))
+      assert_match(%r{lib/note}, frame(prompt).join)
+      refute_match(/library|outside-note/, frame(prompt).join)
+      key(prompt, "\r")
+      key(prompt, "?")
+      %w[n t].each { |character| key(prompt, character) }
+      assert_match(%r{lib/note}, selected_explorer_row(prompt))
+      refute_match(/library|outside-note/, frame(prompt).join)
+      key(prompt, "\e")
+      assert_match(/▸ lib /, selected_explorer_row(prompt))
+    end
+  end
+
+  def test_vibe_explorer_search_is_not_persisted
+    with_editor(mode: "vibe") do |prompt, root|
+      focus_explorer(prompt)
+      key(prompt, "/")
+      key(prompt, "b")
+      key(prompt, "\r")
+      assert_match(/lib\/b\.txt/, selected_explorer_row(prompt))
+      assert prompt.send(:close_editor)
+      restarted = new_editor(root, mode: "vibe")
+      assert_match(/Open Editors/, frame(restarted).join)
+      assert_match(/▸ lib/, frame(restarted).join)
+    end
+  end
+
   private
 
   def focus_explorer(prompt)
