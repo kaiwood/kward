@@ -4,6 +4,8 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+## [0.86.0] - 2026-11-22
+
 ### Changed
 
 - Enable automatic color for commands such as macOS `ls` in interactive `kward shell`, without overriding `TERM=dumb` or changing script environments.
