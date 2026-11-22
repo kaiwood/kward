@@ -716,7 +716,8 @@ class TestCLIShell < KwardTestCase
   end
 
   def test_fullscreen_child_owns_the_terminal_and_can_be_suspended_and_resumed
-    with_terminal do |reader, writer, pid|
+    launcher = 'Signal.trap("TSTP", "IGNORE"); exec(*ARGV)'
+    with_terminal(command: ["-e", launcher, "--", RbConfig.ruby, EXECUTABLE]) do |reader, writer, pid|
       read_until(reader, PROMPT)
       program = <<~'RUBY'
         require "io/console"

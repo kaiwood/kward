@@ -7,7 +7,17 @@ class TestNativeShellSignals < KwardTestCase
   EXECUTABLE = File.expand_path("../exe/kwsh", __dir__)
 
   def invoke(source, interactive: false, ignored: [])
-    launcher = 'ARGV.shift.split(",").each { |name| Signal.trap(name, "IGNORE") }; exec(*ARGV)'
+    launcher = <<~'RUBY'
+      # Only the ignores requested by the fixture should survive exec.
+      signals = Signal.list.reject { |name, number| number.zero? || %w[KILL STOP].include?(name) }
+      signals.values.uniq.each do |number|
+        Signal.trap(number, "SYSTEM_DEFAULT")
+      rescue ArgumentError
+        # MRI reserves some signals from Signal.trap.
+      end
+      ARGV.shift.split(",").each { |name| Signal.trap(name, "IGNORE") }
+      exec(*ARGV)
+    RUBY
     command = [RbConfig.ruby, "-e", launcher, ignored.join(","), RbConfig.ruby, EXECUTABLE, interactive ? "-ic" : "-c", source]
     Open3.popen3({ "ENV" => nil, "LC_ALL" => "C" }, *command, pgroup: true) do |input, output, error, waiter|
       input.close

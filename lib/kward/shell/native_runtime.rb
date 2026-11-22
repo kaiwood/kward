@@ -83,7 +83,9 @@ module Kward
         @options = Set.new(interactive ? ["monitor"] : [])
         @jobs = {}
         @entry_ignored = Set.new(NativeProcess.ignored_signals.map { |name| Signal.list.key(Signal.list.fetch(name)) })
-        @entry_ignored.subtract(%w[TSTP TTIN TTOU]) if hosted
+        # Keep the shell's own job-control ignores from becoming job defaults,
+        # even when the launcher already ignored these signals.
+        @entry_ignored.subtract(%w[TSTP TTIN TTOU]) if interactive || hosted
         @traps = @entry_ignored.to_h { |name| [name, ""] }
         @pending_signals = []
         @persistent_descriptors = descriptors.dup

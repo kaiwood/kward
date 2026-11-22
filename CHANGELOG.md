@@ -87,6 +87,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Keep Ctrl+Z working for foreground jobs when the launcher ignores job-control stop signals.
+- Keep standalone shell history in memory if saving it would exceed the file-size limit, rather than terminating the shell.
 - Restore the previous terminal screen after `kward edit` and after leaving full-screen Git logs in `kward shell` with the default pager settings.
 - Use every terminal row in the editor, both inside chat and when launched with `kward edit`.
 - Show the active alias in kwsh’s `which` output instead of reporting the shadowed executable.

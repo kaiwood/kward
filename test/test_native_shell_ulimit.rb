@@ -195,11 +195,17 @@ class TestNativeShellUlimit < KwardTestCase
   end
 
   def test_failed_interactive_exec_keeps_the_current_limits
-    output, error, status = Open3.capture3({ "ENV" => nil, "PS1" => "", "PS2" => "" }, RbConfig.ruby, EXECUTABLE, "-i", "-s",
-                                         stdin_data: "ulimit -f 4\nulimit -S -f 2\nexec ./missing_native_ulimit\nulimit; ulimit -H\nexit\n")
-    assert status.success?, error
-    assert_equal "2\n4\n", output
-    assert_includes error, "missing_native_ulimit"
+    Dir.mktmpdir do |dir|
+      # The file passes command lookup, but execve cannot find its interpreter.
+      File.write(File.join(dir, "bad-exec"), "#!#{File.join(dir, 'missing-interpreter')}\n")
+      File.chmod(0o700, File.join(dir, "bad-exec"))
+      output, error, status = Open3.capture3({ "ENV" => nil, "HISTFILE" => "", "PS1" => "", "PS2" => "" },
+                                           RbConfig.ruby, EXECUTABLE, "-i", "-s", chdir: dir,
+                                           stdin_data: "ulimit -f 4\nulimit -S -f 2\nexec ./bad-exec\nulimit; ulimit -H\nexit\n")
+      assert status.success?, "#{status}: #{error}"
+      assert_equal "2\n4\n", output
+      assert_includes error, "bad-exec"
+    end
   end
 
   def test_hosted_worker_limits_do_not_change_the_agent_or_other_sessions

@@ -134,11 +134,18 @@ module Kward
       end
 
       def persist(entries)
+        limit = Process.getrlimit(:FSIZE).first
+        bytes = 0
         Tempfile.create(".kwsh-history-", File.dirname(@path)) do |file|
+          file.binmode
           entries.each do |number, text|
             value = text.dup.force_encoding(Encoding::UTF_8)
             value = { "bytes" => [text].pack("m0") } unless value.valid_encoding?
-            file.puts(JSON.generate([number, value]))
+            record = JSON.generate([number, value]) + "\n"
+            bytes += record.bytesize
+            # The kernel can send SIGXFSZ before a write raises EFBIG.
+            raise IOError, "history exceeds the file size limit" if limit != Process::RLIM_INFINITY && bytes > limit
+            file.write(record)
           end
           file.fsync
           File.rename(file.path, @path)

@@ -133,7 +133,10 @@ class TestNativeShell < KwardTestCase
   end
 
   def test_traps_reset_and_list_without_executing_actions
-    assert_output("", "trap 'printf bad' USR1; trap - USR1; trap")
+    status, initial_traps, error = execute("trap")
+    assert_equal 0, status, error
+    assert_empty error
+    assert_output(initial_traps, "trap 'printf bad' USR1; trap - USR1; trap")
     assert_output("", "trap '' USR1; kill -USR1 $$")
     assert_equal 2, execute("trap ':' KILL").first
   end

@@ -77,6 +77,20 @@ class TestNativeShellHistory < KwardTestCase
     end
   end
 
+  def test_file_size_limit_falls_back_to_memory_without_overwriting_history
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "history")
+      original = "[1,\"true\"]\n"
+      File.write(path, original, perm: 0600)
+      out, error, status = invoke("ulimit -S -f 0\na=recorded\nfc -l\nexit\n", env: { "HISTFILE" => path })
+      assert status.success?, "#{status}: #{error}"
+      assert_empty error
+      assert_equal "1\ttrue\n2\tulimit -S -f 0\n3\ta=recorded\n", out
+      assert_equal original, File.read(path)
+      assert_equal ["history", "history.lock"], Dir.children(dir).sort
+    end
+  end
+
   def test_forked_history_cannot_overwrite_parent_storage
     Dir.mktmpdir do |dir|
       path = File.join(dir, "history")
