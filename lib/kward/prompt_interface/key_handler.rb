@@ -135,7 +135,10 @@ module Kward
         reset_editor_word_completion unless editor_word_completion_tab_key?(key)
 
         tab_result = handle_tab_key_binding(key)
-        return tab_result unless tab_result == false
+        unless tab_result == false
+          @vibe_pane_prefix_editor = nil
+          return tab_result
+        end
 
         result = handle_editor_key(key)
         result.is_a?(String) ? true : result

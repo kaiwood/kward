@@ -958,6 +958,7 @@ module Kward
       @editor_runner_completion = nil
       @editor_runner_output_visible = false
       clear_editor_runner_selection
+      @vibe_pane_prefix_editor = nil
       @editor_state = snapshot[:editor_state]&.dup
       @editor_explorer = editor_explorer_snapshot(snapshot[:editor_explorer])
       @retained_editor_buffers = snapshot[:retained_editor_buffers]&.map(&:dup)

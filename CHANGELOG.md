@@ -6,6 +6,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Support Vim-style `Ctrl+W` pane navigation between the editor and Explorer in Vibe mode.
+
 - Add a clickable Explorer to the integrated and standalone editors for browsing workspace files and switching between open buffers without losing unsaved changes.
 
 - Remember the editor Explorer’s visibility and tree position across launches, separately for each workspace.

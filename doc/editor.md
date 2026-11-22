@@ -87,7 +87,7 @@ Click **[Explorer]** in the editor header to show or hide the workspace file tre
 
 Click a folder to expand or collapse it, or click a file to open it. Click back in the text to edit. While the Explorer has focus, use `↑` and `↓` to browse, `Enter` to open the selected file or toggle a folder, and `Esc` to return focus to the editor. On narrow terminals the tree takes the full width; opening a file or pressing `Esc` returns to the editor.
 
-**Open Editors** lists the buffers you've opened. A `*` marks unsaved changes. Switching files or hiding the sidebar keeps edits, cursor position, and undo history in memory. Save each changed file before quitting, or use your editor mode's explicit discard action to quit without saving. The Explorer opens text files; use `/files` for image previews and file management. There is no dedicated Explorer shortcut yet.
+**Open Editors** lists the buffers you've opened. A `*` marks unsaved changes. Switching files or hiding the sidebar keeps edits, cursor position, and undo history in memory. Save each changed file before quitting, or use your editor mode's explicit discard action to quit without saving. The Explorer opens text files; use `/files` for image previews and file management. There is no keyboard shortcut to show or hide the Explorer.
 
 The Explorer remembers whether it was open, which folders were expanded, and where you left off in the tree for each workspace. On a narrow terminal, the file still opens first; click **[Explorer]** to return to the tree. This saves only sidebar preferences, not open buffers or unsaved edits.
 
@@ -274,6 +274,8 @@ The status line always shows the current mode (`NORMAL`, `INSERT`, `VISUAL`, `RE
 ### Normal mode
 
 Use normal mode for movement, operators, marks, registers, macros, search, and command mode. Visual-mode-specific commands are listed in their own section below.
+
+With the Explorer open, press `Ctrl+W` then `Ctrl+W` to switch focus between the editor and the Explorer. `Ctrl+W` then `h` focuses the Explorer; `Ctrl+W` then `l` focuses the editor. `Ctrl+W` then `j` or `k` leaves focus where it is because the Explorer and editor are side by side. In Insert mode, `Ctrl+W` still deletes the previous word.
 
 | Key                     | Action                                          |
 | ----------------------- | ----------------------------------------------- |

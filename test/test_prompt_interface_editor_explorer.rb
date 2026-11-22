@@ -165,23 +165,90 @@ class TestPromptInterfaceEditorExplorer < KwardTestCase
     end
   end
 
+  def test_vibe_pane_chords_move_focus_without_moving_the_editor_cursor
+    with_editor(mode: "vibe") do |prompt, _root|
+      toggle(prompt)
+      key(prompt, "\e[119;5:1u")
+      key(prompt, "\e[119;5:2u")
+      key(prompt, "\e[119;5:3u")
+      key(prompt, "\e[104u")
+      key(prompt, "l")
+      assert_equal [0, 0], editor(prompt).cursor_line_and_column
+
+      %w[j k].each do |direction|
+        key(prompt, "\x17")
+        key(prompt, direction)
+        key(prompt, "l")
+        assert_equal [0, 0], editor(prompt).cursor_line_and_column
+      end
+
+      key(prompt, "\e[27;5;119~")
+      key(prompt, "l")
+      key(prompt, "l")
+      assert_equal [0, 1], editor(prompt).cursor_line_and_column
+
+      key(prompt, "\x17")
+      key(prompt, "\x17")
+      key(prompt, "l")
+      assert_equal [0, 1], editor(prompt).cursor_line_and_column
+
+      key(prompt, "\x17")
+      key(prompt, "\x17")
+      key(prompt, "l")
+      assert_equal [0, 2], editor(prompt).cursor_line_and_column
+    end
+  end
+
+  def test_vibe_pane_chords_switch_the_visible_pane_at_narrow_widths
+    with_editor(width: 45, mode: "vibe") do |prompt, _root|
+      toggle(prompt)
+      key(prompt, "\x17")
+      key(prompt, "l")
+      assert_match(/Edit a.txt/, frame(prompt).first)
+      key(prompt, "\x17")
+      key(prompt, "h")
+      assert_match(/Open Editors/, frame(prompt).join)
+    end
+  end
+
+  def test_vibe_insert_mode_keeps_ctrl_w_word_deletion
+    with_editor(mode: "vibe") do |prompt, _root|
+      toggle(prompt)
+      key(prompt, "i")
+      key(prompt, "w")
+      key(prompt, "\x17")
+      key(prompt, "h")
+      assert_equal "halpha\n", editor(prompt).buffer
+    end
+  end
+
+  def test_modern_mode_does_not_treat_ctrl_w_as_a_pane_prefix
+    with_editor do |prompt, _root|
+      toggle(prompt)
+      key(prompt, "w")
+      key(prompt, "\x17")
+      key(prompt, "h")
+      assert_equal "halpha\n", editor(prompt).buffer
+    end
+  end
+
   private
 
-  def with_editor(width: 80)
+  def with_editor(width: 80, mode: "modern")
     Dir.mktmpdir do |root|
       FileUtils.mkdir_p(File.join(root, "lib"))
       File.write(File.join(root, "a.txt"), "alpha\n")
       File.write(File.join(root, "lib/b.txt"), "beta\n")
       Dir.mktmpdir do |config|
         with_env("KWARD_CONFIG_PATH" => File.join(config, "config.json")) do
-          yield new_editor(root, width: width), root
+          yield new_editor(root, width: width, mode: mode), root
         end
       end
     end
   end
 
-  def new_editor(root, width: 80)
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: root, editor_mode: "modern")
+  def new_editor(root, width: 80, mode: "modern")
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: root, editor_mode: mode)
     prompt.define_singleton_method(:screen_width) { width }
     prompt.define_singleton_method(:screen_height) { 14 }
     assert prompt.send(:open_editor, "a.txt")

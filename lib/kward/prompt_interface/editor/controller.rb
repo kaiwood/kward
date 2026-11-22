@@ -253,6 +253,7 @@ module Kward
         end
 
         persist_editor_explorer
+        @vibe_pane_prefix_editor = nil
         @editor_explorer = nil
         @retained_editor_buffers = nil
         cancel_editor_runner
@@ -282,7 +283,11 @@ module Kward
 
         reset_editor_word_completion unless editor_word_completion_tab_key?(key) && !editor_search_active?
         mouse_result = handle_editor_mouse_key(key)
-        return mouse_result unless mouse_result == false
+        unless mouse_result == false
+          @vibe_pane_prefix_editor = nil
+          return mouse_result
+        end
+        return true if handle_vibe_pane_key(key)
         return true if handle_editor_explorer_key(key)
         return handle_editor_save_as_key(key) if @editor_save_as_active
         return handle_readonly_editor_key(key) if @editor_state&.readonly?

@@ -37,6 +37,54 @@ module Kward
 
       private
 
+      def handle_vibe_pane_key(key)
+        pending = @vibe_pane_prefix_editor.equal?(@editor_state)
+        unless @editor_state&.vibe? && editor_explorer_available? && @editor_explorer&.[](:visible) &&
+               !editor_search_active? && (@editor_state.vibe_mode == "normal" || editor_explorer_focused?) &&
+               !key.start_with?(BRACKETED_PASTE_START)
+          @vibe_pane_prefix_editor = nil
+          return false
+        end
+
+        token = next_key_token(key)
+        logical_key, event_type = vibe_pane_key_event(token)
+        return false unless pending || logical_key == TerminalKeys::CTRL_W
+
+        queue_pending_keys(key[token.length..])
+        return true if event_type == 3 || (event_type == 2 && logical_key == TerminalKeys::CTRL_W)
+
+        if pending
+          @vibe_pane_prefix_editor = nil
+          case logical_key
+          when TerminalKeys::CTRL_W then @editor_explorer[:focused] = !editor_explorer_focused?
+          when "h" then @editor_explorer[:focused] = true
+          when "l" then @editor_explorer[:focused] = false
+          end
+        else
+          @editor_state.vibe_pending = ""
+          @vibe_pane_prefix_editor = @editor_state
+        end
+        true
+      end
+
+      def vibe_pane_key_event(token)
+        if (sequence = parse_csi_u_key(token))
+          code, modifier, event_type = sequence.values_at(:code, :modifier, :event_type)
+        elsif (match = token.match(TerminalKeys::MODIFY_OTHER_KEYS_PATTERN))
+          modifier, code = match.captures.map(&:to_i)
+        else
+          return [token, nil]
+        end
+
+        modifiers = (modifier - 1) & ~192
+        logical_key = if modifiers == 4 && [87, 119].include?(code)
+                        TerminalKeys::CTRL_W
+                      elsif modifiers.zero? && code.between?(32, 126)
+                        code.chr
+                      end
+        [logical_key, event_type]
+      end
+
       def handle_vibe_key(key)
         csi_result = handle_vibe_csi_u_key(key)
         return csi_result unless csi_result == false
