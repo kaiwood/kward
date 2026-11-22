@@ -8,25 +8,31 @@ module Kward
   module ProjectFiles
     module_function
 
-    def list(root: Dir.pwd, include_ignored: false)
-      paths = git_paths(root, include_ignored: include_ignored)
+    def list(root: Dir.pwd, include_ignored: false, literal_names: false)
+      paths = git_paths(root, include_ignored: include_ignored, literal_names: literal_names)
       paths = scanned_paths(root) if paths.empty? && !git_repository?(root)
       paths.reject { |path| path.empty? || path.end_with?("/") }.uniq.sort
     end
 
-    def git_paths(root, include_ignored: false)
-      output, status = Open3.capture2e("git", "ls-files", "--cached", "--others", "--exclude-standard", chdir: root)
+    def git_paths(root, include_ignored: false, literal_names: false)
+      command = ["git", "ls-files"]
+      command << "-z" if literal_names
+      output, status = Open3.capture2e(*command, "--cached", "--others", "--exclude-standard", chdir: root)
       return [] unless status.success?
 
-      paths = output.lines.map(&:chomp).reject(&:empty?)
+      paths = split_git_paths(output, literal_names: literal_names)
       return paths unless include_ignored
 
-      ignored_output, ignored_status = Open3.capture2e("git", "ls-files", "--others", "--ignored", "--exclude-standard", chdir: root)
+      ignored_output, ignored_status = Open3.capture2e(*command, "--others", "--ignored", "--exclude-standard", chdir: root)
       return paths unless ignored_status.success?
 
-      paths + ignored_output.lines.map(&:chomp).reject(&:empty?)
+      paths + split_git_paths(ignored_output, literal_names: literal_names)
     rescue StandardError
       []
+    end
+
+    def split_git_paths(output, literal_names:)
+      literal_names ? output.split("\0") : output.lines.map(&:chomp).reject(&:empty?)
     end
 
     def git_repository?(root)

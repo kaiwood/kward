@@ -897,31 +897,7 @@ module Kward
         return [] unless @project_browser_state
         return project_browser_search_rows if project_browser_search_active?
 
-        tree = project_browser_tree
-        directory_children = tree[:directories].fetch(PROJECT_BROWSER_ROOT, [])
-        file_children = tree[:files].fetch(PROJECT_BROWSER_ROOT, [])
-        rows = []
-        append_project_browser_rows(rows, directory_children, file_children, tree, 0)
-        rows
-      end
-
-      def append_project_browser_rows(rows, directories, files, tree, depth)
-        directories.each do |directory|
-          expanded = @project_browser_state[:expanded].include?(directory)
-          rows << { path: directory, name: File.basename(directory), depth: depth, directory: true, expanded: expanded }
-          next unless expanded
-
-          append_project_browser_rows(
-            rows,
-            tree[:directories].fetch(directory, []),
-            tree[:files].fetch(directory, []),
-            tree,
-            depth + 1
-          )
-        end
-        files.each do |file|
-          rows << { path: file, name: File.basename(file), depth: depth, directory: false }
-        end
+        project_browser_tree.rows(@project_browser_state[:expanded])
       end
 
       def project_browser_search_rows
@@ -946,33 +922,8 @@ module Kward
         paths = @project_browser_state[:paths]
         return @project_browser_tree if @project_browser_tree_paths.equal?(paths) && @project_browser_tree
 
-        directories = Hash.new { |hash, key| hash[key] = Set.new }
-        files = Hash.new { |hash, key| hash[key] = [] }
-        @project_browser_state.fetch(:directory_paths, Set.new).each do |path|
-          parts = path.split("/")
-          parent = PROJECT_BROWSER_ROOT
-          parts.each do |part|
-            directory = parent.empty? ? part : "#{parent}/#{part}"
-            directories[parent].add(directory)
-            parent = directory
-          end
-        end
-        paths.each do |path|
-          parts = path.split("/")
-          parent = PROJECT_BROWSER_ROOT
-          parts[0...-1].each do |part|
-            directory = parent.empty? ? part : "#{parent}/#{part}"
-            directories[parent].add(directory)
-            parent = directory
-          end
-          files[parent] << path
-        end
-
         @project_browser_tree_paths = paths
-        @project_browser_tree = {
-          directories: directories.transform_values { |values| values.to_a.sort },
-          files: files.transform_values(&:sort)
-        }
+        @project_browser_tree = ProjectFileTree.new(paths, directories: @project_browser_state.fetch(:directory_paths, []))
       end
 
       def project_browser_row_text(row)

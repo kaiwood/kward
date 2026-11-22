@@ -81,6 +81,16 @@ A few things to know:
 - If the file changed on disk while you were editing, Kward asks before overwriting it.
 - If you quit with unsaved changes, Kward asks before discarding them.
 
+## Editor Explorer
+
+Click **[Explorer]** in the editor header to show or hide the workspace file tree. It works with `kward edit` (including a `vibe` alias) and with files opened from chat. It does not replace `/files`.
+
+Click a folder to expand or collapse it, or click a file to open it. Click back in the text to edit. While the Explorer has focus, use `↑` and `↓` to browse, `Enter` to open the selected file or toggle a folder, and `Esc` to return focus to the editor. On narrow terminals the tree takes the full width; opening a file or pressing `Esc` returns to the editor.
+
+**Open Editors** lists the buffers you've opened. A `*` marks unsaved changes. Switching files or hiding the sidebar keeps edits, cursor position, and undo history in memory. Save each changed file before quitting, or use your editor mode's explicit discard action to quit without saving. The Explorer opens text files; use `/files` for image previews and file management. There is no dedicated Explorer shortcut yet.
+
+The Explorer remembers whether it was open, which folders were expanded, and where you left off in the tree for each workspace. On a narrow terminal, the file still opens first; click **[Explorer]** to return to the tree. This saves only sidebar preferences, not open buffers or unsaved edits.
+
 ## Example workflow
 
 ```text

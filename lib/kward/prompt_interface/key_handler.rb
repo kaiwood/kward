@@ -867,6 +867,8 @@ module Kward
         when *TerminalKeys::CTRL_SHIFT_T_CSI_U
           { tab_action: :new_after_current }
         when TerminalKeys::CTRL_W_CSI_U
+          return false if editor_active?
+
           { tab_action: :close }
         else
           ctrl_number_tab_action(key)

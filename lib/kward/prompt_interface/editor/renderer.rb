@@ -7,12 +7,26 @@ module Kward
       private
 
       def editor_layout(width, height = screen_height)
+        sidebar_width = editor_explorer_width(width)
+        if sidebar_width.zero? && editor_explorer_focused?
+          pane_height = editor_explorer_body_height(height, width)
+          rows = editor_explorer_layout(width, pane_height)
+          rows.concat(editor_bottom_rows(width)) unless @tabs.empty?
+          return [rows.first(height), 0, 1]
+        end
+
         rows, cursor_row, cursor_col = if editor_runner_output_visible?
                                          editor_split_layout(width, height)
                                        else
-                                         editor_source_layout(width, height)
+                                         editor_source_layout(width - sidebar_width, height)
                                        end
-        [rows.first(height), cursor_row, cursor_col]
+        if sidebar_width.positive?
+          pane_height = editor_explorer_body_height(height, width)
+          sidebar = editor_explorer_layout(sidebar_width, pane_height)
+          rows = sidebar.zip(rows).map { |left, right| left + right.to_s }
+          rows.concat(editor_bottom_rows(width)) unless @tabs.empty?
+        end
+        [rows.first(height), cursor_row, cursor_col + sidebar_width]
       end
 
       def editor_source_layout(width, height)
@@ -181,7 +195,7 @@ module Kward
         [rows, cursor_row, cursor_col]
       end
 
-      def editor_visible_line_count(height: screen_height, width: screen_width)
+      def editor_visible_line_count(height: screen_height, width: editor_pane_width)
         [height - editor_bottom_rows(width).length - 2, 1].max
       end
 
@@ -355,9 +369,14 @@ module Kward
       def editor_top_border(width)
         title_prefix = @editor_state.diff_view? ? "Diff" : "Edit"
         dirty_marker = @editor_state.dirty? && !@editor_state.readonly? ? " *" : ""
-        title = visible_truncate("#{title_prefix} #{editor_display_path}#{dirty_marker}", [width - 4, 1].max)
-        plain_title = ANSI.strip(title)
-        "#{colored("╭", :primary_green)} #{title} #{colored("─" * [width - plain_title.length - 4, 0].max, :primary_green)}#{colored("╮", :primary_green)}"
+        path = ANSI.strip(editor_display_path.to_s.scrub).gsub(/[[:cntrl:]]/, " ")
+        editor_pane_top_border("#{title_prefix} #{path}#{dirty_marker}", width, suffix: editor_explorer_header_label(width))
+      end
+
+      def editor_pane_top_border(title, width, suffix: "")
+        title = visible_truncate(title, [width - 4 - suffix.length, 1].max)
+        padding = [width - TerminalText.width(ANSI.strip(title)) - suffix.length - 4, 0].max
+        "#{colored("╭", :primary_green)} #{title} #{colored("─" * padding, :primary_green)}#{suffix}#{colored("╮", :primary_green)}"
       end
 
       def editor_display_path
@@ -370,7 +389,7 @@ module Kward
       def editor_status_text
         text = @editor_state.search_active ? "#{@editor_state.search_direction == :backward ? "Search backward" : "Search"}: #{@editor_state.search_query}" : @editor_state.status
         text = "#{text} · #{spinner_frame}" if @editor_agent_suspended && @busy
-        visible_truncate(text, [screen_width - 4, 1].max)
+        visible_truncate(text, [editor_pane_width - 4, 1].max)
       end
     end
   end

@@ -101,6 +101,7 @@ module Kward
         end
 
         @editor_state = EditorState.new(path: full_path, content: File.exist?(full_path) ? File.read(full_path) : "", new_file: !File.exist?(full_path), editor_mode: current_editor_mode)
+        restore_editor_explorer unless @editor_explorer
         @editor_agent_suspended = false
         @prompt_label = "Edit>"
         self.composer_input = ""
@@ -243,7 +244,17 @@ module Kward
         normalize_editor_line_numbers(@editor_line_numbers)
       end
 
-      def close_editor
+      def close_editor(force: false)
+        if !force && (dirty = @retained_editor_buffers&.find(&:dirty?))
+          activate_editor_buffer(dirty)
+          @editor_explorer[:focused] = false if @editor_explorer
+          @editor_state.status = "Unsaved changes in another buffer. Save it or quit without saving."
+          return false
+        end
+
+        persist_editor_explorer
+        @editor_explorer = nil
+        @retained_editor_buffers = nil
         cancel_editor_runner
         disable_editor_mouse_reporting(force: true)
         restore_editor_cursor_shape_locked
@@ -272,6 +283,7 @@ module Kward
         reset_editor_word_completion unless editor_word_completion_tab_key?(key) && !editor_search_active?
         mouse_result = handle_editor_mouse_key(key)
         return mouse_result unless mouse_result == false
+        return true if handle_editor_explorer_key(key)
         return handle_editor_save_as_key(key) if @editor_save_as_active
         return handle_readonly_editor_key(key) if @editor_state&.readonly?
         return cancel_editor_runner if editor_runner_running? && @editor_runner_completion && key == TerminalKeys::CTRL_C
@@ -488,6 +500,9 @@ module Kward
         return false unless event
 
         queue_pending_keys(event[:remaining]) unless event[:remaining].empty?
+        return true if handle_editor_explorer_mouse(event)
+
+        event[:column] -= editor_explorer_width
         case event[:code]
         when 64
           scroll_editor_up(editor_mouse_scroll_rows)
@@ -1055,7 +1070,7 @@ module Kward
       def current_editor_text_width
         return @editor_text_width if @editor_text_width
 
-        content_width = [screen_width - 4, 1].max
+        content_width = [editor_pane_width - 4, 1].max
         editor_text_width(content_width)
       end
 
@@ -1163,7 +1178,7 @@ module Kward
       def ensure_editor_cursor_visible
         return false unless @editor_state
 
-        content_width = [screen_width - 4, 1].max
+        content_width = [editor_pane_width - 4, 1].max
         visible_count = editor_visible_line_count
         line_index, column = @editor_state.cursor_line_and_column
         gutter_width = editor_line_number_gutter_width
@@ -1257,10 +1272,10 @@ module Kward
       def quit_editor(message = "Unsaved changes. Press Ctrl+Q again to discard.")
         return false unless @editor_state
         return close_editor unless @editor_state.dirty?
-        return close_editor if @editor_state.quit_confirmed
+        return close_editor(force: true) if @editor_state.quit_confirmed
 
         @editor_state.quit_confirmed = true
-        @editor_state.status = message
+        @editor_state.status = @retained_editor_buffers&.any?(&:dirty?) ? "Unsaved buffers. Repeat quit to discard all changes." : message
         true
       end
 
@@ -1404,6 +1419,11 @@ module Kward
         root = prompt_workspace_root
         unless full_path == root || full_path.start_with?("#{root}/")
           @editor_state.status = "Cannot save outside workspace"
+          return false
+        end
+
+        if @retained_editor_buffers&.any? { |buffer| buffer.path == full_path || File.identical?(buffer.path, full_path) }
+          @editor_state.status = "That file is already open"
           return false
         end
 

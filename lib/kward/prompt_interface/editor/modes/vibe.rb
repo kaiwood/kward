@@ -288,7 +288,7 @@ module Kward
         when "q"
           vibe_quit_editor
         when "q!"
-          close_editor
+          close_editor(force: true)
         when "wq"
           save_editor && close_editor
         when /\Awq\s+(.+)\z/
@@ -440,6 +440,10 @@ module Kward
           @editor_state.status = "No write since last change (:e! overrides)"
           return true
         end
+
+        full_path = File.expand_path(path, prompt_workspace_root)
+        state = @retained_editor_buffers&.find { |buffer| buffer.path == full_path || File.identical?(buffer.path, full_path) }
+        return activate_editor_buffer(state, retain_current: false) if state
 
         open_editor(path, allow_new: true)
       end

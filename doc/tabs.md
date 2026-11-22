@@ -128,7 +128,7 @@ When `composer.tab_keybindings` is `ctrl`:
 | --- | ------ |
 | `Ctrl+T` | Open a new tab at the end of the tab list |
 | `Ctrl+Shift+T` | Open and focus a new tab immediately to the right of the current tab, if your terminal reports the shortcut |
-| `Ctrl+W` | Close tab |
+| `Ctrl+W` | Close tab only when no editor is open in the active tab |
 | `Ctrl+1` through `Ctrl+9` | Switch to a numbered tab, if your terminal reports modified number keys |
 
 When `composer.tab_keybindings` is `alt`:

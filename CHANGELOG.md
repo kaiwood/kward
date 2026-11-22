@@ -4,6 +4,20 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Add a clickable Explorer to the integrated and standalone editors for browsing workspace files and switching between open buffers without losing unsaved changes.
+
+- Remember the editor Explorer’s visibility and tree position across launches, separately for each workspace.
+
+### Changed
+
+- Give the editor Explorer a rounded frame that matches the editor pane.
+
+### Fixed
+
+- Prevent Ctrl+W from closing a tab while its editor is open.
+
 ## [0.86.0] - 2026-11-22
 
 ### Changed

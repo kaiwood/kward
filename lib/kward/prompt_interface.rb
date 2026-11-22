@@ -26,6 +26,7 @@ require_relative "prompt_interface/prompt_renderer"
 require_relative "prompt_interface/stream_state"
 require_relative "prompt_interface/slash_overlay"
 require_relative "prompt_interface/file_overlay"
+require_relative "prompt_interface/project_file_tree"
 require_relative "prompt_interface/project_browser"
 require_relative "prompt_interface/selection_prompt"
 require_relative "prompt_interface/question_prompt"
@@ -34,6 +35,7 @@ require_relative "prompt_interface/approval_prompt"
 require_relative "prompt_interface/git_prompt"
 require_relative "prompt_interface/overlay_renderer"
 require_relative "prompt_interface/editor/renderer"
+require_relative "prompt_interface/editor/explorer"
 require_relative "prompt_interface/editor/syntax_highlighter"
 require_relative "prompt_interface/editor/runner"
 require_relative "prompt_interface/editor/auto_close_pairs"
@@ -95,6 +97,7 @@ module Kward
     include GitPrompt
     include OverlayRenderer
     include EditorRenderer
+    include EditorExplorer
     include EditorSyntaxHighlighter
     include EditorAutoClosePairs
     include EditorEndwise
@@ -362,6 +365,8 @@ module Kward
       @mutex.synchronize do
         return unless @started
 
+        persist_editor_explorer
+
         clear_image_viewer_output_locked if image_viewer_active?
         clear_prompt_for_output_locked
         last_transcript_row = transcript_bottom_row
@@ -545,7 +550,7 @@ module Kward
       run_editor
     rescue StandardError
       @mutex.synchronize do
-        close_editor if editor_active?
+        close_editor(force: true) if editor_active?
         render_prompt_locked if @started
       end
       raise
@@ -895,9 +900,12 @@ module Kward
 
     def tab_view_snapshot(include_transcript: true)
       @mutex.synchronize do
+        persist_editor_explorer
         snapshot = {
           composer: @composer.dup,
           prompt_label: @prompt_label.dup,
+          editor_explorer: editor_explorer_snapshot,
+          retained_editor_buffers: @retained_editor_buffers&.map(&:dup),
           editor_state: @editor_state&.dup
         }
         if include_transcript
@@ -951,6 +959,9 @@ module Kward
       @editor_runner_output_visible = false
       clear_editor_runner_selection
       @editor_state = snapshot[:editor_state]&.dup
+      @editor_explorer = editor_explorer_snapshot(snapshot[:editor_explorer])
+      @retained_editor_buffers = snapshot[:retained_editor_buffers]&.map(&:dup)
+      @editor_text_width = nil
       editor_is_active = editor_active?
 
       if editor_is_active

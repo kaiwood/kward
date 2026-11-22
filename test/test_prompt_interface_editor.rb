@@ -2659,6 +2659,26 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_ctrl_w_cannot_close_a_tab_while_the_editor_is_open
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello world")
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: dir, editor_mode: "modern", tab_keybindings: "ctrl")
+      prompt.update_tabs(labels: ["One", "Two"], active_index: 0)
+      assert prompt.send(:open_editor, "notes.txt")
+      editor = prompt.instance_variable_get(:@editor_state)
+      editor.cursor = editor.buffer.length
+
+      prompt.send(:handle_key, "\e[119;5u")
+      assert_equal "hello ", editor.buffer
+      refute_equal({ tab_action: :close }, prompt.send(:handle_key, "\e[27;5;119~"))
+      assert prompt.editing_file?
+      assert_equal({ tab_action: :next }, prompt.send(:handle_key, "\e[9;5u"))
+
+      prompt.send(:close_editor)
+      assert_equal({ tab_action: :close }, prompt.send(:handle_key, "\e[119;5u"))
+    end
+  end
+
   def test_prompt_interface_tab_view_snapshot_restores_editor_state
     Dir.mktmpdir do |dir|
       dir = File.realpath(dir)

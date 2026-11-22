@@ -207,6 +207,11 @@ module Kward
         File.join(cache_dir, "project_browser_state.json")
       end
 
+      def editor_explorer_state_path(cwd)
+        key = Digest::SHA256.hexdigest(canonical_workspace_root(cwd))[0, 24]
+        File.join(cache_dir, "editor_explorer", "#{key}.json")
+      end
+
       def prompt_history_path(cwd, config_dir: self.config_dir, kind: "prompt")
         key = Digest::SHA256.hexdigest(canonical_workspace_root(cwd))[0, 24]
         return File.join(config_dir, "history", "#{key}.jsonl") if kind.to_s == "prompt"
