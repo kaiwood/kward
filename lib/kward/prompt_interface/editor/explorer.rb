@@ -180,18 +180,23 @@ module Kward
           active = editor_explorer_relative_path(@editor_state.path)
           return [{ label: "No matching files" }] if search[:paths].empty?
 
-          return search[:paths].map { |path| { key: [:file, path], label: path, active: path == active } }
+          return search[:paths].map do |path|
+            { key: [:file, path], label: "#{project_browser_icon(path: path.scrub)}#{path}", active: path == active }
+          end
         end
 
         buffers = ([@editor_state] + retained_editor_buffers).sort_by(&:path).map do |state|
-          { key: [:buffer, state.path], label: "#{editor_explorer_relative_path(state.path) || state.path}#{' *' if state.dirty?}",
+          path = editor_explorer_relative_path(state.path) || state.path
+          icon = project_browser_icon(path: path.scrub)
+          { key: [:buffer, state.path], label: "#{icon}#{path}#{' *' if state.dirty?}",
             active: state.equal?(@editor_state), state: state }
         end
         active_path = editor_explorer_relative_path(@editor_state.path)
         tree = @editor_explorer[:tree].rows(@editor_explorer[:expanded]).map do |row|
           kind = row[:directory] ? :directory : :file
           prefix = row[:directory] ? (row[:expanded] ? "▾ " : "▸ ") : "  "
-          { key: [kind, row[:path]], label: "#{'  ' * row[:depth]}#{prefix}#{row[:name]}", expanded: row[:expanded], active: kind == :file && row[:path] == active_path }
+          icon = project_browser_icon(path: row[:path].scrub, directory: row[:directory])
+          { key: [kind, row[:path]], label: "#{'  ' * row[:depth]}#{prefix}#{icon}#{row[:name]}", expanded: row[:expanded], active: kind == :file && row[:path] == active_path }
         end
         [{ label: "Open Editors" }, *buffers, { label: "Workspace" }, *tree]
       end

@@ -402,6 +402,21 @@ class TestPromptInterfaceEditorExplorer < KwardTestCase
     end
   end
 
+  def test_explorer_uses_the_file_browser_icon_theme_for_tree_buffers_and_search_results
+    with_editor(mode: "vibe") do |prompt, root|
+      File.write(File.join(root, "lib/main.rb"), "")
+      focus_explorer(prompt)
+      refute_match(/|/, frame(prompt).join)
+      prompt.update_project_browser_icon_theme("nerd-font")
+      rows = frame(prompt)
+      assert_match(/▸  lib/, rows.join)
+      assert_equal 2, rows.count { |row| row.include?(" a.txt") }
+      key(prompt, "/")
+      %w[m r b].each { |character| key(prompt, character) }
+      assert_match(%r{ lib/main\.rb}, selected_explorer_row(prompt))
+    end
+  end
+
   private
 
   def focus_explorer(prompt)

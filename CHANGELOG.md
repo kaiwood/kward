@@ -6,6 +6,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Show the configured `/files` icons in the editor Explorer, including open buffers and search results.
+
 - Add `/` and `?` live fuzzy path filters with folder scoping and directional match navigation to the Vibe Explorer.
 
 - Add Vim-style tree navigation, `H`/`M`/`L` viewport jumps, and viewport scrolling to the Explorer in Vibe mode.

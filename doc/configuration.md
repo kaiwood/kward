@@ -389,7 +389,7 @@ You can change these interactively with `/settings`.
 <a id="project-browser-icons"></a>
 ## Project browser icons
 
-`/files` uses text-only rows by default so it remains legible in terminals without a patched icon font. To enable Nerd Font icons explicitly:
+`/files` and the editor Explorer use text-only rows by default so they remain legible in terminals without a patched icon font. To enable Nerd Font icons explicitly:
 
 ```json
 {
