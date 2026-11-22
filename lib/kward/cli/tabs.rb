@@ -444,6 +444,8 @@ module Kward
         case action[:tab_action]
         when :new
           open_new_tab(session_store)
+        when :new_after_current
+          open_new_tab(session_store, after_current: true)
         when :close
           close_active_tab
         when :next
@@ -455,7 +457,7 @@ module Kward
         end
       end
 
-      def open_new_tab(session_store)
+      def open_new_tab(session_store, after_current: false)
         return say_sessions_unavailable unless session_store
 
         stop_tab_live_view
@@ -465,9 +467,11 @@ module Kward
         conversation = new_conversation(workspace_root: session_store.cwd)
         session.attach(conversation)
         agent = build_tab_agent(conversation, session)
-        @tabs << build_tab(session, agent, driver: SessionTabDriver.new(session: session, agent: agent), label: default_tab_label(@tabs.length))
-        @active_tab_index = @tabs.length - 1
-        activate_tab(@active_tab_index)
+        tab = build_tab(session, agent, driver: SessionTabDriver.new(session: session, agent: agent), label: default_tab_label(@tabs.length))
+        index = after_current ? @active_tab_index + 1 : @tabs.length
+        @tabs.insert(index, tab)
+        @active_tab_index = index
+        activate_tab(index)
       end
 
       def close_active_tab

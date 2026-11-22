@@ -23,6 +23,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Press `Ctrl+Shift+T` to open a new tab immediately to the right of the current tab when using the Ctrl tab shortcuts in a terminal that reports the chord.
+
 - Support rbenv’s Bash initialization in interactive `kward shell`, with function-local variables and indexed arrays, `rbenv shell`, and programmable Tab completion.
 
 - Pause standalone shell history and shell-agent context capture with `history pause`, then restore recording with `history resume`.

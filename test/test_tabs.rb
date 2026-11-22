@@ -1099,6 +1099,28 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_new_after_current_inserts_and_activates_tab_without_changing_normal_append
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = TabPrompt.new
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      cli.send(:handle_tab_action, { tab_action: :new }, store)
+      cli.send(:handle_tab_command, "name Existing", store)
+      cli.send(:handle_tab_action, { tab_action: :select, index: 0 }, store)
+
+      cli.send(:handle_tab_action, { tab_action: :new_after_current }, store)
+
+      assert_equal ["Main", "Tab", "Existing"], prompt.tab_update_names
+      assert_equal 1, prompt.tabs_updates.last[:active_index]
+
+      cli.send(:handle_tab_action, { tab_action: :new }, store)
+
+      assert_equal ["Main", "Tab", "Existing", "Tab"], prompt.tab_update_names
+      assert_equal 3, prompt.tabs_updates.last[:active_index]
+    end
+  end
+
   def test_new_command_replaces_active_tab_session_without_opening_tab
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

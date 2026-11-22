@@ -80,11 +80,13 @@ module Kward
     CTRL_SHIFT_DOWN = ["\e[1;6B", "\e[6B"].freeze
 
     CTRL_T_CSI_U = "\e[116;5u".freeze
+    CTRL_SHIFT_T_CSI_U = ["\e[116;6u", "\e[84;6u"].freeze
     CTRL_W_CSI_U = "\e[119;5u".freeze
     CTRL_NUMBER_TAB_PATTERN = /\A\e\[((?:49)|(?:5[0-7]));5u\z/.freeze
     TAB_ACTION_SEQUENCES = (
       CTRL_TAB +
       CTRL_SHIFT_TAB +
+      CTRL_SHIFT_T_CSI_U +
       [CTRL_T, CTRL_T_CSI_U, CTRL_W_CSI_U] +
       (49..57).map { |code| "\e[#{code};5u" } +
       ["\et", "\eT"] +

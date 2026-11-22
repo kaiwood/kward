@@ -127,11 +127,11 @@ Tab follows the normal completion behavior:
 
 `Ctrl+Tab` and `Ctrl+Shift+Tab` switch conversations when your terminal reports those keys. Additional shortcuts depend on `composer.tab_keybindings`:
 
-- `ctrl`: `Ctrl+T` creates a tab, `Ctrl+W` closes one, and reported `Ctrl+1` through `Ctrl+9` select numbered tabs.
+- `ctrl`: `Ctrl+T` creates a tab at the end, `Ctrl+Shift+T` creates one immediately to the right of the current tab if your terminal reports it, `Ctrl+W` closes one, and reported `Ctrl+1` through `Ctrl+9` select numbered tabs.
 - `alt`: `Alt+T` creates a tab, `Alt+Left`/`Alt+Right` move between tabs, and `Alt+1` through `Alt+9` select numbered tabs.
 - `auto`: prefers the Ctrl family on macOS and the Alt family elsewhere.
 
-Use `/settings` → Interface → Tab keybindings to change the family. If your terminal intercepts a shortcut, `/tab` commands always provide the same operations.
+Use `/settings` → Interface → Tab keybindings to change the family. If your terminal intercepts a shortcut, you can use `/tab` commands instead. For example, to open a tab next to the current one, use `/tab new`, then `/tab move <number>` to put it where you want it.
 
 See [Tabs](tabs.md) for background work, status colors, persistence, naming, and moving tabs.
 
