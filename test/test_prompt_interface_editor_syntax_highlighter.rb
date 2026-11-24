@@ -212,6 +212,24 @@ class TestPromptInterfaceEditorSyntaxHighlighter < KwardTestCase
     assert_equal "# not a heading", rendered
   end
 
+  def test_multiline_highlighting_refreshes_after_editing_an_earlier_line
+    {
+      "example.rb" => ["=begin", "ignored", "def call", "\e[90m", "\e[34mdef"],
+      "show.html.erb" => ["<%#", "<%", "return", "\e[90m", "\e[34mreturn"],
+      "README.md" => ["```unknown", "```ruby", "def call", nil, "\e[34mdef"]
+    }.each do |path, (opening, replacement, text, old_color, new_color)|
+      prompt = syntax_prompt(path: path, content: "#{opening}\n#{text}")
+      editor = prompt.instance_variable_get(:@editor_state)
+
+      2.times do
+        rendered = prompt.send(:editor_render_line, text, 1, 80)
+        old_color ? assert_includes(rendered, old_color) : assert_equal(text, rendered)
+      end
+      editor.buffer = "#{replacement}\n#{text}"
+      assert_includes prompt.send(:editor_render_line, text, 1, 80), new_color
+    end
+  end
+
   def test_additional_language_highlighting_colorizes_representative_tokens
     examples = {
       "app.js" => ["const Name = \"ok\" // comment", "\e[34mconst\e[0m", "\e[33mName\e[0m", "\e[90m// comment\e[0m"],

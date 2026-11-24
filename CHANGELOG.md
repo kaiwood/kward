@@ -36,6 +36,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Avoid repeated multiline syntax scans when rendering Ruby, Markdown, and ERB files in the editor.
+
 - Reduce editor scroll lag on high-frequency mouse wheels by processing queued wheel events together instead of redrawing for each event.
 
 - Keep `kward shell` and `/shell` questions separate from coding chat: no automatic loading of `AGENTS.md`, skills, custom prompts, or chat memory.

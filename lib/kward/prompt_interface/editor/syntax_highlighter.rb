@@ -230,11 +230,33 @@ module Kward
       def editor_erb_state_before_line(line_index)
         return :template unless line_index && @editor_state
 
-        state = :template
-        @editor_state.lines.first(line_index.to_i).each do |line|
-          _, state = editor_erb_segments(line.to_s, state)
+        previous = [line_index.to_i, @editor_state.lines.length].min - 1
+        return :template if previous.negative?
+
+        editor_cached_syntax_context(:erb, previous, :template) do |line, state|
+          _, next_state = editor_erb_segments(line, state)
+          [next_state, next_state]
         end
-        state
+      end
+
+      # A fresh lines array is published after every edit or buffer switch.
+      # Extend each syntax's prefix only as far as the requested line.
+      def editor_cached_syntax_context(language, target, initial_state)
+        lines = @editor_state.lines
+        unless @editor_syntax_context_lines.equal?(lines)
+          @editor_syntax_context_lines = lines
+          @editor_syntax_contexts = {}
+        end
+
+        entries, state = @editor_syntax_contexts[language] ||= [[], initial_state]
+        return entries[target] if target < entries.length
+
+        (entries.length..target).each do |index|
+          entry, state = yield lines[index], state, index
+          entries << entry
+        end
+        @editor_syntax_contexts[language][1] = state
+        entries[target]
       end
 
       def editor_erb_segments(text, state)
@@ -279,17 +301,13 @@ module Kward
 
       def editor_ruby_block_comment_line?(line_index)
         return false unless line_index && @editor_state
+        return false unless line_index.to_i.between?(0, @editor_state.lines.length - 1)
 
-        in_comment = false
-        @editor_state.lines.first(line_index.to_i + 1).each_with_index do |line, index|
+        editor_cached_syntax_context(:ruby, line_index.to_i, false) do |line, in_comment|
           starts_block = line.match?(/\A=begin\b/)
           ends_block = line.match?(/\A=end\b/)
-          return true if index == line_index && (in_comment || starts_block || ends_block)
-
-          in_comment = true if starts_block
-          in_comment = false if ends_block
+          [in_comment || starts_block || ends_block, !ends_block && (in_comment || starts_block)]
         end
-        false
       end
 
       def editor_highlight_ruby_token(token)
@@ -422,29 +440,17 @@ module Kward
 
       def editor_markdown_fence_context(line_index)
         return nil unless line_index && @editor_state
+        return nil unless line_index.to_i.between?(0, @editor_state.lines.length - 1)
 
-        inside_fence = false
-        language = nil
-        opening_index = nil
-        @editor_state.lines.first(line_index.to_i + 1).each_with_index do |line, index|
-          match = line.to_s.match(/\A\s*```([^`]*)\s*\z/)
-          if match
-            if inside_fence
-              inside_fence = false
-              language = nil
-              opening_index = nil
-            else
-              inside_fence = true
-              language = editor_markdown_fence_language(match[1])
-              opening_index = index
-            end
-            return :marker if index == line_index
-          elsif inside_fence && index == line_index
-            return [language, index, opening_index]
+        editor_cached_syntax_context(:markdown, line_index.to_i, nil) do |line, fence, index|
+          if (match = line.match(/\A\s*```([^`]*)\s*\z/))
+            [:marker, fence ? nil : [editor_markdown_fence_language(match[1]), index]]
+          elsif fence
+            [[fence.first, index, fence.last], fence]
+          else
+            [nil, nil]
           end
         end
-
-        nil
       end
 
       def editor_effective_syntax_language(line_index = nil)
