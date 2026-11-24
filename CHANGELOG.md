@@ -38,6 +38,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Align editor wrapping, cursor movement, and mouse selection for wide Unicode text and multi-character graphemes.
+
 - Save editor files atomically and offer compare, reload, or overwrite when the disk version changes.
 
 - Reuse Explorer rows across redraws to reduce redraw work for large expanded workspace trees.

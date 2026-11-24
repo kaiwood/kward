@@ -1,5 +1,6 @@
 require_relative "editor_mode"
 require_relative "../../text_boundary"
+require_relative "../../terminal/text"
 require_relative "buffer"
 require_relative "file_marker"
 require_relative "indent_navigation"
@@ -485,22 +486,22 @@ module Kward
 
       def move_left
         if multi_cursor?
-          return move_selection_cursors { |selection| [selection[:cursor] - 1, 0].max } if extending_selections?
+          return move_selection_cursors { |selection| horizontal_grapheme_offset(selection[:cursor], -1) } if extending_selections?
 
           return move_selections { |selection| collapse_or_move_left(selection) }
         end
 
-        @cursor -= 1 if @cursor.positive?
+        @cursor = horizontal_grapheme_offset(@cursor, -1) if @cursor.positive?
       end
 
       def move_right
         if multi_cursor?
-          return move_selection_cursors { |selection| [selection[:cursor] + 1, @buffer.length].min } if extending_selections?
+          return move_selection_cursors { |selection| horizontal_grapheme_offset(selection[:cursor], 1) } if extending_selections?
 
           return move_selections { |selection| collapse_or_move_right(selection) }
         end
 
-        @cursor += 1 if @cursor < @buffer.length
+        @cursor = horizontal_grapheme_offset(@cursor, 1) if @cursor < @buffer.length
       end
 
       def move_up
@@ -1176,14 +1177,30 @@ module Kward
         range = selection_range_for(selection)
         return range[0] if range[0] != range[1]
 
-        [selection[:cursor] - 1, 0].max
+        horizontal_grapheme_offset(selection[:cursor], -1)
       end
 
       def collapse_or_move_right(selection)
         range = selection_range_for(selection)
         return range[1] if range[0] != range[1]
 
-        [selection[:cursor] + 1, @buffer.length].min
+        horizontal_grapheme_offset(selection[:cursor], 1)
+      end
+
+      def horizontal_grapheme_offset(offset, direction)
+        adjacent = (offset + direction).clamp(0, @buffer.length)
+        return adjacent if @buffer.ascii_only? || adjacent == offset
+
+        line, column = cursor_line_and_column_for(offset)
+        text = lines[line]
+        return adjacent if text.ascii_only? || (direction.negative? ? column.zero? : column == text.length)
+
+        boundary = if direction.negative?
+                     TerminalText.previous_grapheme_boundary(text, column)
+                   else
+                     TerminalText.next_grapheme_boundary(text, column)
+                   end
+        offset + boundary - column
       end
 
       def move_offset_vertically(offset, rows)

@@ -648,7 +648,7 @@ module Kward
           editor_wrapped_position_for_mouse(event, row_offset)
         else
           line_index = @editor_state.viewport_row + row_offset
-          editor_position_for_line_and_column(line_index, editor_mouse_column_for_event(event))
+          editor_unwrapped_position_for_mouse(event, line_index)
         end
       end
 
@@ -660,7 +660,7 @@ module Kward
         if current_editor_soft_wrap?
           editor_wrapped_position_for_visual_row(event, row_index)
         else
-          editor_position_for_line_and_column(row_index, editor_mouse_column_for_event(event))
+          editor_unwrapped_position_for_mouse(event, row_index)
         end
       end
 
@@ -668,8 +668,25 @@ module Kward
         visual_row = editor_visual_row_at(row_index, current_editor_text_width)
         return nil unless visual_row
 
-        column = visual_row[:column_offset] + editor_mouse_column_for_event(event)
+        column = editor_column_in_visual_row(visual_row, editor_mouse_column_for_event(event))
         editor_position_for_line_and_column(visual_row[:line_index], column)
+      end
+
+      def editor_unwrapped_position_for_mouse(event, line_index)
+        lines = @editor_state.lines
+        line_index = line_index.clamp(0, lines.length - 1)
+        column, = editor_offset_at_cell(lines[line_index], editor_mouse_column_for_event(event))
+        editor_position_for_line_and_column(line_index, column)
+      end
+
+      def editor_column_in_visual_row(row, cell)
+        start = row[:column_offset]
+        text = row[:line][start...row[:end_column]]
+        column, = editor_offset_at_cell(text, cell)
+        if column == text.length && row[:end_column] < row[:line].length
+          column = TerminalText.previous_grapheme_boundary(text, column)
+        end
+        start + column
       end
 
       def editor_position_for_line_and_column(line_index, column)
@@ -1081,49 +1098,25 @@ module Kward
       def editor_move_up
         return @editor_state.move_up unless current_editor_soft_wrap?
 
-        line, column = @editor_state.cursor_line_and_column
-        text_width = current_editor_text_width
-        row_start = editor_visual_row_start_column(line, column, text_width)
-        visual_column = column - row_start
-        if row_start.positive?
-          target_column = row_start - text_width + visual_column
-          return @editor_state.set_cursor_line_and_column(line, target_column)
-        end
-
-        return @editor_state.move_up if line.zero?
-
-        previous_line = @editor_state.lines[line - 1].to_s
-        previous_row_start = editor_last_visual_row_start_column(previous_line, text_width)
-        target_column = [previous_row_start + visual_column, previous_line.length].min
-        @editor_state.set_cursor_line_and_column(line - 1, target_column)
+        editor_move_visual_row(-1) { @editor_state.move_up }
       end
 
       def editor_move_down
         return @editor_state.move_down unless current_editor_soft_wrap?
 
-        line, column = @editor_state.cursor_line_and_column
-        text_width = current_editor_text_width
-        row_start = editor_visual_row_start_column(line, column, text_width)
-        visual_column = column - row_start
-        next_start = row_start + text_width
-        current_line = @editor_state.lines[line].to_s
-        if next_start < current_line.length
-          target_column = [next_start + visual_column, current_line.length].min
-          return @editor_state.set_cursor_line_and_column(line, target_column)
-        end
-
-        return @editor_state.move_down if line >= @editor_state.lines.length - 1
-
-        next_line = @editor_state.lines[line + 1].to_s
-        target_column = [visual_column, next_line.length].min
-        @editor_state.set_cursor_line_and_column(line + 1, target_column)
+        editor_move_visual_row(1) { @editor_state.move_down }
       end
 
-      def editor_last_visual_row_start_column(line, text_width)
-        length = line.to_s.length
-        return 0 if length.zero?
+      def editor_move_visual_row(delta)
+        line, column = @editor_state.cursor_line_and_column
+        width = current_editor_text_width
+        target = editor_visual_row_for(line, column, width) + delta
+        return yield unless target.between?(0, editor_visual_row_offsets(width).last - 1)
 
-        ((length - 1) / text_width) * text_width
+        start = editor_visual_row_start_column(line, column, width)
+        cell = editor_cells_before(@editor_state.lines[line], column, start: start)
+        row = editor_visual_row_at(target, width)
+        @editor_state.set_cursor_line_and_column(row[:line_index], editor_column_in_visual_row(row, cell))
       end
 
       def current_editor_text_width
@@ -1251,8 +1244,7 @@ module Kward
         else
           @editor_state.viewport_row = [[@editor_state.viewport_row, line_index - visible_count + 1].max, line_index].min
           @editor_state.viewport_row = [@editor_state.viewport_row, 0].max
-          @editor_state.viewport_column = [[@editor_state.viewport_column.to_i, column - text_width + 1].max, column].min
-          @editor_state.viewport_column = [@editor_state.viewport_column, 0].max
+          sync_editor_horizontal_viewport(editor_cells_before(@editor_state.lines[line_index], column), text_width)
         end
         true
       end

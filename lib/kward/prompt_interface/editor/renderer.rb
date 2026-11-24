@@ -201,8 +201,8 @@ module Kward
       def editor_unwrapped_layout(width, content_width, visible_count, line_index, column, text_width, include_bottom: true)
         @editor_state.viewport_row = [[@editor_state.viewport_row, line_index - visible_count + 1].max, line_index].min
         @editor_state.viewport_row = [@editor_state.viewport_row, 0].max
-        @editor_state.viewport_column = [[@editor_state.viewport_column.to_i, column - text_width + 1].max, column].min
-        @editor_state.viewport_column = [@editor_state.viewport_column, 0].max
+        cursor_cell = editor_cells_before(@editor_state.lines[line_index], column)
+        sync_editor_horizontal_viewport(cursor_cell, text_width)
         editor_lines = @editor_state.lines
         visible_lines = editor_lines[@editor_state.viewport_row, visible_count] || []
         actual_visible_count = visible_lines.length
@@ -215,14 +215,17 @@ module Kward
                    else
                      editor_blank_line_number_gutter
                    end
-          rendered_line = editor_render_line(line, @editor_state.viewport_row + index, text_width, column_offset: @editor_state.viewport_column)
-          row = gutter + rendered_line
+          viewport = @editor_state.viewport_column
+          offset, first_cell = editor_offset_at_cell(line, viewport, round_up: true)
+          padding = [first_cell - viewport, 0].max
+          rendered_line = editor_render_line(line, @editor_state.viewport_row + index, text_width - padding, column_offset: offset)
+          row = gutter + (" " * padding) + rendered_line
           box_content_row(row, content_width)
         end)
         rows << footer_row(content_width, editor_status_text)
         rows.concat(editor_bottom_rows(width)) if include_bottom
         cursor_row = 1 + line_index - @editor_state.viewport_row
-        cursor_col = 2 + gutter_width + [[column - @editor_state.viewport_column, 0].max, text_width - 1].min
+        cursor_col = 2 + gutter_width + [cursor_cell - @editor_state.viewport_column, text_width - 1].min
         [rows, cursor_row, cursor_col]
       end
 
@@ -245,7 +248,8 @@ module Kward
         rows.concat(editor_bottom_rows(width)) if include_bottom
         line_start = editor_visual_row_start_column(line_index, column, text_width)
         cursor_row = 1 + cursor_visual_row - @editor_state.viewport_row
-        cursor_col = 2 + editor_line_number_gutter_width + [[column - line_start, 0].max, text_width - 1].min
+        cursor_cell = editor_cells_before(@editor_state.lines[line_index], column, start: line_start)
+        cursor_col = 2 + editor_line_number_gutter_width + [cursor_cell, text_width - 1].min
         [rows, cursor_row, cursor_col]
       end
 
@@ -258,12 +262,16 @@ module Kward
       end
 
       def editor_render_line(line, line_index, text_width, column_offset: 0)
-        visible = line.to_s[column_offset.to_i, text_width].to_s
+        visible = if line.to_s.ascii_only?
+                    line.to_s[column_offset.to_i, [text_width, 0].max].to_s
+                  else
+                    TerminalText.truncate(line.to_s[column_offset.to_i..].to_s, text_width)
+                  end
         rendered = editor_render_visible_line(visible, line_index)
         line_start = @editor_state.line_start_offset(line_index)
         rendered = editor_overlay_search_matches(rendered, line_start, column_offset, visible.length)
         rendered = editor_overlay_line_selections(rendered, line_start, column_offset, visible.length)
-        editor_overlay_secondary_cursors(rendered, line_start, column_offset, visible.length, text_width)
+        editor_overlay_secondary_cursors(rendered, line_start, column_offset, visible.length, text_width, visible_width: visible.ascii_only? ? visible.length : TerminalText.width(visible))
       end
 
       def editor_overlay_search_matches(rendered, line_start, column_offset, visible_length)
@@ -295,7 +303,7 @@ module Kward
         editor_overlay_selection(rendered, selection_ranges)
       end
 
-      def editor_overlay_secondary_cursors(rendered, line_start, column_offset, visible_length, text_width)
+      def editor_overlay_secondary_cursors(rendered, line_start, column_offset, visible_length, text_width, visible_width:)
         return rendered unless @color_enabled
 
         cursor_columns = @editor_state.secondary_cursor_offsets.filter_map do |offset|
@@ -304,7 +312,7 @@ module Kward
         end
         return rendered if cursor_columns.empty?
 
-        if cursor_columns.include?(visible_length) && visible_length < text_width
+        if cursor_columns.include?(visible_length) && visible_width < text_width
           rendered += " "
         end
 
@@ -377,8 +385,15 @@ module Kward
         lines = @editor_state.lines
         if !@editor_wrap_lines.equal?(lines) || @editor_wrap_width != text_width
           offsets = [0]
-          lines.each do |line|
-            count = line.empty? ? 1 : ((line.length - 1) / text_width) + 1
+          @editor_wrap_starts = {}
+          lines.each_with_index do |line, index|
+            count = if line.ascii_only?
+                      line.empty? ? 1 : ((line.length - 1) / text_width) + 1
+                    else
+                      starts = editor_grapheme_wrap_starts(line, text_width)
+                      @editor_wrap_starts[index] = starts
+                      starts.length
+                    end
             offsets << offsets.last + count
           end
           @editor_wrap_lines = lines
@@ -394,21 +409,87 @@ module Kward
         return unless row.between?(0, offsets.last - 1)
 
         line_index = offsets.bsearch_index { |offset| offset > row } - 1
-        column_offset = (row - offsets[line_index]) * text_width
-        { line_index: line_index, column_offset: column_offset, line: @editor_state.lines[line_index], continuation: column_offset.positive? }
+        line = @editor_state.lines[line_index]
+        index = row - offsets[line_index]
+        starts = @editor_wrap_starts[line_index]
+        column_offset = starts ? starts[index] : index * text_width
+        end_column = starts ? starts[index + 1] : column_offset + text_width
+        end_column = [end_column || line.length, line.length].min
+        { line_index: line_index, column_offset: column_offset, end_column: end_column, line: line, continuation: index.positive? }
       end
 
       def editor_visual_row_for(line_index, column, text_width)
-        before = editor_visual_row_offsets(text_width)[line_index]
-        before + (editor_visual_row_start_column(line_index, column, text_width) / text_width)
+        offsets = editor_visual_row_offsets(text_width)
+        offsets[line_index] + editor_wrap_segment_index(line_index, column, text_width, offsets)
       end
 
       def editor_visual_row_start_column(line_index, column, text_width)
-        line = @editor_state.lines[line_index].to_s
-        return 0 if column.to_i.zero?
-        return column.to_i - text_width if column.to_i == line.length && (column.to_i % text_width).zero?
+        offsets = editor_visual_row_offsets(text_width)
+        index = editor_wrap_segment_index(line_index, column, text_width, offsets)
+        starts = @editor_wrap_starts[line_index]
+        starts ? starts[index] : index * text_width
+      end
 
-        (column.to_i / text_width) * text_width
+      def editor_wrap_segment_index(line_index, column, text_width, offsets)
+        last = offsets[line_index + 1] - offsets[line_index] - 1
+        starts = @editor_wrap_starts[line_index]
+        return [column / text_width, last].min unless starts
+
+        next_row = starts.bsearch_index { |offset| offset > column }
+        next_row ? next_row - 1 : last
+      end
+
+      def editor_grapheme_wrap_starts(line, width)
+        starts = [0]
+        offset = cells = 0
+        line.each_grapheme_cluster do |cluster|
+          cluster_width = TerminalText.width(cluster)
+          if cells.positive? && cells + cluster_width > width
+            starts << offset
+            cells = 0
+          end
+          offset += cluster.length
+          cells += cluster_width
+        end
+        starts
+      end
+
+      def editor_cells_before(text, offset, start: 0)
+        return offset - start if text.ascii_only?
+
+        cells = 0
+        chars = start
+        text[start..].each_grapheme_cluster do |cluster|
+          chars += cluster.length
+          break if chars > offset
+
+          cells += TerminalText.width(cluster)
+        end
+        cells
+      end
+
+      # Converts terminal cells back to character offsets without cutting a grapheme.
+      def editor_offset_at_cell(text, column, round_up: false)
+        if text.ascii_only?
+          offset = [text.length, column].min
+          return [offset, offset]
+        end
+
+        offset = cells = 0
+        text.each_grapheme_cluster do |cluster|
+          return [offset, cells] if cells >= column
+
+          next_cell = cells + TerminalText.width(cluster)
+          return [offset, cells] if !round_up && next_cell > column
+
+          offset += cluster.length
+          cells = next_cell
+        end
+        [offset, cells]
+      end
+
+      def sync_editor_horizontal_viewport(cursor_cell, text_width)
+        @editor_state.viewport_column = @editor_state.viewport_column.to_i.clamp([cursor_cell - text_width + 1, 0].max, cursor_cell)
       end
 
       def editor_line_number_gutter(line_index, cursor_line)

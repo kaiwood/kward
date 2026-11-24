@@ -2094,6 +2094,47 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_editor_wrap_cursor_and_mouse_use_the_same_unicode_cells
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    prompt.define_singleton_method(:screen_height) { 8 }
+    content = "12345678界e\u0301👩‍🚀x"
+    assert prompt.send(:open_scratchpad, :text, content: content)
+    editor = prompt.instance_variable_get(:@editor_state)
+    editor.set_cursor_line_and_column(0, 11)
+
+    rows, cursor_row, cursor_col = prompt.send(:editor_layout, 20, 8)
+    assert_includes strip_ansi(rows[1]), "12345678 "
+    assert_includes strip_ansi(rows[2]), "界e\u0301👩‍🚀x"
+    assert_equal [2, 12], [cursor_row, cursor_col]
+
+    # The second half of the wide glyph still addresses that glyph's start.
+    prompt.send(:handle_editor_key, "\e[<0;11;3M")
+    assert_equal [0, 8], editor.cursor_line_and_column
+    editor.move_right
+    editor.move_right
+    assert_equal [0, 11], editor.cursor_line_and_column
+    editor.move_right
+    assert_equal [0, 14], editor.cursor_line_and_column
+    editor.move_left
+    assert_equal [0, 11], editor.cursor_line_and_column
+    prompt.send(:handle_editor_named_key, :up)
+    assert_equal [0, 3], editor.cursor_line_and_column
+  end
+
+  def test_unwrapped_editor_clips_wide_glyphs_without_shifting_mouse_targets
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern", editor_soft_wrap: false)
+    prompt.define_singleton_method(:screen_height) { 8 }
+    assert prompt.send(:open_scratchpad, :text, content: "界abcdefgh")
+    editor = prompt.instance_variable_get(:@editor_state)
+    editor.viewport_column = 1
+    editor.set_cursor_line_and_column(0, 7)
+    rows, _row, column = prompt.send(:editor_layout, 20, 8)
+    assert_equal 16, column
+    assert_includes strip_ansi(rows[1]), "│  abcdefgh"
+    prompt.send(:handle_editor_key, "\e[<0;11;2M")
+    assert_equal [0, 1], editor.cursor_line_and_column
+  end
+
   def test_editor_wrap_updates_mouse_positions_after_resize_and_edit
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
     prompt.define_singleton_method(:screen_height) { 8 }
