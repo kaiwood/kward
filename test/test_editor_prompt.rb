@@ -78,7 +78,7 @@ class TestEditorPrompt < KwardTestCase
     assert session.changed?
   end
 
-  def test_prompt_commits_editor_prompt_as_one_undoable_change
+  def test_prompt_keeps_a_reviewed_editor_draft_as_one_undoable_change
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
     editor = Kward::PromptInterface::EditorState.new(path: "notes.txt", content: "old", editor_mode: "vibe")
     prompt.instance_variable_set(:@editor_state, editor)
@@ -89,9 +89,37 @@ class TestEditorPrompt < KwardTestCase
     assert prompt.suspend_editor_for_agent
     assert prompt.commit_editor_prompt(session)
     assert prompt.resume_editor_for_agent
+    assert_equal "old", editor.buffer
+    comparison = prompt.instance_variable_get(:@editor_state)
+    assert comparison.readonly?
+    assert_includes comparison.buffer, "-old"
+    assert_includes comparison.buffer, "+new"
+    prompt.send(:handle_key, "\e[107u")
     assert_equal "new", editor.buffer
     assert editor.undo
     assert_equal "old", editor.buffer
+  end
+
+  def test_dismissing_agent_comparison_leaves_unsaved_edits_untouched
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    editor = Kward::PromptInterface::EditorState.new(path: "notes.txt", content: "old", editor_mode: "modern")
+    editor.replace_buffer("my unsaved edit")
+    prompt.instance_variable_set(:@editor_state, editor)
+    session = Kward::EditorPromptSession.new(prompt.editor_prompt_context)
+    session.replace("agent draft")
+
+    assert prompt.suspend_editor_for_agent
+    assert prompt.commit_editor_prompt(session)
+    assert prompt.resume_editor_for_agent
+    restored_snapshot = prompt.tab_view_snapshot
+    prompt.restore_tab_view_snapshot(restored_snapshot)
+    prompt.send(:handle_key, "\e")
+
+    restored = prompt.instance_variable_get(:@editor_state)
+    assert_equal "my unsaved edit", restored.buffer
+    assert restored.dirty?
+    assert restored.undo
+    assert_equal "old", restored.buffer
   end
 
   def test_editor_stays_visible_and_shows_spinner_while_agent_runs

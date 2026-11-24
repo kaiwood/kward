@@ -115,7 +115,7 @@ $doc/editor.md
 2. Pick the file from the matching results, or press `Enter` if the path is already complete.
 3. Edit the file.
 4. In Vibe normal mode, use `:prompt <instruction>` to ask the agent to update the current in-memory buffer. In Modern mode, press `Ctrl+.` and type the instruction in the editor prompt line. For example, `write a HelloWorld class`.
-5. The editor stays visible while the agent works; its status line shows a spinner. Review the generated buffer and save with `Ctrl+S` in Modern mode, `C-x C-s` in Emacs mode, or `:w` in Vibe mode. For an unsaved scratchpad in Vibe mode, use `:w filename`.
+5. The editor stays visible while the agent works; its status line shows a spinner. Review the diff. Press **K** to keep the whole draft as one undoable edit, or **Esc** to discard it. Keeping a draft does not write it to disk. Save with `Ctrl+S` in Modern mode, `C-x C-s` in Emacs mode, or `:w` in Vibe mode. For an unsaved scratchpad in Vibe mode, use `:w filename`.
 6. Quit with `Ctrl+Q`, `C-x C-c`, or `:q`.
 7. Continue chatting with Kward.
 
@@ -138,7 +138,7 @@ The editor is intentionally compact, but it covers the basics you need for quick
 - A line-number gutter and a status line that shows the current mode and prompts.
 - Mouse-wheel scrolling in the terminal editor. Kward processes bursts of wheel events together to reduce redraw lag; your mouse or terminal may still send momentum events after you stop moving the wheel.
 - Soft-wrap, enabled by default so long lines wrap within the editor width instead of scrolling sideways. Disable it with `editor.soft_wrap: false`.
-- Vibe `:prompt <instruction>` and Modern `Ctrl+.` prompt lines send the complete current buffer and document metadata to a dedicated, transient editor agent. The agent can replace the in-memory buffer through an explicit editor tool; it does not save files automatically.
+- Vibe `:prompt <instruction>` and Modern `Ctrl+.` prompt lines send the complete current buffer and document metadata to a dedicated, transient editor agent. The agent can propose a replacement through an explicit editor tool. The buffer changes only when you keep the draft; it is never saved automatically.
 - Editor prompts and their tool activity are not added to the normal chat transcript or session history.
 - The editor remains visible and locked for editing while the agent runs. Its status line displays progress and a spinner; `Ctrl+C` cancels the request.
 

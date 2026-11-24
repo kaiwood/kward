@@ -951,6 +951,12 @@ module Kward
 
         return true if handle_bundled_key(key) { |token| handle_readonly_editor_key(token) }
 
+        if @editor_comparison&.key?(:draft) && !editor_search_active?
+          sequence = parse_csi_u_key(key)
+          choice = sequence ? csi_u_printable_text(sequence) : key
+          return return_from_editor_comparison(keep_draft: true) if choice.to_s.downcase == "k"
+        end
+
         key_name = key_name_for(key)
         named_result = handle_readonly_named_key(key_name) if key_name
         return named_result unless named_result == false || named_result.nil?
@@ -976,7 +982,7 @@ module Kward
 
           if editor_search_active?
             editor_search_append(key) if printable_key?(key)
-          elsif printable_key?(key)
+          elsif printable_key?(key) && !@editor_comparison
             @editor_state.status = "Read-only diff"
           end
         end
@@ -1022,7 +1028,7 @@ module Kward
 
       def handle_readonly_bracketed_paste_key(key)
         handle_bracketed_paste(key) do |_content|
-          @editor_state.status = "Read-only diff" unless editor_search_active?
+          @editor_state.status = "Read-only diff" unless editor_search_active? || @editor_comparison
         end
       end
 
@@ -1458,12 +1464,23 @@ module Kward
         true
       end
 
-      def return_from_editor_comparison
+      def return_from_editor_comparison(keep_draft: false)
+        draft = @editor_comparison[:draft]
         @editor_state = @editor_comparison[:source]
         @editor_text_width = @editor_comparison[:text_width]
         @editor_comparison = nil
         @prompt_label = "Edit>"
-        @editor_state.status = "Disk changed · C compare · R reload · O overwrite · Esc cancel" if @editor_save_conflict
+        if draft
+          if keep_draft
+            @editor_state.replace_buffer(draft)
+            ensure_editor_cursor_visible
+            @editor_state.status = "Agent changes kept · not saved"
+          else
+            @editor_state.status = "Agent draft discarded"
+          end
+        elsif @editor_save_conflict
+          @editor_state.status = "Disk changed · C compare · R reload · O overwrite · Esc cancel"
+        end
         true
       end
 

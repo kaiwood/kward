@@ -499,16 +499,25 @@ module Kward
       end
     end
 
-    # Commits an agent draft as one undoable editor operation.
+    # Presents a completed agent draft for review before changing the buffer.
     def commit_editor_prompt(session)
       @mutex.synchronize do
         return false unless editor_active? && @editor_agent_suspended
         return false unless @editor_state.buffer == session.initial_content
 
-        changed = @editor_state.replace_buffer(session.content)
-        @editor_state.status = changed ? "Agent updated buffer · :w save" : "Agent made no buffer changes"
+        unless session.changed?
+          @editor_state.status = "Agent made no buffer changes"
+          render_prompt_locked if @started
+          return false
+        end
+
+        draft = session.content.dup.freeze
+        open_editor_comparison(@editor_state.buffer, draft, from: "Buffer", to: "Agent draft",
+                               status: "Agent draft · K keep · Esc discard")
+        @editor_comparison[:draft] = draft
+        @editor_agent_suspended = true
         render_prompt_locked if @started
-        changed
+        true
       end
     end
 
