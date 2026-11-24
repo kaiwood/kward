@@ -126,6 +126,12 @@ module Kward
         @retained_editor_buffers ||= []
       end
 
+      def retained_editor_buffer_for(path)
+        @retained_editor_buffers&.find do |buffer|
+          buffer.path && (buffer.path == path || File.identical?(buffer.path, path))
+        end
+      end
+
       def activate_editor_buffer(state, retain_current: true)
         retained_editor_buffers.delete(state)
         retained_editor_buffers << @editor_state if retain_current

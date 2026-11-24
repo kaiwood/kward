@@ -163,6 +163,24 @@ class TestPromptInterfaceEditorExplorer < KwardTestCase
     end
   end
 
+  def test_vibe_can_save_as_and_open_files_with_a_retained_scratchpad
+    with_editor(mode: "vibe", open_file: false) do |prompt, root|
+      assert prompt.send(:open_scratchpad, :text, content: "scratch notes")
+      scratchpad = editor(prompt)
+      assert prompt.send(:open_editor_explorer_file, "a.txt")
+      assert_includes prompt.send(:retained_editor_buffers), scratchpad
+      assert_equal File.join(root, "a.txt"), editor(prompt).path
+
+      ":w copy.txt\r".each_char { |char| key(prompt, char) }
+      assert_equal "alpha\n", File.read(File.join(root, "copy.txt"))
+      assert_equal File.join(root, "copy.txt"), editor(prompt).path
+
+      ":e lib/b.txt\r".each_char { |char| key(prompt, char) }
+      assert_equal "beta\n", editor(prompt).buffer
+      assert_equal File.join(root, "lib/b.txt"), editor(prompt).path
+    end
+  end
+
   def test_tab_snapshot_retains_sidebar_and_inactive_buffers
     with_editor do |prompt, _root|
       key(prompt, "X")

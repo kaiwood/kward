@@ -515,7 +515,7 @@ module Kward
         end
 
         full_path = File.expand_path(path, prompt_workspace_root)
-        state = @retained_editor_buffers&.find { |buffer| buffer.path == full_path || File.identical?(buffer.path, full_path) }
+        state = retained_editor_buffer_for(full_path)
         return activate_editor_buffer(state, retain_current: false) if state
 
         open_editor(path, allow_new: true)

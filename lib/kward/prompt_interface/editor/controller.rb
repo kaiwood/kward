@@ -1587,7 +1587,7 @@ module Kward
           return false
         end
 
-        if @retained_editor_buffers&.any? { |buffer| buffer.path == full_path || File.identical?(buffer.path, full_path) }
+        if retained_editor_buffer_for(full_path)
           @editor_state.status = "That file is already open"
           return false
         end
