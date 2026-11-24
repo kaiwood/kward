@@ -109,6 +109,7 @@ module Kward
 
       def open_editor_workspace
         @editor_state = EditorState.new(path: nil, content: "", editor_mode: current_editor_mode, workspace_only: true)
+        @editor_state.status = nil
         restore_editor_explorer
         toggle_editor_explorer unless @editor_explorer[:visible]
         @editor_explorer[:focused] = true
@@ -299,8 +300,8 @@ module Kward
           @vibe_pane_prefix_editor = nil
           return mouse_result
         end
-        return true if handle_vibe_pane_key(key)
         return handle_editor_workspace_key(key) if @editor_state.workspace_only?
+        return true if handle_vibe_pane_key(key)
         return true if handle_editor_explorer_key(key)
         return handle_editor_save_as_key(key) if @editor_save_as_active
         return handle_readonly_editor_key(key) if @editor_state&.readonly?
@@ -919,10 +920,21 @@ module Kward
           return close_editor
         end
 
+        if @editor_state.vibe_mode == "command"
+          return true if sequence&.[](:event_type) == 3
+          return true if handle_bracketed_paste(key) { |_content| }
+          return true if handle_bundled_key(key) { |token| handle_editor_key(token) }
+
+          return handle_vibe_key(key)
+        end
+
+        return true if handle_vibe_pane_key(key)
         return true if handle_editor_explorer_key(key)
         return true if handle_bracketed_paste(key) { |_content| }
+        return true if handle_bundled_key(key) { |token| handle_editor_key(token) }
 
-        handle_bundled_key(key) { |token| handle_editor_key(token) }
+        colon = sequence ? vibe_explorer_printable_key(sequence) : key
+        vibe_begin_command if @editor_state.vibe? && colon == ":" && sequence&.[](:event_type) != 3
         true
       end
 

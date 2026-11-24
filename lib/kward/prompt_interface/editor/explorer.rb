@@ -450,7 +450,7 @@ module Kward
       def handle_vibe_explorer_motion(key, sequence, rows, index)
         motion = sequence ? vibe_explorer_printable_key(sequence) : key
         prefix = @editor_explorer.delete(:motion_prefix)
-        if motion == ":" && !@editor_state.workspace_only?
+        if motion == ":"
           @editor_explorer[:focused] = false
           vibe_begin_command
           return true

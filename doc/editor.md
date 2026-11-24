@@ -16,7 +16,7 @@ In the Land of Ruby where the agents lie.<br>
 
 ## Quick start
 
-Run `kward edit` or `kward edit .` to browse the current directory, or pass a directory such as `kward edit ~/notes` to browse it instead. The Explorer starts focused with no file open. Click a file, or select it with the arrow keys and press Enter. Press `Ctrl+Q` to quit without opening a file.
+Run `kward edit` or `kward edit .` to browse the current directory, or pass a directory such as `kward edit ~/notes` to browse it instead. The Explorer starts focused with no file open. Click a file, or select it with the arrow keys and press Enter. To quit without opening a file, use `:q` in Vibe or press `Ctrl+Q` in Modern or Emacs mode.
 
 To open a file directly from your shell:
 
@@ -283,7 +283,7 @@ The status line always shows the current mode (`NORMAL`, `INSERT`, `VISUAL`, `RE
 
 Use normal mode for movement, operators, marks, registers, macros, search, and command mode. Visual-mode-specific commands are listed in their own section below.
 
-With the Explorer open, press `Ctrl+W` then `Ctrl+W` to switch focus between the editor and the Explorer. `Ctrl+W` then `h` focuses the Explorer; `Ctrl+W` then `l` focuses the editor. `Ctrl+W` then `j` or `k` leaves focus where it is because the Explorer and editor are side by side. In Insert mode, `Ctrl+W` still deletes the previous word. With a file open and the Explorer focused, press `:` to switch to the editor and start an Ex command.
+With the Explorer open, press `Ctrl+W` then `Ctrl+W` to switch focus between the editor and the Explorer. `Ctrl+W` then `h` focuses the Explorer; `Ctrl+W` then `l` focuses the editor. `Ctrl+W` then `j` or `k` leaves focus where it is because the Explorer and editor are side by side. In Insert mode, `Ctrl+W` still deletes the previous word. With the Explorer focused, press `:` to switch to the editor and start an Ex command. If no file is open, use `:q` to quit.
 
 | Key                     | Action                                          |
 | ----------------------- | ----------------------------------------------- |

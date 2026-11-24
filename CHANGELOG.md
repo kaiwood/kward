@@ -32,6 +32,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Let Vibe users quit with `:q` after opening a directory without a file.
+
 - Let the Up and Down arrows select Explorer search results while typing a filter in Vibe mode.
 
 - Prevent Ctrl+W from closing a tab while its editor is open.

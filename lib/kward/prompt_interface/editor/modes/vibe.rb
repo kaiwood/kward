@@ -315,6 +315,8 @@ module Kward
 
       def execute_vibe_command(command)
         command = command.to_s.strip
+        return execute_vibe_workspace_command(command) if @editor_state.workspace_only?
+
         command_range = @editor_state.vibe_command_range
         command_range ||= vibe_visual_line_bounds if vibe_visual_mode?
         command_range, command = vibe_extract_command_range(command, command_range)
@@ -362,6 +364,18 @@ module Kward
           @editor_state.status = "Unknown command: #{command}"
         end
         action || true
+      end
+
+      def execute_vibe_workspace_command(command)
+        @editor_state.vibe_command = ""
+        vibe_return_to_normal
+        return close_editor if command == "q"
+        return close_editor(force: true) if command == "q!"
+        return true if command.empty?
+
+        @editor_explorer[:focused] = false
+        @editor_state.status = "No file open · :q quit"
+        true
       end
 
       def vibe_extract_command_range(command, visual_range)
@@ -677,7 +691,12 @@ module Kward
       def vibe_return_to_normal
         @editor_state.collapse_to_primary_selection if @editor_state.multi_cursor?
         @editor_state.vibe_mode = "normal"
-        @editor_state.status = "NORMAL · i insert · :prompt ask agent · :w save · :q quit"
+        if @editor_state.workspace_only?
+          @editor_explorer[:focused] = @editor_explorer[:visible]
+          @editor_state.status = nil
+        else
+          @editor_state.status = "NORMAL · i insert · :prompt ask agent · :w save · :q quit"
+        end
         true
       end
 

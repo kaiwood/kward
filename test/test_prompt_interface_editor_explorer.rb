@@ -40,6 +40,35 @@ class TestPromptInterfaceEditorExplorer < KwardTestCase
     end
   end
 
+  def test_vibe_workspace_can_quit_via_ex_without_opening_a_file
+    [[80, ":"], [45, "\e[58;2u"]].each do |width, colon|
+      with_editor(width: width, mode: "vibe", open_file: false) do |prompt, root|
+        verify_editor = -> do
+          assert_includes frame(prompt).join, ":q quit" if width == 80
+          key(prompt, colon)
+          assert_includes frame(prompt).first, "No file open"
+          assert_match(/│\s+:\s+│/, frame(prompt).join("\n"))
+          key(prompt, "\e")
+          assert_includes frame(prompt).join, "Open Editors"
+
+          key(prompt, colon)
+          key(prompt, "w")
+          key(prompt, "\r")
+          assert_includes frame(prompt).join, "No file open · :q quit"
+          assert prompt.editing_file?
+
+          key(prompt, colon)
+          key(prompt, "q")
+          key(prompt, "\r")
+          refute prompt.editing_file?
+          true
+        end
+        prompt.define_singleton_method(:run_editor) { verify_editor.call }
+        assert prompt.edit_workspace(root)
+      end
+    end
+  end
+
   def test_standalone_editor_shares_one_frame_with_the_explorer
     with_editor do |prompt, _root|
       toggle(prompt)
