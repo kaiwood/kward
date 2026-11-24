@@ -418,6 +418,30 @@ class TestPromptInterfaceEditorExplorer < KwardTestCase
     end
   end
 
+  def test_vibe_explorer_arrows_select_live_search_results
+    with_editor(mode: "vibe") do |prompt, root|
+      File.write(File.join(root, "first-note.txt"), "first\n")
+      File.write(File.join(root, "last-note.txt"), "last\n")
+      focus_explorer(prompt)
+      key(prompt, "/")
+      "note".each_char { |character| key(prompt, character) }
+      assert_match(/first-note/, selected_explorer_row(prompt))
+
+      key(prompt, "\e[B")
+      assert_match(/last-note/, selected_explorer_row(prompt))
+      key(prompt, "\e[A")
+      assert_match(/first-note/, selected_explorer_row(prompt))
+      key(prompt, "\e[1;1:2B")
+      assert_match(/last-note/, selected_explorer_row(prompt))
+      assert_includes frame(prompt).first, "/note"
+
+      key(prompt, "\r")
+      assert_equal "alpha\n", editor(prompt).buffer
+      key(prompt, "\r")
+      assert_equal "last\n", editor(prompt).buffer
+    end
+  end
+
   def test_vibe_explorer_backward_search_reverses_repeat_and_escape_restores_tree
     with_editor(mode: "vibe") do |prompt, root|
       File.write(File.join(root, "one-note.txt"), "")

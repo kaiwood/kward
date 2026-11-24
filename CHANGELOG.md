@@ -28,6 +28,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Let the Up and Down arrows select Explorer search results while typing a filter in Vibe mode.
+
 - Prevent Ctrl+W from closing a tab while its editor is open.
 
 ## [0.86.0] - 2026-11-22

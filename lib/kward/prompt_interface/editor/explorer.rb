@@ -361,6 +361,8 @@ module Kward
       end
 
       def handle_vibe_explorer_search(key, sequence, name)
+        return false if name == :up || name == :down
+
         search = @editor_explorer[:search]
         text = sequence ? vibe_explorer_printable_key(sequence) : key
         if search && name == :escape
