@@ -187,28 +187,27 @@ module Kward
           return [{ label: "No matching files" }] if search[:paths].empty?
 
           return search[:paths].map do |path|
-            { key: [:file, path], prefix: project_browser_icon(path: path.scrub), label: path, active: path == active }
+            { key: [:file, path], icon: project_browser_icon(path: path), label: path, active: path == active }
           end
         end
 
         buffers = ([@editor_state] + retained_editor_buffers).reject(&:workspace_only?).sort_by(&:path).map do |state|
           path = editor_explorer_relative_path(state.path) || state.path
-          icon = project_browser_icon(path: path.scrub)
-          { key: [:buffer, state.path], prefix: icon, label: "#{path}#{' *' if state.dirty?}",
+          { key: [:buffer, state.path], icon: project_browser_icon(path: path), label: "#{path}#{' *' if state.dirty?}",
             active: state.equal?(@editor_state), state: state }
         end
         active_path = editor_explorer_relative_path(@editor_state.path)
         tree = @editor_explorer[:tree].rows(@editor_explorer[:expanded]).map do |row|
           kind = row[:directory] ? :directory : :file
           prefix = row[:directory] ? (row[:expanded] ? "▾ " : "▸ ") : "  "
-          icon = project_browser_icon(path: row[:path].scrub, directory: row[:directory])
+          icon = project_browser_icon(row)
           depth = row[:depth]
           indent = if depth > EXPLORER_MAX_INDENT_DEPTH
                      "  " * (EXPLORER_MAX_INDENT_DEPTH - 1) + "… "
                    else
                      "  " * depth
                    end
-          { key: [kind, row[:path]], prefix: "#{indent}#{prefix}#{icon}", label: row[:name], expanded: row[:expanded], active: kind == :file && row[:path] == active_path }
+          { key: [kind, row[:path]], prefix: indent + prefix, icon: icon, label: row[:name], expanded: row[:expanded], active: kind == :file && row[:path] == active_path }
         end
         [{ label: "Open Editors" }, *buffers, { label: "Workspace" }, *tree]
       end
@@ -237,6 +236,10 @@ module Kward
           label = editor_explorer_row_label(row, columns: columns)
           selected = row && row[:key] && row[:key] == @editor_explorer[:selected] && @editor_explorer[:focused]
           text = visible_ljust(visible_truncate(label, columns), columns)
+          if row&.[](:icon)
+            column = 2 + TerminalText.width(row[:prefix]) - @editor_explorer[:horizontal_offset].to_i
+            text = color_project_browser_icon(text, row[:icon], column: column, inverse: selected)
+          end
           text = "#{TerminalSequences::SGR_INVERSE}#{text}#{TerminalSequences::SGR_INVERSE_OFF}" if selected
           lines << box_content_row(text, columns)
         end
@@ -247,7 +250,7 @@ module Kward
       def editor_explorer_row_label(row, columns: nil)
         return "" unless row
 
-        prefix = "#{row[:active] ? '•' : ' '} #{row[:prefix]}"
+        prefix = "#{row[:active] ? '•' : ' '} #{row[:prefix]}#{project_browser_icon_text(row[:icon])}"
         label = ANSI.strip(row[:label].scrub).gsub(/[[:cntrl:]]/, " ")
         return prefix + label unless columns && row[:key]
 

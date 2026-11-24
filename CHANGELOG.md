@@ -6,6 +6,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Color Nerd Font file icons by type in `/files` and the editor Explorer, and add a Python icon.
+
 - Press `o` to toggle the selected folder in the Vibe Explorer.
 
 - Press `:` in the Vibe Explorer to focus the open file and start an Ex command.

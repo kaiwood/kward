@@ -50,14 +50,14 @@ module Kward
       output.respond_to?(:tty?) && output.tty?
     end
 
-    def colorize(text, *styles, enabled: enabled?)
+    def colorize(text, *styles, enabled: enabled?, reset: 0)
       string = text.to_s
       return string unless enabled
 
       codes = styles.flatten.map { |style| STYLES.fetch(style, style) }.compact
       return string if codes.empty?
 
-      "\e[#{codes.join(";")}m#{string}\e[0m"
+      "\e[#{codes.join(";")}m#{string}\e[#{reset}m"
     end
 
     def strip(text)

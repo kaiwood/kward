@@ -399,7 +399,7 @@ You can change these interactively with `/settings`.
 }
 ```
 
-`icons` defaults to `off`; the supported values are `off` and `nerd-font`. Kward does not detect terminal fonts. Enable `nerd-font` only after configuring a compatible Nerd Font, such as Hack Nerd Font, in your terminal. You can also select **File icons** under the Interface section of `/settings`.
+`icons` defaults to `off`; the supported values are `off` and `nerd-font`. Kward does not detect terminal fonts. Enable `nerd-font` only after configuring a compatible Nerd Font, such as Hack Nerd Font, in your terminal. You can also select **File icons** under the Interface section of `/settings`. With terminal colors enabled, both browsers tint the glyphs by file type: amber for folders, red for Ruby, and yellow for Python and JavaScript, for example. With colors disabled, the icons remain monochrome.
 
 ## Composer settings
 

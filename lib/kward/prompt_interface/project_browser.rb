@@ -13,28 +13,32 @@ module Kward
       PROJECT_BROWSER_ROOT = "".freeze
       PROJECT_BROWSER_RESULT_LIMIT = 200
       PROJECT_BROWSER_STATE_VERSION = 1
+      PROJECT_BROWSER_RUBY_ICON = ["", 0xE25555].freeze
+      PROJECT_BROWSER_MARKDOWN_ICON = ["", 0x70C6D8].freeze
+      PROJECT_BROWSER_YAML_ICON = ["", 0xB4A1D8].freeze
       PROJECT_BROWSER_FILENAME_ICONS = {
-        ".gitignore" => "",
-        "Gemfile" => "",
-        "Rakefile" => "",
-        "README" => "",
-        "README.md" => "",
-        "package.json" => ""
+        ".gitignore" => ["", 0xF05032].freeze,
+        "Gemfile" => PROJECT_BROWSER_RUBY_ICON,
+        "Rakefile" => PROJECT_BROWSER_RUBY_ICON,
+        "README" => PROJECT_BROWSER_MARKDOWN_ICON,
+        "README.md" => PROJECT_BROWSER_MARKDOWN_ICON,
+        "package.json" => ["", 0x83BA63].freeze
       }.freeze
       PROJECT_BROWSER_EXTENSION_ICONS = {
-        "css" => "",
-        "html" => "",
-        "js" => "",
-        "json" => "",
-        "md" => "",
-        "rb" => "",
-        "sh" => "",
-        "ts" => "",
-        "yaml" => "",
-        "yml" => ""
+        "css" => ["", 0x5AB9EC].freeze,
+        "html" => ["", 0xF06529].freeze,
+        "js" => ["", 0xF7DF1E].freeze,
+        "json" => ["", 0x9BAAC0].freeze,
+        "md" => PROJECT_BROWSER_MARKDOWN_ICON,
+        "py" => ["", 0xFFD343].freeze,
+        "rb" => PROJECT_BROWSER_RUBY_ICON,
+        "sh" => ["", 0x69C5A0].freeze,
+        "ts" => ["", 0x4D9DE0].freeze,
+        "yaml" => PROJECT_BROWSER_YAML_ICON,
+        "yml" => PROJECT_BROWSER_YAML_ICON
       }.freeze
-      PROJECT_BROWSER_DIRECTORY_ICON = ""
-      PROJECT_BROWSER_FILE_ICON = ""
+      PROJECT_BROWSER_DIRECTORY_ICON = ["", 0xE5B454].freeze
+      PROJECT_BROWSER_FILE_ICON = ["", 0xA5A9B0].freeze
       IMAGE_VIEWER_CELL_HEIGHT_TO_WIDTH = 2.0
       IMAGE_VIEWER_ZOOM_STEP = 0.25
       IMAGE_VIEWER_MIN_ZOOM = 0.25
@@ -866,7 +870,10 @@ module Kward
           visible = visible_project_browser_rows(rows, height: height, width: width)
           visible[:rows].each_with_index do |row, offset|
             index = visible[:start] + offset
-            lines << overlay_choice_line(project_browser_row_text(row), selected: index == @project_browser_state[:selection_index])
+            icon = project_browser_icon(row)
+            prefix = project_browser_row_prefix(row)
+            choice = overlay_choice_line(project_browser_row_text(row, icon: icon, prefix: prefix), selected: index == @project_browser_state[:selection_index])
+            lines << choice.merge(file_icon: icon, file_icon_column: 2 + TerminalText.width(prefix))
           end
         end
         lines << overlay_text_line(@project_browser_state[:status], :muted) if @project_browser_state[:status]
@@ -926,32 +933,42 @@ module Kward
         @project_browser_tree = ProjectFileTree.new(paths, directories: @project_browser_state.fetch(:directory_paths, []))
       end
 
-      def project_browser_row_text(row)
-        indent = "  " * row[:depth]
-        marker = if row[:directory]
-                   row[:expanded] ? "▾ " : "▸ "
-                 else
-                   "  "
-                 end
-        icon = project_browser_icon(row)
+      def project_browser_row_text(row, icon: project_browser_icon(row), prefix: project_browser_row_prefix(row))
+        name = ANSI.strip(row[:name].scrub).gsub(/[[:cntrl:]]/, " ")
         suffix = row[:directory] ? "/" : ""
-        "#{indent}#{marker}#{icon}#{row[:name]}#{suffix}"
+        "#{prefix}#{project_browser_icon_text(icon)}#{name}#{suffix}"
+      end
+
+      def project_browser_row_prefix(row)
+        marker = row[:directory] ? (row[:expanded] ? "▾ " : "▸ ") : "  "
+        ("  " * row[:depth]) + marker
       end
 
       def project_browser_icon(row)
-        return "" unless @project_browser_icon_theme == "nerd-font"
+        return unless @project_browser_icon_theme == "nerd-font"
+        return PROJECT_BROWSER_DIRECTORY_ICON if row[:directory]
 
-        icon = if row[:directory]
-                 PROJECT_BROWSER_DIRECTORY_ICON
-               else
-                 project_browser_file_icon(row[:path])
-               end
-        "#{icon} "
+        name = File.basename(row[:path].to_s.scrub)
+        extension = File.extname(name).delete_prefix(".").downcase
+        PROJECT_BROWSER_FILENAME_ICONS[name] || PROJECT_BROWSER_EXTENSION_ICONS[extension] || PROJECT_BROWSER_FILE_ICON
       end
 
-      def project_browser_file_icon(path)
-        name = File.basename(path.to_s)
-        PROJECT_BROWSER_FILENAME_ICONS[name] || PROJECT_BROWSER_EXTENSION_ICONS[File.extname(name).delete_prefix(".").downcase] || PROJECT_BROWSER_FILE_ICON
+      def project_browser_icon_text(icon)
+        icon ? "#{icon.first} " : ""
+      end
+
+      def color_project_browser_icon(text, icon, column:, restore_foreground: 39, inverse: false)
+        return text unless @color_enabled && icon && column >= 0
+
+        glyph, rgb = icon
+        prefix = TerminalText.truncate(text, column)
+        return text unless TerminalText.width(prefix) == column && text[prefix.length, glyph.length] == glyph
+
+        red, green, blue = [rgb >> 16, (rgb >> 8) & 255, rgb & 255]
+        # In reverse video the background channel supplies the glyph's foreground.
+        channel, restore = inverse ? [48, 49] : [38, restore_foreground]
+        styled_glyph = ANSI.colorize(glyph, "#{channel};2;#{red};#{green};#{blue}", enabled: @color_enabled, reset: restore)
+        prefix + styled_glyph + text[(prefix.length + glyph.length)..]
       end
 
       def saved_project_browser_state

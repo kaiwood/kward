@@ -597,6 +597,25 @@ class TestPromptInterfaceEditorExplorer < KwardTestCase
     end
   end
 
+  def test_explorer_colors_the_icon_without_resetting_search_selection
+    with_editor(mode: "vibe") do |prompt, root|
+      File.write(File.join(root, "lib/main.rb"), "")
+      prompt.update_project_browser_icon_theme("nerd-font")
+      prompt.instance_variable_set(:@color_enabled, true)
+      focus_explorer(prompt)
+      width, height = prompt.send(:screen_size)
+      rows, = prompt.send(:composer_layout, width, height)
+      assert_includes rows.join, "▸ \e[38;2;229;180;84m\e[39m lib"
+      assert_includes rows.join, "• \e[38;2;165;169;176m\e[39m a.txt"
+
+      key(prompt, "/")
+      %w[m r b].each { |character| key(prompt, character) }
+      rows, = prompt.send(:composer_layout, width, height)
+      assert_match(%r{\e\[7m +\e\[48;2;226;85;85m\e\[49m lib/main\.rb +\e\[27m}, rows.join)
+      assert rows.all? { |row| Kward::TerminalText.width(strip_ansi(row)) == width }
+    end
+  end
+
   private
 
   def focus_explorer(prompt)

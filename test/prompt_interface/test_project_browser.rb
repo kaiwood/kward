@@ -599,6 +599,26 @@ class TestPromptInterfaceProjectBrowser < KwardTestCase
     assert_equal "   notes.txt", prompt.send(:project_browser_row_text, { name: "notes.txt", path: "notes.txt", depth: 0, directory: false })
   end
 
+  def test_project_browser_colors_icons_without_coloring_the_filename_or_losing_selection
+    Dir.mktmpdir do |root|
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: root, project_browser_icon_theme: "nerd-font")
+      prompt.instance_variable_set(:@file_mention_paths, %w[lib/main.rb Gemfile data.json package.json script.py])
+      prompt.instance_variable_set(:@color_enabled, true)
+      prompt.open_project_browser
+
+      rows = prompt.send(:project_browser_rows, 80, height: 40)
+      assert_includes rows.join, "\e[38;2;229;180;84m\e[38;2;138;160;106m lib/"
+      assert_includes rows.join, "\e[38;2;226;85;85m\e[39m Gemfile"
+      assert_includes rows.join, "\e[38;2;155;170;192m\e[39m data.json"
+      assert_includes rows.join, "\e[38;2;131;186;99m\e[39m package.json"
+      assert_includes rows.join, "\e[38;2;255;211;67m\e[39m script.py"
+      assert rows.all? { |row| Kward::TerminalText.width(strip_ansi(row)) == 80 }
+
+      prompt.instance_variable_set(:@color_enabled, false)
+      assert_equal rows.map { |row| strip_ansi(row) }, prompt.send(:project_browser_rows, 80, height: 40)
+    end
+  end
+
   def test_prompt_interface_project_browser_restores_after_editor_closes
     Dir.mktmpdir do |dir|
       FileUtils.mkdir_p(File.join(dir, "lib", "kward"))

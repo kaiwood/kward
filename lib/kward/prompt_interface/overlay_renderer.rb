@@ -92,6 +92,10 @@ module Kward
 
       def overlay_content_row(row, inner_width)
         text = visible_truncate(row[:text], inner_width)
+        if row[:file_icon]
+          foreground = row[:selected] ? ANSI::STYLES.fetch(:primary_green) : 39
+          text = color_project_browser_icon(text, row[:file_icon], column: row[:file_icon_column], restore_foreground: foreground)
+        end
         text = colored(text, :primary_green, :bold) if row[:selected]
         colored("│", :primary_green) + " " + visible_ljust(text, inner_width) + " " + colored("│", :primary_green)
       end
