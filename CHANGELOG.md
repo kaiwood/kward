@@ -38,6 +38,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Keep standalone `kward edit` open when submitting an editor prompt.
+
 - Skip unnamed buffers when checking open files for Save As and Vibe `:e`.
 
 - Keep the original buffer path when Save As is canceled or fails, and ask before replacing an existing destination.

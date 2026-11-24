@@ -6,8 +6,8 @@ module Kward
     module InteractiveTurn
       private
 
-      def run_editor_prompt_turn(action, agent)
-        unless agent.respond_to?(:tool_registry) && agent.tool_registry.respond_to?(:for_editor_prompt)
+      def run_editor_prompt_turn(action, agent = nil)
+        if agent && !(agent.respond_to?(:tool_registry) && agent.tool_registry.respond_to?(:for_editor_prompt))
           runtime_output("Editor prompts are unavailable in this tab.")
           return []
         end
@@ -27,8 +27,10 @@ module Kward
           return []
         end
 
+        ensure_client!
         session = EditorPromptSession.new(context)
-        registry = agent.tool_registry.for_editor_prompt(session)
+        base_registry = agent ? agent.tool_registry : ToolRegistry.new(workspace: configured_workspace(root: context[:workspace_root]))
+        registry = base_registry.for_editor_prompt(session)
         editor_agent = build_editor_prompt_agent(agent, context, registry)
         instruction = action[:instruction] || action["instruction"]
         run_interactive_turn(
@@ -45,15 +47,15 @@ module Kward
       end
 
       def build_editor_prompt_agent(active_agent, context, registry)
-        active_conversation = active_agent.conversation
+        active_conversation = active_agent&.conversation
         config = safely_read_config.to_h
         configured_provider = ConfigFiles.editor_agent_provider(config)
-        provider = configured_provider || active_conversation.provider || current_model_provider
-        model = ConfigFiles.editor_agent_model(config) || (configured_provider ? nil : active_conversation.model || current_model_id)
-        reasoning = ConfigFiles.editor_agent_reasoning_effort(config) || (configured_provider ? nil : active_conversation.reasoning_effort || current_reasoning_effort)
+        provider = configured_provider || active_conversation&.provider || current_model_provider
+        model = ConfigFiles.editor_agent_model(config) || (configured_provider ? nil : active_conversation&.model || current_model_id)
+        reasoning = ConfigFiles.editor_agent_reasoning_effort(config) || (configured_provider ? nil : active_conversation&.reasoning_effort || current_reasoning_effort)
         conversation = Conversation.new(
           system_message: EditorPrompt.system_message,
-          workspace_root: context[:workspace_root] || active_conversation.workspace_root,
+          workspace_root: context[:workspace_root] || active_conversation&.workspace_root,
           provider: provider,
           model: model,
           reasoning_effort: reasoning

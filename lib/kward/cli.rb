@@ -425,10 +425,14 @@ module Kward
         raise ArgumentError, "The integrated editor requires an interactive terminal."
       end
 
-      if directory
+      result = if directory
         @prompt.edit_workspace(target)
       else
         @prompt.edit_file(path, base_dir: Dir.pwd, allow_new: true)
+      end
+      while result.is_a?(Hash) && result[:editor_prompt]
+        run_editor_prompt_turn(result[:editor_prompt])
+        result = @prompt.run_editor
       end
     ensure
       begin

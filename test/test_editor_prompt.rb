@@ -68,6 +68,30 @@ class EditorPromptTestClient
 end
 
 class TestEditorPrompt < KwardTestCase
+  def test_standalone_edit_resumes_after_an_editor_prompt_and_reviews_the_draft
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "hello.rb")
+      File.write(path, "class OldName; end\n")
+      output = StringIO.new
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, workspace_root: dir, editor_mode: "vibe")
+      keys = ":prompt update the class\r".chars + ["\e[107u"] + ":q!\r".chars
+      prompt.define_singleton_method(:read_key) do |**|
+        next nil if @editor_agent_suspended
+
+        keys.shift || raise("Editor did not close after :q!")
+      end
+      client = EditorPromptTestClient.new
+      cli = Kward::CLI.new(argv: ["edit", path], prompt: prompt, client: client)
+
+      cli.run
+
+      assert_includes client.messages.first.last[:content], "update the class"
+      assert_includes strip_ansi(output.string), "+class HelloWorld; end"
+      assert_empty keys
+      assert_equal "class OldName; end\n", File.read(path)
+    end
+  end
+
   def test_editor_prompt_session_keeps_agent_changes_in_a_draft
     session = Kward::EditorPromptSession.new(content: "old", path: "notes.txt")
 
