@@ -110,10 +110,11 @@ module Kward
         @vibe_state = VibeEditorState.copy(other.vibe_state)
         sync_vibe_state
         @undo_history = EditorUndoHistory.new
-        other.undo_stack.each { |entry| @undo_history.undo_stack << duplicate_editor_snapshot(entry) }
-        other.redo_stack.each { |entry| @undo_history.redo_stack << duplicate_editor_snapshot(entry) }
+        other.undo_stack.each { |entry| @undo_history.undo_stack << duplicate_editor_history_entry(entry) }
+        other.redo_stack.each { |entry| @undo_history.redo_stack << duplicate_editor_history_entry(entry) }
         @undo_stack = @undo_history.undo_stack
         @redo_stack = @undo_history.redo_stack
+        @undo_capture = nil
         @readonly = other.readonly
         @diff_view = other.diff_view
       end
@@ -121,6 +122,11 @@ module Kward
       attr_reader :vibe_state
 
       def buffer=(value)
+        if @undo_capture
+          @undo_capture[:edits] = nil
+        else
+          @undo_history.preserve_targets(@buffer) unless value.to_s == @buffer
+        end
         @text_buffer.text = value
         @buffer = @text_buffer.text
         sync_selection_state if @selections
@@ -420,33 +426,47 @@ module Kward
       end
 
       def push_undo
-        @undo_history.push(editor_snapshot)
+        @undo_history.push(buffer: @buffer.dup, selections: selections)
+      end
+
+      def record_undo(clear_redo_on_noop: false)
+        return yield if @undo_capture
+
+        before = @buffer
+        selection = selections
+        @undo_capture = { edits: [] }
+        begin
+          yield
+        ensure
+          edits = @undo_capture[:edits]
+          @undo_capture = nil
+          if @buffer != before
+            entry = edits ? { edits: edits.reverse.freeze } : { buffer: before.dup }
+            @undo_history.push(entry.merge(selections: selection))
+          elsif clear_redo_on_noop
+            @redo_stack.clear
+          end
+        end
       end
 
       def undo
-        snapshot = @undo_history.undo(editor_snapshot)
-        unless snapshot
+        if @undo_history.undo { |entry| restore_editor_history_entry(entry) }
+          @status = "Undo"
+          true
+        else
           @status = "Already at oldest change"
-          return false
+          false
         end
-
-        restore_editor_snapshot(snapshot)
-        changed!
-        @status = "Undo"
-        true
       end
 
       def redo
-        snapshot = @undo_history.redo(editor_snapshot)
-        unless snapshot
+        if @undo_history.redo { |entry| restore_editor_history_entry(entry) }
+          @status = "Redo"
+          true
+        else
           @status = "Already at newest change"
-          return false
+          false
         end
-
-        restore_editor_snapshot(snapshot)
-        changed!
-        @status = "Redo"
-        true
       end
 
       def insert(text)
@@ -454,7 +474,7 @@ module Kward
         return if text.empty?
         return replace_selections(text) if multi_cursor?
 
-        @text_buffer.insert(@cursor, text)
+        replace_editor_text(@cursor, @cursor, text)
         @cursor += text.length
         @buffer = @text_buffer.text
         sync_selection_state
@@ -465,7 +485,7 @@ module Kward
         return delete_before_selections if multi_cursor?
         return false if @cursor.zero?
 
-        @text_buffer.delete_range(@cursor - 1, @cursor)
+        replace_editor_text(@cursor - 1, @cursor, "")
         @cursor -= 1
         @buffer = @text_buffer.text
         sync_selection_state
@@ -477,7 +497,7 @@ module Kward
         return delete_at_selections if multi_cursor?
         return false unless @cursor < @buffer.length
 
-        @text_buffer.delete_range(@cursor, @cursor + 1)
+        replace_editor_text(@cursor, @cursor + 1, "")
         @buffer = @text_buffer.text
         sync_selection_state
         changed!
@@ -841,15 +861,16 @@ module Kward
         content = content.to_s
         return false if content == @buffer
 
-        push_undo
-        self.buffer = content
-        @cursor = [@cursor, @buffer.length].min
-        changed!
-        true
+        record_undo do
+          self.buffer = content
+          @cursor = [@cursor, @buffer.length].min
+          changed!
+          true
+        end
       end
 
       def replace_range(start_index, end_index, text)
-        start_index, = @text_buffer.replace_range(start_index, end_index, text)
+        start_index, = replace_editor_text(start_index, end_index, text)
         @buffer = @text_buffer.text
         @cursor = [start_index, @buffer.length].min
         changed!
@@ -1059,28 +1080,34 @@ module Kward
         @selections.range_for(selection)
       end
 
-      def editor_snapshot
-        { buffer: @buffer.dup, selections: selections }
+      def replace_editor_text(start_index, end_index, text)
+        if @undo_capture
+          edits = @undo_capture[:edits]
+          return @text_buffer.replace_range(start_index, end_index, text) { |edit| edits << edit } if edits
+        else
+          @undo_history.preserve_targets(@buffer)
+        end
+        @text_buffer.replace_range(start_index, end_index, text)
       end
 
-      def restore_editor_snapshot(snapshot)
-        self.buffer = snapshot[:buffer].to_s
-        if snapshot[:selections]
-          set_selections(snapshot[:selections])
+      def restore_editor_history_entry(entry)
+        selection = selections
+        inverse = @undo_history.apply(entry, @text_buffer)
+        @buffer = @text_buffer.text
+        if entry[:selections]
+          set_selections(entry[:selections])
         else
-          set_selections([{ anchor: nil, cursor: [snapshot[:cursor].to_i, @buffer.length].min }])
-          clear_selection
+          set_selections([{ anchor: nil, cursor: [entry[:cursor].to_i, @buffer.length].min }])
         end
+        changed!
+        inverse.merge(selections: selection)
       end
 
-      def duplicate_editor_snapshot(snapshot)
-        duplicate = { buffer: snapshot[:buffer].to_s.dup }
-        if snapshot[:selections]
-          duplicate[:selections] = snapshot[:selections].map(&:dup)
-        else
-          duplicate[:cursor] = snapshot[:cursor]
-        end
-        duplicate
+      def duplicate_editor_history_entry(entry)
+        copy = entry.dup
+        copy[:buffer] = entry[:buffer].dup if entry.key?(:buffer)
+        copy[:selections] = entry[:selections].map(&:dup) if entry[:selections]
+        copy
       end
 
       def apply_selection_edits
@@ -1101,7 +1128,7 @@ module Kward
             selection[:anchor] += delta if selection[:anchor] >= edit[:end]
             selection[:cursor] += delta if selection[:cursor] >= edit[:end]
           end
-          @text_buffer.replace_range(edit[:start], edit[:end], edit[:text])
+          replace_editor_text(edit[:start], edit[:end], edit[:text])
           @buffer = @text_buffer.text
           sync_selection_state
           cursor = edit[:start] + edit[:text].length
@@ -1132,7 +1159,7 @@ module Kward
         return false if start_index == end_index
 
         push_kill(@buffer[start_index...end_index].to_s)
-        @text_buffer.delete_range(start_index, end_index)
+        replace_editor_text(start_index, end_index, "")
         @buffer = @text_buffer.text
         @cursor = start_index
         sync_selection_state

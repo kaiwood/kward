@@ -38,6 +38,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Reduce editor undo and redo memory on large files by storing small edits instead of whole-buffer copies.
+
 - Align editor wrapping, cursor movement, and mouse selection for wide Unicode text and multi-character graphemes.
 
 - Save editor files atomically and offer compare, reload, or overwrite when the disk version changes.

@@ -1217,6 +1217,61 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_editor_undo_keeps_small_edits_compact_and_replays_multicursor_edits
+    source = "αβ" + ("a" * 100_000) + "γδ"
+    editor = Kward::PromptInterface::EditorState.new(path: "notes.txt", content: source)
+    editor.set_selections([{ anchor: 0, cursor: 1 }, { anchor: source.length - 1, cursor: source.length }])
+
+    editor.record_undo { editor.replace_selections("界!") }
+    edited = "界!β" + ("a" * 100_000) + "γ界!"
+    assert_equal edited, editor.buffer
+    entry = editor.undo_stack.fetch(0)
+    refute entry.key?(:buffer), "a small edit must not retain the whole buffer"
+    assert_operator entry.fetch(:edits).sum { |_, _, text| text.bytesize }, :<, 10
+
+    copy = editor.dup
+    assert copy.undo
+    assert_equal source, copy.buffer
+    assert_equal 1, copy.cursor
+    assert copy.redo
+    assert_equal edited, copy.buffer
+    assert_equal edited, editor.buffer
+    assert_equal 1, editor.undo_stack.size
+  end
+
+  def test_editor_replays_deltas_across_whole_buffer_replacements
+    editor = Kward::PromptInterface::EditorState.new(path: "notes.txt", content: "abc")
+    editor.record_undo { editor.insert("!") }
+    editor.replace_buffer("draft")
+    editor.record_undo { editor.insert("?") }
+
+    ["draft", "!abc", "abc"].each do |text|
+      assert editor.undo
+      assert_equal text, editor.buffer
+    end
+    ["!abc", "draft", "d?raft"].each do |text|
+      assert editor.redo
+      assert_equal text, editor.buffer
+    end
+  end
+
+  def test_untracked_editor_edit_does_not_shift_undo_or_redo_targets
+    editor = Kward::PromptInterface::EditorState.new(path: "notes.txt", content: "abc")
+    editor.move_file_end
+    editor.record_undo { editor.insert("!") }
+    editor.record_undo { editor.insert("?") }
+    assert editor.undo
+
+    editor.move_file_start
+    editor.insert("untracked ")
+    assert editor.redo
+    assert_equal "abc!?", editor.buffer
+    assert editor.undo
+    assert_equal "untracked abc!", editor.buffer
+    assert editor.undo
+    assert_equal "abc", editor.buffer
+  end
+
   def test_prompt_interface_modern_ctrl_z_undoes_and_ctrl_shift_z_redoes
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "hello")

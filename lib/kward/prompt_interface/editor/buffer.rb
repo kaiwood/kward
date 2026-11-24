@@ -76,9 +76,16 @@ module Kward
         start_index, end_index = [start_index, end_index].minmax
         start_index = [[start_index, 0].max, @text.length].min
         end_index = [[end_index, 0].max, @text.length].min
-        @text = @text[0...start_index].to_s + text.to_s + @text[end_index..].to_s
+        replacement = text.to_s
+        combined = @text[0...start_index].to_s + replacement + @text[end_index..].to_s
+        if block_given?
+          removed = @text[start_index...end_index]
+          # Copy the span so a retained slice cannot pin the old buffer.
+          yield [start_index, replacement.length, (String.new(capacity: removed.bytesize) << removed).freeze].freeze
+        end
+        @text = combined
         invalidate_lines_cache
-        [start_index, start_index + text.to_s.length]
+        [start_index, start_index + replacement.length]
       end
 
       def insert(offset, text)

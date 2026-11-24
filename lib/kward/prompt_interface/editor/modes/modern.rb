@@ -344,16 +344,8 @@ module Kward
         delete_editor_selection || editor_delete_before_cursor
       end
 
-      def modern_record_undo
-        before_buffer = @editor_state.buffer.dup
-        before_redo_stack = @editor_state.redo_stack.map { |entry| entry.merge(buffer: entry[:buffer].dup, selections: entry[:selections]&.map(&:dup)) }
-        @editor_state.push_undo
-        result = yield
-        if @editor_state.buffer == before_buffer
-          @editor_state.undo_stack.pop
-          @editor_state.redo_stack = before_redo_stack
-        end
-        result
+      def modern_record_undo(&edit)
+        @editor_state.record_undo(&edit)
       end
 
       def modern_ctrl_shift_key?(code, modifier)

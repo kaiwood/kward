@@ -2605,11 +2605,8 @@ module Kward
         Array(command).flat_map { |key| key.is_a?(String) ? key.each_char.to_a : key }
       end
 
-      def vibe_record_undo
-        before = @editor_state.buffer.dup
-        @editor_state.push_undo
-        yield
-        @editor_state.undo_stack.pop if @editor_state.buffer == before
+      def vibe_record_undo(&edit)
+        @editor_state.record_undo(clear_redo_on_noop: true, &edit)
       end
 
     end
