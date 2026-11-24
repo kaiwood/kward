@@ -119,6 +119,12 @@ $doc/editor.md
 6. Quit with `Ctrl+Q`, `C-x C-c`, or `:q`.
 7. Continue chatting with Kward.
 
+## Saving a file that changed on disk
+
+Ordinary saves replace the file atomically and preserve its permission bits. For a symlink to an existing file, the editor saves to its target; it refuses to replace a hard-linked file rather than silently breaking the link.
+
+If the disk version changes while you edit, save opens a choice: **C** compares disk and buffer, **R** reloads the disk version (undo restores your edits), **O** overwrites the disk version shown, and **Esc** cancels. If the disk changes again before you confirm, the editor asks again. These controls are part of the terminal editor, not the RPC API.
+
 ## What the editor supports
 
 The editor is intentionally compact, but it covers the basics you need for quick changes:

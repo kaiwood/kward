@@ -485,6 +485,59 @@ class TestPromptInterfaceEditor < KwardTestCase
     refute prompt.send(:editor_runner_selection_active?)
   end
 
+  def test_editor_save_conflict_compares_and_reloads_without_losing_undo
+    Dir.mktmpdir do |root|
+      path = File.join(root, "notes.txt")
+      File.write(path, "original\n")
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: root, diff_view: "unified")
+      assert prompt.send(:open_editor, path)
+      editor = prompt.instance_variable_get(:@editor_state)
+      editor.replace_buffer("my edit\n")
+      File.write(path, "external change\n")
+
+      prompt.send(:save_editor)
+      assert_includes editor.status, "C compare"
+      prompt.send(:handle_editor_key, "c")
+      diff = prompt.instance_variable_get(:@editor_state)
+      assert diff.readonly?
+      assert_includes diff.buffer, "-external change\n+my edit"
+      prompt.send(:handle_editor_key, "\e")
+      assert_same editor, prompt.instance_variable_get(:@editor_state)
+      prompt.send(:handle_editor_key, "r")
+      assert_equal "external change\n", editor.buffer
+      refute editor.dirty?
+      editor.undo
+      assert_equal "my edit\n", editor.buffer
+      assert editor.dirty?
+    end
+  end
+
+  def test_editor_overwrite_rechecks_disk_and_atomically_preserves_file_mode
+    Dir.mktmpdir do |root|
+      path = File.join(root, "notes.txt")
+      File.write(path, "original")
+      File.chmod(0o640, path)
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: root)
+      assert prompt.send(:open_editor, path)
+      editor = prompt.instance_variable_get(:@editor_state)
+      editor.replace_buffer("mine")
+      File.write(path, "theirs")
+      prompt.send(:save_editor)
+      File.write(path, "newer")
+      prompt.send(:handle_editor_key, "o")
+      assert_equal "newer", File.read(path)
+      assert editor.dirty?
+      File.open(path) do |previous_file|
+        prompt.send(:handle_editor_key, "o")
+        assert_equal "newer", previous_file.read
+      end
+      assert_equal "mine", File.read(path)
+      assert_equal 0o640, File.stat(path).mode & 0o777
+      assert_empty Dir.glob(File.join(root, ".kward-edit-*"))
+      refute editor.dirty?
+    end
+  end
+
   def test_prompt_interface_modern_ctrl_s_saves_file
     Dir.mktmpdir do |dir|
       path = File.join(dir, "notes.txt")
@@ -2253,16 +2306,14 @@ class TestPromptInterfaceEditor < KwardTestCase
         prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         prompt.send(:handle_editor_key, "!")
-        sleep 0.01
         File.write(path, "external")
 
         prompt.send(:handle_editor_key, "\x18")
         prompt.send(:handle_editor_key, "\x13")
         assert_equal "external", File.read(path)
-        assert_includes prompt.instance_variable_get(:@editor_state).status, "Press Ctrl+S again"
+        assert_includes prompt.instance_variable_get(:@editor_state).status, "O overwrite"
 
-        prompt.send(:handle_editor_key, "\x18")
-        prompt.send(:handle_editor_key, "\x13")
+        prompt.send(:handle_editor_key, "o")
         assert_equal "!hello", File.read(path)
       end
     end

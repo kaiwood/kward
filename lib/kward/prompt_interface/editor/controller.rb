@@ -1,6 +1,8 @@
 require "fileutils"
 require_relative "scratchpad_languages"
 require_relative "runner"
+require_relative "file_save"
+require_relative "buffer_diff"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -258,6 +260,9 @@ module Kward
       end
 
       def close_editor(force: false)
+        return return_from_editor_comparison if @editor_comparison
+
+        @editor_save_conflict = nil
         if !force && (dirty = @retained_editor_buffers&.find(&:dirty?))
           activate_editor_buffer(dirty)
           @editor_explorer[:focused] = false if @editor_explorer
@@ -293,6 +298,7 @@ module Kward
 
       def handle_editor_key(key)
         return if key.nil?
+        return handle_editor_save_conflict_key(key) if @editor_save_conflict && !@editor_comparison
         return handle_editor_prompt_key(key) if @editor_prompt_active
         return handle_editor_runner_output_key(key) if editor_runner_output_visible?
 
@@ -1379,20 +1385,86 @@ module Kward
 
         return false if !path.to_s.strip.empty? && !bind_editor_save_path(path)
 
-        if @editor_state.file_changed_on_disk? && !@editor_state.overwrite_confirmed
-          @editor_state.overwrite_confirmed = true
-          @editor_state.status = "File changed on disk. Press Ctrl+S again to overwrite."
-          return true
-        end
-
-        parent = File.dirname(@editor_state.path)
-        FileUtils.mkdir_p(parent) unless Dir.exist?(parent)
-        File.write(@editor_state.path, @editor_state.buffer)
-        @editor_state.refresh_after_save(@editor_state.buffer)
-        true
+        expected = @editor_state.new_file ? nil : @editor_state.original_content
+        write_editor_file(expected)
       rescue StandardError => e
         @editor_state.status = "Save failed: #{e.message}" if @editor_state
         false
+      end
+
+      def write_editor_file(expected)
+        path = @editor_state.path
+        FileUtils.mkdir_p(File.dirname(path))
+        EditorFileSave.write(path, @editor_state.buffer, expected: expected)
+        @editor_save_conflict = nil
+        @editor_state.refresh_after_save(@editor_state.buffer)
+        true
+      rescue EditorFileSave::Conflict
+        begin_editor_save_conflict
+      end
+
+      def begin_editor_save_conflict
+        @editor_save_conflict = { disk: EditorFileSave.read(@editor_state.path) }
+        @editor_state.clear_search_highlights
+        @editor_state.status = "Disk changed · C compare · R reload · O overwrite · Esc cancel"
+        true
+      end
+
+      def handle_editor_save_conflict_key(key)
+        return true if handle_bracketed_paste(key) { |_content| }
+        return true if handle_bundled_key(key) { |token| handle_editor_save_conflict_key(token) }
+
+        sequence = parse_csi_u_key(key)
+        key = sequence[:code] == 27 ? "\e" : csi_u_printable_text(sequence) if sequence
+        case key.to_s.downcase
+        when "c"
+          disk = @editor_save_conflict[:disk]
+          open_editor_comparison(disk, @editor_state.buffer, from: "Disk", to: "Buffer", status: "Disk vs. buffer · Esc back")
+        when "r"
+          disk = EditorFileSave.read(@editor_state.path)
+          return begin_editor_save_conflict unless disk == @editor_save_conflict[:disk]
+          if disk.nil?
+            @editor_state.status = "File missing · C compare · O recreate · Esc cancel"
+            return true
+          end
+
+          @editor_state.replace_buffer(disk)
+          @editor_state.refresh_after_save(disk)
+          @editor_state.status = "Reloaded from disk · undo restores your edits"
+          @editor_save_conflict = nil
+          ensure_editor_cursor_visible
+        when "o"
+          write_editor_file(@editor_save_conflict[:disk])
+        when "\e", TerminalKeys::CTRL_C
+          @editor_save_conflict = nil
+          @editor_state.status = "Save canceled"
+          true
+        else
+          true
+        end
+      rescue StandardError => e
+        @editor_save_conflict = nil
+        @editor_state.status = "Save failed: #{e.message}"
+        false
+      end
+
+      def open_editor_comparison(before, after, from:, to:, status:)
+        content = EditorBufferDiff.compare(before, after, from: from, to: to)
+        source = @editor_state
+        width = @editor_text_width
+        open_diff_viewer(source.display_path, content)
+        @editor_comparison = { source: source, text_width: width }
+        @editor_state.status = status
+        true
+      end
+
+      def return_from_editor_comparison
+        @editor_state = @editor_comparison[:source]
+        @editor_text_width = @editor_comparison[:text_width]
+        @editor_comparison = nil
+        @prompt_label = "Edit>"
+        @editor_state.status = "Disk changed · C compare · R reload · O overwrite · Esc cancel" if @editor_save_conflict
+        true
       end
 
       def begin_editor_save_as

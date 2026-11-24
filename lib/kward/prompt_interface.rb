@@ -919,6 +919,8 @@ module Kward
           editor_explorer: editor_explorer_snapshot,
           editor_outline_visible: @editor_outline_visible,
           retained_editor_buffers: @retained_editor_buffers&.map(&:dup),
+          editor_comparison: @editor_comparison&.merge(source: @editor_comparison[:source].dup),
+          editor_save_conflict: @editor_save_conflict&.dup,
           editor_state: @editor_state&.dup
         }
         if include_transcript
@@ -972,6 +974,8 @@ module Kward
       @editor_runner_output_visible = false
       clear_editor_runner_selection
       @vibe_pane_prefix_editor = nil
+      @editor_comparison = snapshot[:editor_comparison]&.then { |comparison| comparison.merge(source: comparison[:source].dup) }
+      @editor_save_conflict = snapshot[:editor_save_conflict]&.dup
       @editor_state = snapshot[:editor_state]&.dup
       @editor_explorer = editor_explorer_snapshot(snapshot[:editor_explorer])
       @editor_outline_visible = snapshot[:editor_outline_visible]
