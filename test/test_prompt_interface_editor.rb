@@ -2019,6 +2019,29 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_editor_wrap_updates_mouse_positions_after_resize_and_edit
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    prompt.define_singleton_method(:screen_height) { 8 }
+    assert prompt.send(:open_scratchpad, :text, content: "abcdefghijkl\nnext")
+    editor = prompt.instance_variable_get(:@editor_state)
+    click_second_row = "\e[<0;8;3M"
+
+    prompt.send(:composer_layout, 20, 8)
+    prompt.send(:handle_editor_key, click_second_row)
+    assert_equal [0, 9], editor.cursor_line_and_column
+
+    editor.cursor = 0
+    prompt.send(:composer_layout, 24, 8)
+    prompt.send(:handle_editor_key, "\e[<0;10;3M")
+    assert_equal [1, 0], editor.cursor_line_and_column
+
+    editor.buffer = "abcdefghijklmnop\nnext"
+    editor.cursor = 0
+    prompt.send(:composer_layout, 24, 8)
+    prompt.send(:handle_editor_key, click_second_row)
+    assert_equal [0, 13], editor.cursor_line_and_column
+  end
+
   def test_prompt_interface_editor_horizontal_scrolls_when_soft_wrap_is_disabled
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "abcdefghijkl")

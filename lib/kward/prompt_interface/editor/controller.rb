@@ -659,7 +659,7 @@ module Kward
       end
 
       def editor_wrapped_position_for_visual_row(event, row_index)
-        visual_row = editor_visual_rows(current_editor_text_width)[row_index]
+        visual_row = editor_visual_row_at(row_index, current_editor_text_width)
         return nil unless visual_row
 
         column = visual_row[:column_offset] + editor_mouse_column_for_event(event)
@@ -1262,7 +1262,7 @@ module Kward
       def editor_last_viewport_row
         visible_count = editor_page_rows
         if current_editor_soft_wrap?
-          [editor_visual_rows(current_editor_text_width).length - visible_count, 0].max
+          [editor_visual_row_offsets(current_editor_text_width).last - visible_count, 0].max
         else
           [@editor_state.lines.length - visible_count, 0].max
         end
@@ -1305,7 +1305,7 @@ module Kward
       def scroll_editor_down(rows)
         visible_count = editor_visible_line_count
         last_top_row = if current_editor_soft_wrap?
-          [editor_visual_rows(current_editor_text_width).length - visible_count, 0].max
+          [editor_visual_row_offsets(current_editor_text_width).last - visible_count, 0].max
         else
           [@editor_state.lines.length - visible_count, 0].max
         end

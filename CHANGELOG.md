@@ -36,6 +36,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Keep scrolling and rendering responsive in large files with editor soft wrap enabled.
+
 - Avoid repeated multiline syntax scans when rendering Ruby, Markdown, and ERB files in the editor.
 
 - Reduce editor scroll lag on high-frequency mouse wheels by processing queued wheel events together instead of redrawing for each event.

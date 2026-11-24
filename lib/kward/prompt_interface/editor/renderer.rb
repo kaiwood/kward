@@ -217,14 +217,12 @@ module Kward
       end
 
       def editor_wrapped_layout(width, content_width, visible_count, line_index, column, text_width, include_bottom: true)
-        visual_rows = editor_visual_rows(text_width)
         cursor_visual_row = editor_visual_row_for(line_index, column, text_width)
         @editor_state.viewport_row = [[@editor_state.viewport_row, cursor_visual_row - visible_count + 1].max, cursor_visual_row].min
         @editor_state.viewport_row = [@editor_state.viewport_row, 0].max
-        visible_rows = visual_rows[@editor_state.viewport_row, visible_count] || []
-        visible_rows << nil while visible_rows.length < visible_count
         rows = [editor_top_border(width)]
-        rows.concat(visible_rows.map do |visual_row|
+        rows.concat(visible_count.times.map do |index|
+          visual_row = editor_visual_row_at(@editor_state.viewport_row + index, text_width)
           if visual_row
             gutter = visual_row[:continuation] ? editor_blank_line_number_gutter : editor_line_number_gutter(visual_row[:line_index], line_index)
             rendered_line = editor_render_line(visual_row[:line], visual_row[:line_index], text_width, column_offset: visual_row[:column_offset])
@@ -365,25 +363,33 @@ module Kward
         [content_width - gutter_width, 1].max
       end
 
-      def editor_visual_rows(text_width)
-        @editor_state.lines.each_with_index.flat_map do |line, line_index|
-          count = editor_visual_row_count(line, text_width)
-          count.times.map do |index|
-            column_offset = index * text_width
-            { line_index: line_index, column_offset: column_offset, line: line, continuation: index.positive? }
+      def editor_visual_row_offsets(text_width)
+        lines = @editor_state.lines
+        if !@editor_wrap_lines.equal?(lines) || @editor_wrap_width != text_width
+          offsets = [0]
+          lines.each do |line|
+            count = line.empty? ? 1 : ((line.length - 1) / text_width) + 1
+            offsets << offsets.last + count
           end
+          @editor_wrap_lines = lines
+          @editor_wrap_width = text_width
+          @editor_wrap_offsets = offsets
         end
+        @editor_wrap_offsets
       end
 
-      def editor_visual_row_count(line, text_width)
-        length = line.to_s.length
-        return 1 if length.zero?
+      def editor_visual_row_at(row, text_width)
+        offsets = editor_visual_row_offsets(text_width)
+        row += offsets.last if row.negative?
+        return unless row.between?(0, offsets.last - 1)
 
-        ((length - 1) / text_width) + 1
+        line_index = offsets.bsearch_index { |offset| offset > row } - 1
+        column_offset = (row - offsets[line_index]) * text_width
+        { line_index: line_index, column_offset: column_offset, line: @editor_state.lines[line_index], continuation: column_offset.positive? }
       end
 
       def editor_visual_row_for(line_index, column, text_width)
-        before = @editor_state.lines.first(line_index).sum { |line| editor_visual_row_count(line, text_width) }
+        before = editor_visual_row_offsets(text_width)[line_index]
         before + (editor_visual_row_start_column(line_index, column, text_width) / text_width)
       end
 
