@@ -552,6 +552,73 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_vibe_canceled_save_as_keeps_saving_to_the_original_file
+    Dir.mktmpdir do |root|
+      source = File.join(root, "source.txt")
+      destination = File.join(root, "copy.txt")
+      File.write(source, "original")
+      File.write(destination, "original")
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: root, editor_mode: "vibe")
+      assert prompt.send(:open_editor, source)
+      editor = prompt.instance_variable_get(:@editor_state)
+      editor.replace_buffer("mine")
+
+      prompt.send(:execute_vibe_command, "wq copy.txt")
+      assert_includes editor.status, "O overwrite"
+      assert_equal "original", File.read(destination)
+      prompt.send(:handle_editor_key, "\e")
+      assert prompt.editing_file?
+      assert_equal source, editor.path
+
+      prompt.send(:execute_vibe_command, "w")
+      assert prompt.editing_file?
+      assert_equal "mine", File.read(source)
+      assert_equal "original", File.read(destination)
+    end
+  end
+
+  def test_vibe_failed_save_as_keeps_the_source_path
+    Dir.mktmpdir do |root|
+      source = File.join(root, "source.txt")
+      File.write(source, "original")
+      Dir.mkdir(File.join(root, "directory"))
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: root, editor_mode: "vibe")
+      assert prompt.send(:open_editor, source)
+      editor = prompt.instance_variable_get(:@editor_state)
+      editor.replace_buffer("mine")
+
+      prompt.send(:execute_vibe_command, "w directory")
+      assert_includes editor.status, "Save failed:"
+      assert_equal source, editor.path
+      assert_equal "mine", editor.buffer
+      assert_equal "original", File.read(source)
+    end
+  end
+
+  def test_vibe_save_as_binds_the_destination_after_confirming_overwrite
+    Dir.mktmpdir do |root|
+      source = File.join(root, "source.txt")
+      destination = File.join(root, "copy.txt")
+      File.write(source, "original")
+      File.write(destination, "existing copy")
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: root, editor_mode: "vibe")
+      assert prompt.send(:open_editor, source)
+      editor = prompt.instance_variable_get(:@editor_state)
+      editor.replace_buffer("mine")
+
+      prompt.send(:execute_vibe_command, "w copy.txt")
+      prompt.send(:handle_editor_key, "r")
+      assert_equal source, editor.path
+      assert_equal "mine", editor.buffer
+      prompt.send(:handle_editor_key, "o")
+
+      assert_equal destination, editor.path
+      refute editor.dirty?
+      assert_equal "original", File.read(source)
+      assert_equal "mine", File.read(destination)
+    end
+  end
+
   def test_editor_save_conflict_compares_and_reloads_without_losing_undo
     Dir.mktmpdir do |root|
       path = File.join(root, "notes.txt")

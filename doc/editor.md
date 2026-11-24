@@ -125,6 +125,8 @@ Ordinary saves replace the file atomically and preserve its permission bits. For
 
 If the disk version changes while you edit, save opens a choice: **C** compares disk and buffer, **R** reloads the disk version (undo restores your edits), **O** overwrites the disk version shown, and **Esc** cancels. If the disk changes again before you confirm, the editor asks again. These controls are part of the terminal editor, not the RPC API.
 
+When saving to a different filename, the buffer switches to that path only after a successful write. If the destination already exists, compare it with the buffer, confirm the overwrite, or cancel to keep editing the original file.
+
 ## What the editor supports
 
 The editor is intentionally compact, but it covers the basics you need for quick changes:

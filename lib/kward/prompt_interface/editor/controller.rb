@@ -1374,31 +1374,44 @@ module Kward
           return begin_editor_save_as(close_after: close_after)
         end
 
-        return false if !path.to_s.strip.empty? && !bind_editor_save_path(path)
+        destination = path.to_s.strip.empty? ? @editor_state.path : resolve_editor_save_path(path)
+        return false unless destination
 
-        expected = @editor_state.new_file ? nil : @editor_state.original_content
-        write_editor_file(expected, close_after: close_after)
+        expected = @editor_state.original_content if destination == @editor_state.path && !@editor_state.new_file
+        write_editor_file(destination, expected: expected, close_after: close_after)
       rescue StandardError => e
         @editor_state.status = "Save failed: #{e.message}" if @editor_state
         false
       end
 
-      def write_editor_file(expected, close_after:)
-        path = @editor_state.path
+      def write_editor_file(path, expected:, close_after:)
         FileUtils.mkdir_p(File.dirname(path))
         EditorFileSave.write(path, @editor_state.buffer, expected: expected)
         @editor_save_conflict = nil
+        if path != @editor_state.path
+          @editor_state.bind_path(path)
+          @editor_syntax_language_path = nil
+          @editor_indent_unit_path = nil
+        end
         @editor_state.refresh_after_save(@editor_state.buffer)
         close_after ? close_editor : true
       rescue EditorFileSave::Conflict
-        begin_editor_save_conflict(close_after: close_after)
+        begin_editor_save_conflict(path, close_after: close_after)
       end
 
-      def begin_editor_save_conflict(close_after:)
-        @editor_save_conflict = { disk: EditorFileSave.read(@editor_state.path), close_after: close_after }
+      def begin_editor_save_conflict(path, close_after:)
+        @editor_save_conflict = { path: path, disk: EditorFileSave.read(path), close_after: close_after }
         @editor_state.clear_search_highlights
-        @editor_state.status = "Disk changed · C compare · R reload · O overwrite · Esc cancel"
+        @editor_state.status = editor_save_conflict_status
         true
+      end
+
+      def editor_save_conflict_status
+        if @editor_save_conflict[:path] == @editor_state.path
+          "Disk changed · C compare · R reload · O overwrite · Esc cancel"
+        else
+          "Save destination conflict · C compare · O overwrite · Esc cancel"
+        end
       end
 
       def handle_editor_save_conflict_key(key)
@@ -1407,13 +1420,15 @@ module Kward
 
         sequence = parse_csi_u_key(key)
         key = sequence[:code] == 27 ? "\e" : csi_u_printable_text(sequence) if sequence
+        path, expected, close_after = @editor_save_conflict.values_at(:path, :disk, :close_after)
         case key.to_s.downcase
         when "c"
-          disk = @editor_save_conflict[:disk]
-          open_editor_comparison(disk, @editor_state.buffer, from: "Disk", to: "Buffer", status: "Disk vs. buffer · Esc back")
+          open_editor_comparison(expected, @editor_state.buffer, from: "Disk", to: "Buffer", status: "Disk vs. buffer · Esc back")
         when "r"
-          disk = EditorFileSave.read(@editor_state.path)
-          return begin_editor_save_conflict(close_after: @editor_save_conflict[:close_after]) unless disk == @editor_save_conflict[:disk]
+          return true unless path == @editor_state.path
+
+          disk = EditorFileSave.read(path)
+          return begin_editor_save_conflict(path, close_after: close_after) unless disk == expected
           if disk.nil?
             @editor_state.status = "File missing · C compare · O recreate · Esc cancel"
             return true
@@ -1425,7 +1440,7 @@ module Kward
           @editor_save_conflict = nil
           ensure_editor_cursor_visible
         when "o"
-          write_editor_file(@editor_save_conflict[:disk], close_after: @editor_save_conflict[:close_after])
+          write_editor_file(path, expected: expected, close_after: close_after)
         when "\e", TerminalKeys::CTRL_C
           @editor_save_conflict = nil
           @editor_state.status = "Save canceled"
@@ -1464,7 +1479,7 @@ module Kward
             @editor_state.status = "Agent draft discarded"
           end
         elsif @editor_save_conflict
-          @editor_state.status = "Disk changed · C compare · R reload · O overwrite · Esc cancel"
+          @editor_state.status = editor_save_conflict_status
         end
         true
       end
@@ -1564,7 +1579,7 @@ module Kward
         true
       end
 
-      def bind_editor_save_path(path)
+      def resolve_editor_save_path(path)
         full_path = File.expand_path(path.to_s.strip, prompt_workspace_root)
         root = prompt_workspace_root
         unless full_path == root || full_path.start_with?("#{root}/")
@@ -1577,10 +1592,7 @@ module Kward
           return false
         end
 
-        @editor_state.bind_path(full_path)
-        @editor_syntax_language_path = nil
-        @editor_indent_unit_path = nil
-        true
+        full_path
       end
 
       def normalize_scratchpad_language(language)
