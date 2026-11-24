@@ -166,26 +166,27 @@ module Kward
 
       def side_by_side_diff_content(content)
         width = side_by_side_diff_column_width
+        wrap = current_editor_soft_wrap?
         rows = []
         pending_deletions = []
 
         content.to_s.each_line(chomp: true) do |line|
           if side_by_side_diff_metadata_line?(line)
-            rows.concat(flush_side_by_side_deletions(pending_deletions, width))
+            rows.concat(flush_side_by_side_deletions(pending_deletions, width, wrap: wrap))
             rows << line
           elsif line.start_with?("-")
             pending_deletions << line[1..].to_s
           elsif line.start_with?("+")
             deleted = pending_deletions.shift
-            rows.concat(side_by_side_diff_rows(deleted && "- #{deleted}", "+ #{line[1..]}", width))
+            rows.concat(side_by_side_diff_rows(deleted && "- #{deleted}", "+ #{line[1..]}", width, wrap: wrap))
           else
-            rows.concat(flush_side_by_side_deletions(pending_deletions, width))
+            rows.concat(flush_side_by_side_deletions(pending_deletions, width, wrap: wrap))
             text = line.start_with?(" ") ? line[1..].to_s : line
-            rows.concat(side_by_side_diff_rows("  #{text}", "  #{text}", width))
+            rows.concat(side_by_side_diff_rows("  #{text}", "  #{text}", width, wrap: wrap))
           end
         end
 
-        rows.concat(flush_side_by_side_deletions(pending_deletions, width))
+        rows.concat(flush_side_by_side_deletions(pending_deletions, width, wrap: wrap))
         rows.join("\n")
       end
 
@@ -193,12 +194,12 @@ module Kward
         line.start_with?("diff --git", "index ", "---", "+++", "@@")
       end
 
-      def flush_side_by_side_deletions(lines, width)
-        lines.shift(lines.length).flat_map { |line| side_by_side_diff_rows("- #{line}", nil, width) }
+      def flush_side_by_side_deletions(lines, width, wrap:)
+        lines.shift(lines.length).flat_map { |line| side_by_side_diff_rows("- #{line}", nil, width, wrap: wrap) }
       end
 
-      def side_by_side_diff_rows(left, right, width)
-        return [side_by_side_diff_row(left, right, width)] unless current_editor_soft_wrap?
+      def side_by_side_diff_rows(left, right, width, wrap:)
+        return [side_by_side_diff_row(left, right, width)] unless wrap
 
         left_lines = side_by_side_diff_cell_lines(left, width)
         right_lines = side_by_side_diff_cell_lines(right, width)

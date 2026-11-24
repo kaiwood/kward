@@ -92,6 +92,29 @@ class TestEditorPrompt < KwardTestCase
     end
   end
 
+  def test_large_side_by_side_draft_reads_wrap_setting_once
+    reads = 0
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, diff_view: "side_by_side",
+                                       editor_soft_wrap_source: -> { reads += 1; true })
+    content = "line\n\n" * 500
+    diff = Kward::PromptInterface::EditorBufferDiff.compare(content, "line\n" * 500, from: "Buffer", to: "Draft")
+
+    preview = prompt.send(:side_by_side_diff_content, diff)
+
+    assert_includes preview, "+ line"
+    assert_equal 1, reads
+  end
+
+  def test_editor_agent_can_be_cancelled_with_encoded_ctrl_c
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+    assert prompt.send(:open_scratchpad, :text, content: "unsaved")
+    assert prompt.suspend_editor_for_agent
+    prompt.begin_busy_input("You>")
+
+    assert_equal Kward::PromptInterface::CANCEL_INPUT, prompt.send(:handle_key, "\e[99;5u")
+    assert_equal "unsaved", prompt.editor_prompt_context[:content]
+  end
+
   def test_editor_prompt_session_keeps_agent_changes_in_a_draft
     session = Kward::EditorPromptSession.new(content: "old", path: "notes.txt")
 

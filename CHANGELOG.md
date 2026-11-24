@@ -40,6 +40,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Avoid re-reading editor configuration for every line of a side-by-side draft, and recognize encoded `Ctrl+C` while an editor prompt is running.
+
 - Hide Markdown code fences and their language labels in the editor agent’s status-line replies.
 
 - Include the exact selected text in editor prompts so the agent does not have to count lines in the full buffer.

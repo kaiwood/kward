@@ -155,9 +155,16 @@ module Kward
         match && match[4] == "M" && [64, 65].include?(match[1].to_i)
       end
 
+      def editor_agent_cancel_key?(key)
+        return true if key == TerminalKeys::CTRL_C
+
+        sequence = parse_csi_u_key(key)
+        sequence && sequence[:event_type] != 3 && [67, 99].include?(sequence[:code]) && ctrl_modifier?(sequence[:modifier])
+      end
+
       def handle_editor_input_key(key)
         if @editor_agent_suspended
-          return CANCEL_INPUT if @busy && key == TerminalKeys::CTRL_C
+          return CANCEL_INPUT if @busy && editor_agent_cancel_key?(key)
 
           return true
         end
