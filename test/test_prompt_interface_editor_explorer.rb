@@ -410,6 +410,31 @@ class TestPromptInterfaceEditorExplorer < KwardTestCase
     end
   end
 
+  def test_explorer_reuses_rows_between_frames_and_updates_after_expansion_or_edit
+    with_editor(mode: "vibe") do |prompt, _root|
+      focus_explorer(prompt)
+      key(prompt, "k")
+      tree = prompt.instance_variable_get(:@editor_explorer).fetch(:tree)
+      traversals = 0
+      tree.define_singleton_method(:rows) do |expanded|
+        traversals += 1
+        super(expanded)
+      end
+
+      key(prompt, "l")
+      assert_includes frame(prompt).join, "b.txt"
+      assert_equal 1, traversals
+
+      2.times { assert_includes frame(prompt).join, "b.txt" }
+      assert_equal 1, traversals
+
+      editor(prompt).buffer = "new content"
+      assert_includes frame(prompt).join, "a.txt *"
+      key(prompt, "h")
+      refute_includes frame(prompt).join, "b.txt"
+    end
+  end
+
   def test_vibe_explorer_o_toggles_only_the_selected_folder
     with_editor(mode: "vibe") do |prompt, _root|
       focus_explorer(prompt)

@@ -28,8 +28,8 @@ module Kward
         return unless state
 
         view = state.dig(:search, :origin) || state
-        state.except(:motion_prefix, :search).merge(expanded: state[:expanded].dup, selected: view[:selected].dup,
-                                                    offset: view[:offset], horizontal_offset: view[:horizontal_offset])
+        state.except(:motion_prefix, :search, :row_cache).merge(selected: view[:selected].dup,
+                                                                offset: view[:offset], horizontal_offset: view[:horizontal_offset])
       end
 
       def editor_explorer_header_label(width)
@@ -65,7 +65,7 @@ module Kward
         selected = kind && selection[1].is_a?(String) ? [kind, selection[1]] : [:file, path]
         offset = saved["offset"].is_a?(Integer) ? [saved["offset"], 0].max : 0
 
-        @editor_explorer = { visible: saved["visible"] == true, expanded: expanded.to_set, selected: selected,
+        @editor_explorer = { visible: saved["visible"] == true, expanded: expanded.to_set.freeze, selected: selected,
                              offset: offset, state_path: state_path }
         @editor_explorer[:saved_preferences] = editor_explorer_preferences
         load_editor_explorer_tree if @editor_explorer[:visible]
@@ -185,12 +185,17 @@ module Kward
       end
 
       def editor_explorer_rows
+        active_path = editor_explorer_relative_path(@editor_state.path)
         if (search = @editor_explorer[:search])
-          active = editor_explorer_relative_path(@editor_state.path)
-          return [{ label: "No matching files" }] if search[:paths].empty?
-
-          return search[:paths].map do |path|
-            { key: [:file, path], icon: project_browser_icon(path: path), label: path, active: path == active }
+          paths = search[:paths]
+          return cached_editor_explorer_rows([paths, active_path, @project_browser_icon_theme]) do
+            if paths.empty?
+              [{ label: "No matching files" }]
+            else
+              paths.map do |path|
+                { key: [:file, path], icon: project_browser_icon(path: path), label: path, active: path == active_path }
+              end
+            end
           end
         end
 
@@ -199,20 +204,33 @@ module Kward
           { key: [:buffer, state.path], icon: project_browser_icon(path: path), label: "#{path}#{' *' if state.dirty?}",
             active: state.equal?(@editor_state), state: state }
         end
-        active_path = editor_explorer_relative_path(@editor_state.path)
-        tree = @editor_explorer[:tree].rows(@editor_explorer[:expanded]).map do |row|
-          kind = row[:directory] ? :directory : :file
-          prefix = row[:directory] ? (row[:expanded] ? "▾ " : "▸ ") : "  "
-          icon = project_browser_icon(row)
-          depth = row[:depth]
-          indent = if depth > EXPLORER_MAX_INDENT_DEPTH
-                     "  " * (EXPLORER_MAX_INDENT_DEPTH - 1) + "… "
-                   else
-                     "  " * depth
-                   end
-          { key: [kind, row[:path]], prefix: indent + prefix, icon: icon, label: row[:name], expanded: row[:expanded], active: kind == :file && row[:path] == active_path }
+        tree, expanded = @editor_explorer.values_at(:tree, :expanded)
+        cached_editor_explorer_rows([tree, expanded, buffers, active_path, @project_browser_icon_theme]) do
+          tree_rows = tree.rows(expanded).map { |row| editor_explorer_tree_row(row, active_path) }
+          [{ label: "Open Editors" }, *buffers, { label: "Workspace" }, *tree_rows]
         end
-        [{ label: "Open Editors" }, *buffers, { label: "Workspace" }, *tree]
+      end
+
+      def cached_editor_explorer_rows(key)
+        cached_key, rows = @editor_explorer[:row_cache]
+        return rows if key == cached_key
+
+        rows = yield.freeze
+        @editor_explorer[:row_cache] = [key, rows]
+        rows
+      end
+
+      def editor_explorer_tree_row(row, active_path)
+        kind = row[:directory] ? :directory : :file
+        prefix = row[:directory] ? (row[:expanded] ? "▾ " : "▸ ") : "  "
+        depth = row[:depth]
+        indent = if depth > EXPLORER_MAX_INDENT_DEPTH
+                   "  " * (EXPLORER_MAX_INDENT_DEPTH - 1) + "… "
+                 else
+                   "  " * depth
+                 end
+        { key: [kind, row[:path]], prefix: indent + prefix, icon: project_browser_icon(row), label: row[:name],
+          expanded: row[:expanded], active: kind == :file && row[:path] == active_path }
       end
 
       def editor_explorer_window(rows, height)
@@ -272,8 +290,7 @@ module Kward
 
         kind, path = @editor_explorer[:selected] = row[:key]
         if kind == :directory
-          expanded = @editor_explorer[:expanded]
-          expanded.delete?(path) || expanded.add(path)
+          set_editor_explorer_expanded(path, !@editor_explorer[:expanded].include?(path))
         else
           @editor_explorer[:search][:editing] = false if @editor_explorer[:search]
           open_editor_explorer_file(path, state: row[:state])
@@ -519,15 +536,22 @@ module Kward
       def move_vibe_explorer_folder(motion, rows, index)
         row = rows[index]
         kind, path = row[:key]
-        expanded = @editor_explorer[:expanded]
         if motion == "l"
-          expanded.add(path) if kind == :directory
+          set_editor_explorer_expanded(path, true) if kind == :directory
         elsif row[:expanded]
-          expanded.delete(path)
+          set_editor_explorer_expanded(path, false)
         elsif kind != :buffer
           parent = [:directory, File.dirname(path)]
           select_editor_explorer_row(rows, rows.index { |candidate| candidate[:key] == parent })
         end
+      end
+
+      def set_editor_explorer_expanded(path, open)
+        expanded = @editor_explorer[:expanded]
+        return if expanded.include?(path) == open
+
+        # Cache keys and tab snapshots can share this set until expansion changes.
+        @editor_explorer[:expanded] = (open ? expanded + [path] : expanded - [path]).freeze
       end
 
       def scroll_vibe_explorer(motion, rows, index)

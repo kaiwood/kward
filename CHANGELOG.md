@@ -36,6 +36,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Reuse Explorer rows across redraws to reduce redraw work for large expanded workspace trees.
+
 - Reuse wrapped runner output so scrolling and selecting in the output pane stay responsive.
 
 - Keep scrolling and rendering responsive in large files with editor soft wrap enabled.
