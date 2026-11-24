@@ -4,6 +4,9 @@ module Kward
   class PromptInterface
     # Keyboard sequence handling for the terminal prompt interface.
     module KeyHandler
+      EDITOR_WHEEL_BATCH_SIZE = 32
+      SGR_MOUSE_PATTERN = /\A(?:\e)?\[<(\d+);(\d+);(\d+)([Mm])/.freeze
+
       private
 
       def filter_terminal_handoff_input_locked(chunk)
@@ -123,6 +126,33 @@ module Kward
         TerminalKeys::CTRL_C
       rescue IO::WaitReadable, Errno::EAGAIN, Errno::EWOULDBLOCK
         nil
+      end
+
+      def handle_key_before_redraw(key)
+        batch_wheel = editor_active? && !interactive_active_locked? && !image_viewer_active? && editor_wheel_key?(key)
+        result = handle_key(key)
+        return result unless batch_wheel
+
+        # Drain ready wheel reports before painting, but leave the first other
+        # key for normal dispatch and let large bursts redraw periodically.
+        (EDITOR_WHEEL_BATCH_SIZE - 1).times do
+          break unless result == true
+
+          key = read_key(nonblock: true)
+          break unless key
+          unless editor_wheel_key?(key)
+            @pending_keys.unshift(key)
+            break
+          end
+
+          result = handle_key(key)
+        end
+        result
+      end
+
+      def editor_wheel_key?(key)
+        match = SGR_MOUSE_PATTERN.match(key.to_s)
+        match && match[4] == "M" && [64, 65].include?(match[1].to_i)
       end
 
       def handle_editor_input_key(key)
@@ -420,7 +450,7 @@ module Kward
       end
 
       def parse_sgr_mouse_event(key)
-        match = key.to_s.match(/\A(?:\e)?\[<(\d+);(\d+);(\d+)([Mm])/)
+        match = SGR_MOUSE_PATTERN.match(key.to_s)
         return nil unless match
 
         code = match[1].to_i
@@ -702,7 +732,8 @@ module Kward
 
       def next_key_token(keys)
         text = keys.to_s
-        text.match(TerminalKeys::CSI_KEY_PATTERN)&.[](0) ||
+        text.match(SGR_MOUSE_PATTERN)&.[](0) ||
+          text.match(TerminalKeys::CSI_KEY_PATTERN)&.[](0) ||
           text.match(TerminalKeys::SS3_KEY_PATTERN)&.[](0) ||
           shift_enter_sequence_for(text) ||
           (text.start_with?("\e") && text.length > 1 && alt_key_sequence?(text[1]) ? text[0, 2] : text[0, 1])

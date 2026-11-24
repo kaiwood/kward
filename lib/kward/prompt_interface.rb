@@ -608,7 +608,7 @@ module Kward
             chrome_changed = tick_composer_chrome_locked
             render_prompt_locked if resized || chrome_changed
           else
-            result = handle_key(key)
+            result = handle_key_before_redraw(key)
             action = result if prompt_action_result?(result)
             render_prompt_locked unless result.is_a?(String) || result == EXIT_INPUT || prompt_action_result?(result)
           end
@@ -655,7 +655,7 @@ module Kward
             preview_opened = open_pending_generated_image_locked
             render_prompt_locked if resized || chrome_changed || completion_changed || preview_opened
           else
-            result = handle_key(key)
+            result = handle_key_before_redraw(key)
             render_prompt_locked unless result.is_a?(String) || result == EXIT_INPUT || prompt_action_result?(result)
           end
         end
@@ -1133,7 +1133,7 @@ module Kward
           return nil
         end
 
-        result = handle_key(key)
+        result = handle_key_before_redraw(key)
         render_prompt_locked unless [EXIT_INPUT, CANCEL_INPUT].include?(result) || prompt_action_result?(result)
         result
       end

@@ -130,6 +130,7 @@ The editor is intentionally compact, but it covers the basics you need for quick
 - Incremental search forward and backward.
 - Selection, copy, cut, and paste. Copy and cut also write to the terminal clipboard through OSC 52 when the terminal supports it.
 - A line-number gutter and a status line that shows the current mode and prompts.
+- Mouse-wheel scrolling in the terminal editor. Kward processes bursts of wheel events together to reduce redraw lag; your mouse or terminal may still send momentum events after you stop moving the wheel.
 - Soft-wrap, enabled by default so long lines wrap within the editor width instead of scrolling sideways. Disable it with `editor.soft_wrap: false`.
 - Vibe `:prompt <instruction>` and Modern `Ctrl+.` prompt lines send the complete current buffer and document metadata to a dedicated, transient editor agent. The agent can replace the in-memory buffer through an explicit editor tool; it does not save files automatically.
 - Editor prompts and their tool activity are not added to the normal chat transcript or session history.

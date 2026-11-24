@@ -1273,6 +1273,54 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_editor_batches_ready_wheel_reports_without_crossing_keyboard_input
+    IO.pipe do |input, writer|
+      prompt = Kward::PromptInterface.new(input: input, output: StringIO.new, editor_mode: "modern")
+      prompt.define_singleton_method(:screen_height) { 14 }
+      assert prompt.send(:open_scratchpad, :text, content: (0...100).to_a.join("\n"))
+      editor = prompt.instance_variable_get(:@editor_state)
+      frames = []
+      prompt.define_singleton_method(:render_prompt_locked) { frames << editor.viewport_row }
+      down = "\e[<65;1;1M"
+      up = "\e[<64;1;1M"
+      writer.write(down * 40 + up * 2 + "x" + down)
+
+      prompt.poll_input
+      assert_equal 1, frames.length
+      assert_operator frames.first, :>, 1
+      assert_operator frames.first, :<, 40
+
+      prompt.poll_input
+      assert_equal 2, frames.length
+      assert_equal 38, frames.last
+      refute editor.dirty?
+
+      prompt.poll_input
+      assert_equal "x40", editor.lines[40]
+      assert_equal 38, frames.last
+
+      prompt.poll_input
+      assert_equal 39, frames.last
+    end
+  end
+
+  def test_editor_batches_wheel_reports_bundled_in_one_read
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    prompt.define_singleton_method(:screen_height) { 14 }
+    assert prompt.send(:open_scratchpad, :text, content: (0...30).to_a.join("\n"))
+    editor = prompt.instance_variable_get(:@editor_state)
+    reads = ["\e[<65;1;1M" * 4 + "x"]
+    reader = prompt.instance_variable_get(:@reader)
+    reader.define_singleton_method(:read_keypress) { |**| reads.shift }
+
+    prompt.poll_input
+    assert_equal 4, editor.viewport_row
+    refute editor.dirty?
+
+    prompt.poll_input
+    assert_equal "x4", editor.lines[4]
+  end
+
   def test_prompt_interface_editor_enables_and_disables_mouse_reporting
     output = StringIO.new
     Dir.mktmpdir do |dir|

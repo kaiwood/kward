@@ -36,6 +36,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Reduce editor scroll lag on high-frequency mouse wheels by processing queued wheel events together instead of redrawing for each event.
+
 - Keep `kward shell` and `/shell` questions separate from coding chat: no automatic loading of `AGENTS.md`, skills, custom prompts, or chat memory.
 
 - Let Vibe users quit with `:q` after opening a directory without a file.
