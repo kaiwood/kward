@@ -5,6 +5,7 @@ module Kward
       configured_provider = ConfigFiles.shell_agent_provider(config)
       conversation = Conversation.new(
         system_message: ShellPrompt.system_message,
+        refresh_system_message: false,
         workspace_root: workspace_root,
         provider: configured_provider || provider,
         model: ConfigFiles.shell_agent_model(config) || (configured_provider ? nil : model),

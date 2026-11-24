@@ -613,7 +613,7 @@ module Kward
       tools.concat(@tools.values.select { |tool| tool.is_a?(Tools::PluginTool) })
       tools << @tools["datetime"] if @tools["datetime"]
       tools << @tools["typesafe_evaluate"] if @tools["typesafe_evaluate"]
-      tools << @tools["read_skill"] if skills_available?
+      tools << @tools["read_skill"] if @tools["read_skill"] && skills_available?
       tools << @tools["ask_user_question"] if ask_user_question_available?
       tools.compact
     end
@@ -627,7 +627,7 @@ module Kward
         Tools::WebSearch.new(web_search: @web_search),
         Tools::FetchContent.new(web_fetch: @web_fetch),
         Tools::FetchRaw.new(web_fetch: @web_fetch),
-        Tools::ReadSkill.new(skills: discovered_skills),
+        (Tools::ReadSkill.new(skills: discovered_skills) if !@allowed_tool_names || @allowed_tool_names.include?("read_skill")),
         Tools::AskUserQuestion.new(prompt: @prompt),
         Tools::DateTime.new
       ]).compact + mcp_tool_values + plugin_tool_values

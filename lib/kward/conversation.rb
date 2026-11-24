@@ -68,7 +68,7 @@ module Kward
     # @return [Array<String>, nil] explicitly permitted project skill paths
     attr_reader :project_skill_paths
 
-    def initialize(system_message: DEFAULT_SYSTEM_MESSAGE, messages: [], read_paths: [], on_append: nil, on_compact: nil, on_tool_execution: nil, on_runtime_update: nil, workspace_root: Dir.pwd, compaction_system_message: DEFAULT_SYSTEM_MESSAGE, provider: nil, model: nil, reasoning_effort: nil, memory_context: nil, session_memories: [], last_memory_retrieval: nil, plugin_registry: nil, execution_profile_context: nil, project_skill_paths: nil)
+    def initialize(system_message: DEFAULT_SYSTEM_MESSAGE, messages: [], read_paths: [], on_append: nil, on_compact: nil, on_tool_execution: nil, on_runtime_update: nil, workspace_root: Dir.pwd, compaction_system_message: DEFAULT_SYSTEM_MESSAGE, provider: nil, model: nil, reasoning_effort: nil, memory_context: nil, session_memories: [], last_memory_retrieval: nil, plugin_registry: nil, execution_profile_context: nil, project_skill_paths: nil, refresh_system_message: true)
       @workspace_root = ConfigFiles.canonical_workspace_root(workspace_root)
       @provider = provider
       @model = model
@@ -87,13 +87,15 @@ module Kward
         end
       end
       @system_message = system_message
-      @system_message_enabled = !@system_message.nil?
+      @refresh_system_message = refresh_system_message && !@system_message.nil?
       if compaction_system_message.equal?(DEFAULT_SYSTEM_MESSAGE)
-        compaction_system_message = @system_message_enabled ? Prompts.system_message(workspace_root: @workspace_root, include_workspace_personality: false, model: @model, reasoning_effort: @reasoning_effort, now: prompt_time, execution_profile_context: @execution_profile_context, project_skill_paths: @project_skill_paths) : nil
+        compaction_system_message = @refresh_system_message ? Prompts.system_message(workspace_root: @workspace_root, include_workspace_personality: false, model: @model, reasoning_effort: @reasoning_effort, now: prompt_time, execution_profile_context: @execution_profile_context, project_skill_paths: @project_skill_paths) : @system_message
       end
       @compaction_system_message = compaction_system_message
-      @workspace_agents_mtime = workspace_agents_mtime
-      @system_prompt_sources_fingerprint = ConfigFiles.system_prompt_sources_fingerprint
+      if @refresh_system_message
+        @workspace_agents_mtime = workspace_agents_mtime
+        @system_prompt_sources_fingerprint = ConfigFiles.system_prompt_sources_fingerprint
+      end
       @last_entry_compaction = false
       @memory_context = memory_context
       @session_memories = Array(session_memories)
@@ -226,8 +228,10 @@ module Kward
     # Conversations created with `system_message: nil` keep system prompts
     # disabled; this preserves tests, compaction summaries, and imported
     # transcripts that intentionally do not include runtime instructions.
+    # With `refresh_system_message: false`, a supplied prompt stays fixed
+    # without checking or loading runtime prompt sources.
     def refresh_system_message!
-      return nil unless @system_message_enabled
+      return nil unless @refresh_system_message
 
       @last_plugin_prompt_context = plugin_prompt_context
       replacement = Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort, now: prompt_time, memory_context: @memory_context, plugin_context: @last_plugin_prompt_context, execution_profile_context: @execution_profile_context, project_skill_paths: @project_skill_paths)
@@ -263,7 +267,7 @@ module Kward
     # sources change. Keep the older public method above as a compatibility
     # alias for existing callers.
     def refresh_system_message_if_sources_changed!
-      return unless @system_message_enabled
+      return unless @refresh_system_message
 
       changed = workspace_agents_mtime != @workspace_agents_mtime ||
         ConfigFiles.system_prompt_sources_fingerprint != @system_prompt_sources_fingerprint

@@ -272,6 +272,7 @@ module Kward
           display_input: "? #{instruction}",
           tool_registry: registry,
           busy_label: shell.prompt_label,
+          use_memory: false,
           on_complete: on_complete
         )
         @prompt.update_prompt_label(shell.prompt_label) if @prompt.respond_to?(:update_prompt_label)

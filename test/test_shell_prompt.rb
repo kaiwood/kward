@@ -1,4 +1,5 @@
 require_relative "test_helper"
+require_relative "../lib/kward/shell/standalone_agent"
 
 class TestShellPrompt < KwardTestCase
   class ShellEditorPrompt
@@ -191,6 +192,48 @@ class TestShellPrompt < KwardTestCase
     end
   end
 
+  def test_standalone_shell_questions_do_not_load_coding_agent_context
+    Dir.mktmpdir("shell-prompt") do |dir|
+      shell = Kward::Kwsh.new(cwd: dir)
+      client = RecordingClient.new(["Ready.", "Still ready."])
+      agent = Kward::StandaloneAgent.new(client: client)
+      agents_path = File.join(dir, "AGENTS.md")
+      File.write(agents_path, "Do not use as shell instructions.\n")
+
+      assert_no_coding_context_loads do
+        assert_equal ["Ready.", nil], agent.ask("Are you ready?", shell, cancellation: nil)
+        File.utime(Time.now + 5, Time.now + 5, agents_path)
+        assert_equal ["Still ready.", nil], agent.ask("Still ready?", shell, cancellation: nil)
+      end
+
+      assert_shell_only_requests(client)
+    end
+  end
+
+  def test_hosted_shell_questions_do_not_load_coding_agent_context
+    Dir.mktmpdir("shell-prompt") do |dir|
+      shell = Kward::Kwsh.new(cwd: dir)
+      client = RecordingClient.new(["Ready."])
+      prompt = FakePrompt.new([])
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+      registry = Kward::ToolRegistry.new(workspace: Kward::Workspace.new(root: dir))
+      active_agent = Kward::Agent.new(client: client, conversation: conversation, tool_registry: registry)
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+      %i[prepare_memory_context persist_memory_state auto_summarize_memory].each do |method|
+        cli.define_singleton_method(method) { |*| flunk("Shell turn called #{method}") }
+      end
+
+      assert_no_coding_context_loads do
+        shell_agent = cli.send(:build_shell_prompt_agent, active_agent)
+        shell_agent.conversation.refresh_system_message!
+        cli.send(:run_shell_prompt_turn, "? Are you ready?", shell, shell_agent)
+      end
+
+      assert_includes prompt.output.join, "Ready."
+      assert_shell_only_requests(client)
+    end
+  end
+
   def test_shell_prompt_agent_uses_configured_model_and_reasoning_with_environment_overrides
     Dir.mktmpdir("shell-prompt") do |dir|
       config_path = File.join(dir, "config.json")
@@ -316,6 +359,31 @@ class TestShellPrompt < KwardTestCase
       assert_empty prompt.prefilled_inputs
     ensure
       shell&.close
+    end
+  end
+
+  private
+
+  def assert_no_coding_context_loads
+    calls = []
+    watched_methods = {
+      Kward::ConfigFiles => %i[skills system_prompt_sources_fingerprint],
+      Kward::Prompts => [:system_message],
+      Kward::Conversation => [:workspace_agents_mtime]
+    }
+    trace = TracePoint.new(:call) do |event|
+      methods = watched_methods[event.self] || watched_methods[event.defined_class]
+      calls << event.method_id if methods&.include?(event.method_id)
+    end
+    trace.enable { yield }
+    assert_empty calls
+  end
+
+  def assert_shell_only_requests(client)
+    refute_empty client.seen_messages
+    client.seen_messages.zip(client.requests).each do |messages, request|
+      assert_equal Kward::ShellPrompt.system_message, messages.first
+      refute_includes request.fetch(:tools).map { |tool| tool.dig(:function, :name) }, "read_skill"
     end
   end
 end

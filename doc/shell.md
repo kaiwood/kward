@@ -88,6 +88,8 @@ $ ? what was the last error message?
 
 The first question loads your configured Kward model and credentials. The agent sees the last command, its exit status, the current directory, and a bounded portion of plain terminal output from before you supplied interactive input. Full-screen output is not sent. Ordinary shell use does not send output to a model.
 
+In both `kward shell` and `/shell`, the `?` assistant uses a dedicated shell prompt and does not load coding-agent instructions (`AGENTS.md`, skills, or custom system prompts) or chat memory. Shell startup files, such as `kwshrc`, still work as described above.
+
 Ask explicitly to run a command or change shell state and the agent works in the same live shell. For example, `? run brew install glow` prints `brew install glow` after your normal shell prompt and passes Homebrew's output directly to your terminal, including live progress and cursor updates. Only the copy sent to the model is bounded and filtered; output that redraws the screen can be visible in your terminal without being available to the agent.
 
 Ask the agent to **prepare** commands that need keyboard input or full-screen terminal access. It puts an editable draft in the native prompt without running it; press **Enter** to run it yourself. With `TERM=dumb` the suggestion is printed instead. **Ctrl+C** cancels a question or a running agent command.

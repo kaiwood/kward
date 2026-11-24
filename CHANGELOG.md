@@ -36,6 +36,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Keep `kward shell` and `/shell` questions separate from coding chat: no automatic loading of `AGENTS.md`, skills, custom prompts, or chat memory.
+
 - Let Vibe users quit with `:q` after opening a directory without a file.
 
 - Let the Up and Down arrows select Explorer search results while typing a filter in Vibe mode.

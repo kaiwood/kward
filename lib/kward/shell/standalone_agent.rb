@@ -22,7 +22,7 @@ module Kward
     def build_agent(cwd)
       config = ConfigFiles.read_config
       workspace = WorkspaceFactory.build(root: cwd, guardrails: ConfigFiles.workspace_guardrails_enabled?(config), config: config)
-      registry = ToolRegistry.new(workspace: workspace, mcp_clients: [])
+      registry = ToolRegistry.new(workspace: workspace, allowed_tool_names: [])
       ShellPromptAgent.build(client: @client, registry: registry, workspace_root: cwd, config: config,
                              provider: @client.current_provider, model: @client.current_model,
                              reasoning_effort: @client.current_reasoning_effort)
