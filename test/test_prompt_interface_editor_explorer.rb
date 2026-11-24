@@ -338,6 +338,27 @@ class TestPromptInterfaceEditorExplorer < KwardTestCase
     end
   end
 
+  def test_vibe_explorer_o_toggles_only_the_selected_folder
+    with_editor(mode: "vibe") do |prompt, _root|
+      focus_explorer(prompt)
+      key(prompt, "k")
+      assert_match(/▸ lib/, selected_explorer_row(prompt))
+      key(prompt, "o")
+      assert_match(/▾ lib/, selected_explorer_row(prompt))
+      assert_includes frame(prompt).join, "b.txt"
+
+      key(prompt, "j")
+      key(prompt, "o")
+      assert_match(/b\.txt/, selected_explorer_row(prompt))
+      assert_equal "alpha\n", editor(prompt).buffer
+
+      key(prompt, "k")
+      key(prompt, "o")
+      assert_match(/▸ lib/, selected_explorer_row(prompt))
+      refute_includes frame(prompt).join, "b.txt"
+    end
+  end
+
   def test_vibe_explorer_jumps_to_the_first_and_last_entries
     with_editor(mode: "vibe") do |prompt, root|
       20.times { |index| File.write(File.join(root, format("file-%02d.txt", index)), "") }

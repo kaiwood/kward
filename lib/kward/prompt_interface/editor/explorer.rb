@@ -476,6 +476,9 @@ module Kward
           select_vibe_explorer_viewport_row(motion, rows)
         when "h", "l"
           move_vibe_explorer_folder(motion, rows, index) if index
+        when "o"
+          row = rows[index] if index
+          editor_explorer_activate_row(row) if row&.dig(:key, 0) == :directory
         else
           return false
         end
