@@ -283,7 +283,7 @@ The status line always shows the current mode (`NORMAL`, `INSERT`, `VISUAL`, `RE
 
 Use normal mode for movement, operators, marks, registers, macros, search, and command mode. Visual-mode-specific commands are listed in their own section below.
 
-With the Explorer open, press `Ctrl+W` then `Ctrl+W` to switch focus between the editor and the Explorer. `Ctrl+W` then `h` focuses the Explorer; `Ctrl+W` then `l` focuses the editor. `Ctrl+W` then `j` or `k` leaves focus where it is because the Explorer and editor are side by side. In Insert mode, `Ctrl+W` still deletes the previous word.
+With the Explorer open, press `Ctrl+W` then `Ctrl+W` to switch focus between the editor and the Explorer. `Ctrl+W` then `h` focuses the Explorer; `Ctrl+W` then `l` focuses the editor. `Ctrl+W` then `j` or `k` leaves focus where it is because the Explorer and editor are side by side. In Insert mode, `Ctrl+W` still deletes the previous word. With a file open and the Explorer focused, press `:` to switch to the editor and start an Ex command.
 
 | Key                     | Action                                          |
 | ----------------------- | ----------------------------------------------- |

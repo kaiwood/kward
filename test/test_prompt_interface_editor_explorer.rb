@@ -271,6 +271,33 @@ class TestPromptInterfaceEditorExplorer < KwardTestCase
     end
   end
 
+  def test_vibe_colon_in_explorer_focuses_editor_and_starts_an_ex_command
+    [[80, ":"], [45, "\e[58;2u"]].each do |width, colon|
+      with_editor(width: width, mode: "vibe") do |prompt, _root|
+        focus_explorer(prompt)
+        key(prompt, colon)
+
+        assert_match(/Edit a\.txt/, frame(prompt).first)
+        assert_match(/│\s+:\s+│/, frame(prompt).join("\n"))
+        key(prompt, "q")
+        key(prompt, "\r")
+        refute prompt.editing_file?
+      end
+    end
+  end
+
+  def test_vibe_colon_is_still_search_text_while_editing_an_explorer_filter
+    with_editor(mode: "vibe") do |prompt, root|
+      File.write(File.join(root, "foo:bar.txt"), "")
+      focus_explorer(prompt)
+      key(prompt, "/")
+      key(prompt, ":")
+
+      assert_includes frame(prompt).first, "/:"
+      assert_match(/foo:bar/, selected_explorer_row(prompt))
+    end
+  end
+
   def test_vibe_insert_mode_keeps_ctrl_w_word_deletion
     with_editor(mode: "vibe") do |prompt, _root|
       toggle(prompt)

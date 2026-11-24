@@ -6,6 +6,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Press `:` in the Vibe Explorer to focus the open file and start an Ex command.
+
 - Run `kward edit` with no argument or with a directory to start in the Explorer without opening a file.
 
 - Show the configured `/files` icons in the editor Explorer, including open buffers and search results.

@@ -282,6 +282,14 @@ module Kward
         vibe_insert_printable(key)
       end
 
+      def vibe_begin_command
+        @editor_state.vibe_pending = ""
+        @editor_state.vibe_command_range = nil
+        @editor_state.vibe_mode = "command"
+        @editor_state.vibe_command = ""
+        @editor_state.status = ":"
+      end
+
       def handle_vibe_command_key(key)
         result = nil
         case key
@@ -888,10 +896,7 @@ module Kward
         when "u"
           @editor_state.undo
         when ":"
-          @editor_state.vibe_command_range = nil
-          @editor_state.vibe_mode = "command"
-          @editor_state.vibe_command = ""
-          @editor_state.status = ":"
+          vibe_begin_command
         when "/"
           editor_search_begin
         when "?"
