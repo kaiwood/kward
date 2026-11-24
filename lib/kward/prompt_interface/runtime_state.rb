@@ -92,7 +92,8 @@ module Kward
 
         footer_changed = tick_footer_locked
         status_changed = tick_composer_status_locked
-        footer_changed || status_changed
+        outline_changed = tick_editor_outline_locked
+        footer_changed || status_changed || outline_changed
       end
 
       def tick_footer_locked

@@ -305,6 +305,7 @@ class TestRPCServer < KwardTestCase
     assert_equal "interactiveVibeEditorOnly", capabilities.dig("composer", "editorPrompt", "reason")
     assert_equal false, capabilities.dig("composer", "editorExplorer", "supported")
     assert_equal "interactiveEditorOnly", capabilities.dig("composer", "editorExplorer", "reason")
+    assert_equal({ "supported" => false, "reason" => "interactiveEditorOnly" }, capabilities.dig("composer", "editorOutline"))
     assert_equal "none", capabilities["security"]["workspaceMutationGuard"]
     assert_equal true, capabilities.dig("security", "toolApproval", "supported")
     assert_equal "none", capabilities.dig("security", "toolApproval", "defaultMode")

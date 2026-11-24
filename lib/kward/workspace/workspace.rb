@@ -1,6 +1,7 @@
 require "pathname"
 require_relative "../pty/local_command_runner"
 require_relative "../sandbox"
+require_relative "../source/declarations"
 require_relative "../sessions/diff"
 
 require_relative "path_guard"
@@ -276,49 +277,12 @@ module Kward
     end
 
     def source_outline_entries(lines)
-      candidates = []
-      lines.each_with_index do |line, index|
-        declaration = source_declaration(line.strip)
-        next unless declaration
-
-        candidates << declaration.merge(line: index + 1, indent: line[/\A\s*/].to_s.length)
-      end
+      candidates = SourceDeclarations.scan(lines)
       candidates.each_with_index do |entry, index|
         following = candidates[(index + 1)..]&.find { |candidate| candidate[:indent] <= entry[:indent] }
         entry[:end_line] = following ? following[:line] - 1 : last_content_line(lines)
       end
       candidates
-    end
-
-    def source_declaration(stripped)
-      case stripped
-      when /\A(module)\s+(.+)/
-        { kind: "module", signature: stripped }
-      when /\A(class)\s+(.+)/
-        { kind: "class", signature: stripped }
-      when /\A(async\s+def|def)\s+(.+)/
-        { kind: "function", signature: stripped }
-      when /\A(export\s+)?(async\s+)?function\s+(.+)/
-        { kind: "function", signature: stripped }
-      when /\A(async\s+)?(?:get\s+|set\s+)?(?:constructor|[A-Za-z_$][\w$]*)\s*\([^;]*\)\s*(?::\s*[^{}]+)?\s*(?:\{\}|\{|=>)?\z/
-        { kind: "method", signature: stripped } unless stripped.match?(/\A(if|for|while|switch|catch)\b/)
-      when /\A(export\s+)?(class|interface|type|enum)\s+(.+)/
-        { kind: Regexp.last_match(2), signature: stripped }
-      when /\A(?:export\s+)?(?:const|let|var)\s+\w+\s*=.*=>/
-        { kind: "function", signature: stripped }
-      when /\Afunc\s+(.+)/
-        { kind: "function", signature: stripped }
-      when /\Atype\s+\w+\s+(struct|interface)\b/
-        { kind: Regexp.last_match(1), signature: stripped }
-      when /\A(pub\s+)?(async\s+)?fn\s+(.+)/
-        { kind: "function", signature: stripped }
-      when /\A(pub\s+)?(struct|enum|trait|impl)\b(.+)?/
-        { kind: Regexp.last_match(2), signature: stripped }
-      when /\A(?:public|private|protected|internal|static|final|abstract|async|override|virtual|sealed|readonly|partial|\s)+\s*(class|interface|enum|record)\s+(.+)/
-        { kind: Regexp.last_match(1), signature: stripped }
-      when /\A(?:public|private|protected|internal|static|final|abstract|async|override|virtual|sealed|readonly|partial|\s)+\s*\S[^{;=]*\w+\s*\([^;]*\)\s*(?:\{|=>)?\z/
-        { kind: "method", signature: stripped }
-      end
     end
 
     def last_content_line(lines)

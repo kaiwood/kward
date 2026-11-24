@@ -36,6 +36,7 @@ require_relative "prompt_interface/git_prompt"
 require_relative "prompt_interface/overlay_renderer"
 require_relative "prompt_interface/editor/renderer"
 require_relative "prompt_interface/editor/explorer"
+require_relative "prompt_interface/editor/outline"
 require_relative "prompt_interface/editor/syntax_highlighter"
 require_relative "prompt_interface/editor/runner"
 require_relative "prompt_interface/editor/auto_close_pairs"
@@ -98,6 +99,7 @@ module Kward
     include OverlayRenderer
     include EditorRenderer
     include EditorExplorer
+    include EditorOutline
     include EditorSyntaxHighlighter
     include EditorAutoClosePairs
     include EditorEndwise
@@ -366,6 +368,7 @@ module Kward
         return unless @started
 
         persist_editor_explorer
+        cancel_editor_outline
 
         clear_image_viewer_output_locked if image_viewer_active?
         clear_prompt_for_output_locked
@@ -914,6 +917,7 @@ module Kward
           composer: @composer.dup,
           prompt_label: @prompt_label.dup,
           editor_explorer: editor_explorer_snapshot,
+          editor_outline_visible: @editor_outline_visible,
           retained_editor_buffers: @retained_editor_buffers&.map(&:dup),
           editor_state: @editor_state&.dup
         }
@@ -970,6 +974,9 @@ module Kward
       @vibe_pane_prefix_editor = nil
       @editor_state = snapshot[:editor_state]&.dup
       @editor_explorer = editor_explorer_snapshot(snapshot[:editor_explorer])
+      @editor_outline_visible = snapshot[:editor_outline_visible]
+      @editor_outline_focused = false
+      cancel_editor_outline
       @retained_editor_buffers = snapshot[:retained_editor_buffers]&.map(&:dup)
       @editor_text_width = nil
       editor_is_active = editor_active?

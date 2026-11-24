@@ -39,8 +39,9 @@ module Kward
 
       def handle_vibe_pane_key(key)
         pending = @vibe_pane_prefix_editor.equal?(@editor_state)
-        unless @editor_state&.vibe? && editor_explorer_available? && @editor_explorer&.[](:visible) &&
-               !editor_search_active? && (@editor_state.vibe_mode == "normal" || editor_explorer_focused?) &&
+        panes = editor_navigation_panes
+        unless @editor_state&.vibe? && panes.length > 1 &&
+               !editor_search_active? && (@editor_state.vibe_mode == "normal" || editor_explorer_focused? || editor_outline_focused?) &&
                !key.start_with?(BRACKETED_PASTE_START)
           @vibe_pane_prefix_editor = nil
           return false
@@ -55,14 +56,16 @@ module Kward
 
         if pending
           @vibe_pane_prefix_editor = nil
+          current = editor_explorer_focused? ? :explorer : (editor_outline_focused? ? :outline : :source)
+          index = panes.index(current)
           case logical_key
-          when TerminalKeys::CTRL_W then @editor_explorer[:focused] = !editor_explorer_focused?
-          when "h" then @editor_explorer[:focused] = true
-          when "l" then @editor_explorer[:focused] = false
+          when TerminalKeys::CTRL_W then focus_editor_pane(panes[(index + 1) % panes.length])
+          when "h" then focus_editor_pane(panes[index - 1]) if index.positive?
+          when "l" then focus_editor_pane(panes[index + 1]) if index + 1 < panes.length
           end
         else
           @editor_state.vibe_pending = ""
-          @editor_explorer.delete(:motion_prefix)
+          @editor_explorer&.delete(:motion_prefix)
           @vibe_pane_prefix_editor = @editor_state
         end
         true
@@ -800,11 +803,11 @@ module Kward
           line = command.match?(/\A\d+G\z/) ? count - 1 : @editor_state.lines.length - 1
           @editor_state.set_cursor_line_and_column(line, 0)
         when "zz"
-          vibe_position_cursor_line(:center)
+          editor_position_cursor_line(:center)
         when "zt"
-          vibe_position_cursor_line(:top)
+          editor_position_cursor_line(:top)
         when "zb"
-          vibe_position_cursor_line(:bottom)
+          editor_position_cursor_line(:bottom)
         when "H"
           vibe_move_to_screen_line(count - 1)
         when "M"
@@ -1452,29 +1455,6 @@ module Kward
           @editor_state.move_to_line_first_non_blank(line_index)
         else
           @editor_state.move_to_line_first_non_blank(target_row)
-        end
-      end
-
-      def vibe_position_cursor_line(position)
-        row = if current_editor_soft_wrap?
-                editor_visual_row_for(*@editor_state.cursor_line_and_column, current_editor_text_width)
-              else
-                @editor_state.cursor_line_and_column.first
-              end
-        offset = case position
-                 when :top then 0
-                 when :bottom then editor_page_rows - 1
-                 else editor_page_rows / 2
-                 end
-        @editor_state.viewport_row = [[row - offset, 0].max, vibe_last_viewport_row].min
-      end
-
-      def vibe_last_viewport_row
-        visible_count = editor_page_rows
-        if current_editor_soft_wrap?
-          [editor_visual_rows(current_editor_text_width).length - visible_count, 0].max
-        else
-          [@editor_state.lines.length - visible_count, 0].max
         end
       end
 

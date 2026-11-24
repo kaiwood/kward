@@ -268,6 +268,8 @@ module Kward
         persist_editor_explorer
         @vibe_pane_prefix_editor = nil
         @editor_explorer = nil
+        @editor_outline_visible = @editor_outline_focused = false
+        cancel_editor_outline
         @retained_editor_buffers = nil
         cancel_editor_runner
         disable_editor_mouse_reporting(force: true)
@@ -302,7 +304,7 @@ module Kward
         end
         return handle_editor_workspace_key(key) if @editor_state.workspace_only?
         return true if handle_vibe_pane_key(key)
-        return true if handle_editor_explorer_key(key)
+        return true if handle_editor_explorer_key(key) || handle_editor_outline_key(key)
         return handle_editor_save_as_key(key) if @editor_save_as_active
         return handle_readonly_editor_key(key) if @editor_state&.readonly?
         return cancel_editor_runner if editor_runner_running? && @editor_runner_completion && key == TerminalKeys::CTRL_C
@@ -519,7 +521,7 @@ module Kward
         return false unless event
 
         queue_pending_keys(event[:remaining]) unless event[:remaining].empty?
-        return true if handle_editor_explorer_mouse(event) || @editor_state.workspace_only?
+        return true if handle_editor_outline_mouse(event) || handle_editor_explorer_mouse(event) || @editor_state.workspace_only?
 
         event[:column] -= editor_explorer_width
         case event[:code]
@@ -1241,6 +1243,29 @@ module Kward
           @editor_state.viewport_column = [@editor_state.viewport_column, 0].max
         end
         true
+      end
+
+      def editor_position_cursor_line(position)
+        row = if current_editor_soft_wrap?
+                editor_visual_row_for(*@editor_state.cursor_line_and_column, current_editor_text_width)
+              else
+                @editor_state.cursor_line_and_column.first
+              end
+        offset = case position
+                 when :top then 0
+                 when :bottom then editor_page_rows - 1
+                 else editor_page_rows / 2
+                 end
+        @editor_state.viewport_row = [[row - offset, 0].max, editor_last_viewport_row].min
+      end
+
+      def editor_last_viewport_row
+        visible_count = editor_page_rows
+        if current_editor_soft_wrap?
+          [editor_visual_rows(current_editor_text_width).length - visible_count, 0].max
+        else
+          [@editor_state.lines.length - visible_count, 0].max
+        end
       end
 
       def editor_page_rows

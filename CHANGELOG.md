@@ -6,6 +6,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Add a right-hand editor Outline for jumping to declarations in the live buffer, with optional Universal Ctags support for more languages.
+
 - Color Nerd Font file icons by type in `/files` and the editor Explorer, and add a Python icon.
 
 - Press `o` to toggle the selected folder in the Vibe Explorer.

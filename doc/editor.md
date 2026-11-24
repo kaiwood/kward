@@ -99,6 +99,12 @@ With the Vibe Explorer focused, press `/` to search forward or `?` to search bac
 
 The Explorer remembers whether it was open, which folders were expanded, and where you left off in the tree for each workspace. On a narrow terminal, a directory launch shows the Explorer full-width. When you open a file directly, click **[Explorer]** to return to the tree. This saves only sidebar preferences, not open buffers or unsaved edits.
 
+## Source Outline
+
+In a terminal at least 100 columns wide, click **[Outline]** in the editor header. The right pane lists symbol names from the current buffer, including unsaved edits. It omits parameters and line numbers so there’s more room for names. Click a symbol to jump to its line. In Vibe, use `Ctrl+W` then `l` to focus the Outline from the source pane, `j`/`k` or the arrow keys to select a symbol, and `Enter` to jump. Click **[Outline]** again to hide it. Kward remembers whether the Outline is open for each workspace, even when you start with `kward edit .`. It stays empty until you open a file. Narrower terminals hide it temporarily without changing that preference.
+
+No extra software is required. The built-in scanner recognizes common declarations in several languages, but it can miss or misidentify symbols. For broader coverage, install [Universal Ctags](https://docs.ctags.io/en/stable/man/ctags.1.html) with JSON support and put it on your `PATH`; Kward detects it automatically. Older Exuberant or BSD `ctags` binaries do not count. This is navigation within one file, not project-wide go-to-definition. Buffers over 512 KiB are not scanned.
+
 ## Example workflow
 
 ```text

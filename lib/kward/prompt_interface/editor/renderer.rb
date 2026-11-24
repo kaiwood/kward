@@ -8,6 +8,7 @@ module Kward
 
       def editor_layout(width, height = screen_height)
         sidebar_width = editor_explorer_width(width)
+        outline_width = editor_outline_width(width)
         if sidebar_width.zero? && editor_explorer_focused?
           pane_height = editor_explorer_body_height(height, width)
           rows = editor_explorer_layout(width, pane_height)
@@ -18,32 +19,44 @@ module Kward
         rows, cursor_row, cursor_col = if editor_runner_output_visible?
                                          editor_split_layout(width, height)
                                        else
-                                         editor_source_layout(width - sidebar_width, height)
+                                         editor_source_layout(width - sidebar_width - outline_width, height)
                                        end
         if sidebar_width.positive?
           pane_height = editor_explorer_body_height(height, width)
           sidebar = editor_explorer_layout(sidebar_width, pane_height)
-          rows = join_editor_panes(sidebar, rows, sidebar_width, width)
+          rows = join_editor_panes(sidebar, rows, sidebar_width, width - outline_width)
+          rows.concat(editor_bottom_rows(width - outline_width)) unless @tabs.empty?
+        end
+        if outline_width.positive?
+          pane_height = editor_explorer_body_height(height, width)
+          outline = editor_outline_layout(outline_width, pane_height)
+          rows = join_editor_panes(rows.first(pane_height), outline, width - outline_width, width, sidebar_on_left: false)
           rows.concat(editor_bottom_rows(width)) unless @tabs.empty?
         end
         [rows.first(height), cursor_row, cursor_col + sidebar_width]
       end
 
-      def join_editor_panes(sidebar, source, sidebar_width, width)
+      def join_editor_panes(left_rows, right_rows, left_width, width, sidebar_on_left: true)
         vertical = colored("│", :primary_green)
         top_join = colored("┬─", :primary_green)
         top_left = colored("╭", :primary_green)
         top_right = colored("╮", :primary_green)
 
-        sidebar.each_with_index.map do |left, index|
-          right = source[index].to_s
+        left_rows.each_with_index.map do |left, index|
+          right = right_rows[index].to_s
           if index.zero?
             left.delete_suffix(top_right) + top_join + right.delete_prefix(top_left)
-          elsif index == sidebar.length - 1 && @tabs.empty?
+          elsif index == left_rows.length - 1 && @tabs.empty?
             bottom_border(width)
           else
             # In a tab, the sidebar ends at the editor status row, above the shared tab border.
-            left = vertical + (" " * (sidebar_width - 2)) + vertical if index == sidebar.length - 1
+            if index == left_rows.length - 1
+              if sidebar_on_left
+                left = box_content_row("", left_width - 4)
+              else
+                right = box_content_row("", width - left_width - 4)
+              end
+            end
             left + " " + right.delete_prefix(vertical)
           end
         end
@@ -68,7 +81,8 @@ module Kward
 
       def editor_workspace_layout(width, height)
         content_width = [width - 4, 1].max
-        rows = [editor_pane_top_border("No file open", width, suffix: editor_explorer_header_label(width))]
+        suffix = editor_explorer_header_label(width) + editor_outline_toggle_label(screen_width)
+        rows = [editor_pane_top_border("No file open", width, suffix: suffix)]
         rows.concat(Array.new(editor_visible_line_count(height: height, width: width)) { box_content_row(" " * content_width, content_width) })
         quit_hint = @editor_state.vibe? ? ":q quit" : "Ctrl+Q quit"
         rows << footer_row(content_width, @editor_state.status || "#{quit_hint} · Open a file from the Explorer")
@@ -402,7 +416,7 @@ module Kward
         title_prefix = @editor_state.diff_view? ? "Diff" : "Edit"
         dirty_marker = @editor_state.dirty? && !@editor_state.readonly? ? " *" : ""
         path = ANSI.strip(editor_display_path.to_s.scrub).gsub(/[[:cntrl:]]/, " ")
-        editor_pane_top_border("#{title_prefix} #{path}#{dirty_marker}", width, suffix: editor_explorer_header_label(width))
+        editor_pane_top_border("#{title_prefix} #{path}#{dirty_marker}", width, suffix: editor_explorer_header_label(width) + editor_outline_toggle_label(screen_width))
       end
 
       def editor_pane_top_border(title, width, suffix: "")

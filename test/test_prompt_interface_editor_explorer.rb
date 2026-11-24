@@ -237,13 +237,56 @@ class TestPromptInterfaceEditorExplorer < KwardTestCase
     end
   end
 
+  def test_outline_remembers_open_and_closed_visibility_per_workspace
+    with_editor(width: 112) do |prompt, root|
+      click(prompt, frame(prompt).first.index("[Outline]") + 1, 1)
+      assert_includes frame(prompt).join, "Scanning"
+      assert prompt.send(:close_editor)
+
+      narrow = new_editor(root)
+      refute_includes frame(narrow).first, "[Outline]"
+      assert narrow.send(:close_editor)
+
+      restored = new_editor(root, width: 112)
+      assert_includes frame(restored).join, "Scanning"
+      other = File.join(root, "other")
+      FileUtils.mkdir_p(other)
+      File.write(File.join(other, "a.txt"), "other\n")
+      refute_includes frame(new_editor(other, width: 112)).join, "Scanning"
+
+      click(restored, frame(restored).first.index("[Outline]") + 1, 1)
+      assert restored.send(:close_editor)
+      refute_includes frame(new_editor(root, width: 112)).join, "Scanning"
+    end
+  end
+
+  def test_workspace_launch_shows_the_saved_outline_without_scanning_until_a_file_opens
+    with_editor(width: 112) do |prompt, root|
+      click(prompt, frame(prompt).first.index("[Outline]") + 1, 1)
+      assert prompt.send(:close_editor)
+
+      workspace = new_editor(root, width: 112, open_file: false)
+      verify_editor = -> do
+        rows = frame(workspace)
+        assert_match(/No file open.*┬.*\[Outline\]/, rows.first)
+        assert rows[1...-1].all? { |row| row[-26..].delete_suffix("│").strip.empty? }
+        refute workspace.send(:tick_editor_outline_locked)
+        click_row(workspace, /a\.txt/)
+        assert_includes frame(workspace).join, "Scanning"
+        true
+      end
+      workspace.define_singleton_method(:run_editor) { verify_editor.call }
+      assert workspace.edit_workspace(root)
+    end
+  end
+
   def test_explorer_preferences_are_private_and_scoped_to_the_workspace
     with_editor do |prompt, root|
       toggle(prompt)
       assert prompt.send(:close_editor)
       state_path = Kward::ConfigFiles.editor_explorer_state_path(root)
       assert_equal 0o600, File.stat(state_path).mode & 0o777
-      assert_equal %w[expanded offset selection visible], JSON.parse(File.read(state_path)).keys.sort
+      assert_equal %w[expanded offset outline_visible selection visible], JSON.parse(File.read(state_path)).keys.sort
 
       other = File.join(root, "other")
       FileUtils.mkdir_p(other)
@@ -616,7 +659,57 @@ class TestPromptInterfaceEditorExplorer < KwardTestCase
     end
   end
 
+  def test_outline_jumps_to_live_symbols_with_mouse_and_vibe_keys
+    with_editor(width: 112, mode: "vibe") do |prompt, _root|
+      clock = 10.0
+      prompt.define_singleton_method(:monotonic_now) { clock }
+      prompt.instance_variable_set(:@color_enabled, true)
+      prompt.update_tabs(labels: ["Chat", "Edit"], active_index: 1)
+      padding = ("# " + "x" * 90 + "\n") * 10
+      editor(prompt).buffer = "class Demo\n#{padding}  def first\n  end\n#{padding}  def second_method(host, port: 80)\n  end\n#{padding}end\n"
+      toggle(prompt)
+      click(prompt, frame(prompt).first.index("[Outline]") + 1, 1)
+      assert_match(/Open Editors|Workspace/, frame(prompt).join)
+      assert_includes frame(prompt).join, "Scanning"
+
+      with_env("PATH" => "") do
+        clock += 1
+        prompt.send(:tick_editor_outline_locked)
+        prompt.instance_variable_get(:@editor_outline_job).last.join
+        assert prompt.send(:tick_editor_outline_locked)
+      end
+      rows = frame(prompt)
+      assert_match(/Explorer.*┬.*Edit.*┬.*Outline/, rows.first)
+      assert rows.all? { |row| Kward::TerminalText.width(row) == 112 }
+      assert_equal "second_method", rows[3][86..].delete_suffix("│").strip
+      click(prompt, 95, 4)
+      assert_equal [23, 2], editor(prompt).cursor_line_and_column
+      assert_outline_jump_is_centered(prompt, "second_method")
+
+      key(prompt, "\x17")
+      key(prompt, "l")
+      key(prompt, "j")
+      key(prompt, "\r")
+      assert_equal [11, 2], editor(prompt).cursor_line_and_column
+      assert_outline_jump_is_centered(prompt, "def first")
+
+      editor(prompt).buffer = "\nclass Updated\nend\n"
+      assert_includes frame(prompt).join, "Scanning"
+      refute_includes frame(prompt).map { |row| row[86..] }.join, "second_method"
+      narrow_rows, = prompt.send(:editor_layout, 75, 14)
+      refute_includes narrow_rows.map { |row| strip_ansi(row) }.first, "[Outline]"
+    end
+  end
+
   private
+
+  def assert_outline_jump_is_centered(prompt, declaration)
+    width, height = prompt.send(:screen_size)
+    rows, cursor_row, = prompt.send(:editor_layout, width, height)
+    visible_rows = rows.length - 5 # Header, status, and three tab rows.
+    assert_equal 1 + visible_rows / 2, cursor_row
+    assert_includes strip_ansi(rows[cursor_row])[0...86], declaration
+  end
 
   def focus_explorer(prompt)
     toggle(prompt)

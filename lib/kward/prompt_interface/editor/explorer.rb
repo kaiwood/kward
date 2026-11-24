@@ -33,18 +33,19 @@ module Kward
       end
 
       def editor_explorer_header_label(width)
-        editor_explorer_header_hit?(width - 2, width) ? " #{EXPLORER_TOGGLE} " : ""
+        editor_explorer_header_hit?(width - editor_outline_toggle_label(screen_width).length - 2, width) ? " #{EXPLORER_TOGGLE} " : ""
       end
 
       def editor_explorer_header_hit?(column, width)
         return false unless editor_explorer_available? && width >= EXPLORER_TOGGLE.length + 8
         return false if @editor_explorer&.[](:visible) && screen_width >= EXPLORER_SPLIT_MIN_WIDTH
 
-        column.between?(width - EXPLORER_TOGGLE.length - 1, width - 2)
+        suffix = editor_outline_toggle_label(screen_width).length
+        column.between?(width - suffix - EXPLORER_TOGGLE.length - 1, width - suffix - 2)
       end
 
       def editor_pane_width
-        screen_width - editor_explorer_width
+        screen_width - editor_explorer_width - editor_outline_width
       end
 
       def editor_explorer_focused?
@@ -54,6 +55,7 @@ module Kward
       def restore_editor_explorer
         state_path = ConfigFiles.editor_explorer_state_path(prompt_workspace_root)
         saved = read_editor_explorer_preferences(state_path)
+        @editor_outline_visible = saved["outline_visible"] == true
         path = editor_explorer_relative_path(@editor_state.path)
         parts = path ? path.split("/")[0...-1] : []
         expanded = parts.each_index.map { |index| parts[0..index].join("/") }
@@ -85,6 +87,7 @@ module Kward
         end
         {
           "visible" => @editor_explorer[:visible],
+          "outline_visible" => @editor_outline_visible == true,
           "expanded" => @editor_explorer[:expanded].to_a.sort,
           "selection" => path && [kind.to_s, path],
           "offset" => view[:offset]
@@ -288,7 +291,7 @@ module Kward
         width = editor_explorer_width
         focused = editor_explorer_focused?
         if width.zero? && !focused
-          if event[:row] == 1 && editor_explorer_header_hit?(event[:column], screen_width)
+          if event[:row] == 1 && editor_explorer_header_hit?(event[:column], screen_width - editor_outline_width)
             if editor_explorer_click?(event)
               if @editor_explorer&.[](:visible)
                 @editor_explorer[:focused] = true
@@ -316,7 +319,7 @@ module Kward
           @editor_explorer[:offset] += event[:code] == 64 ? -3 : 3
         else
           if editor_explorer_click?(event)
-            @editor_explorer[:focused] = true
+            focus_editor_pane(:explorer)
             editor_explorer_activate_row(window[event[:row] - 2]) if event[:row].between?(2, height - 1)
           end
         end

@@ -687,7 +687,8 @@ module Kward
             sessionDiff: { supported: false, reason: "interactiveComposerOnly" },
             copy: { supported: false, reason: "clientClipboardOwnedByUi" },
             editorPrompt: { supported: false, reason: "interactiveVibeEditorOnly" },
-            editorExplorer: { supported: false, reason: "interactiveEditorOnly" }
+            editorExplorer: { supported: false, reason: "interactiveEditorOnly" },
+            editorOutline: { supported: false, reason: "interactiveEditorOnly" }
           },
           security: {
             workspaceMutationGuard: "none",
