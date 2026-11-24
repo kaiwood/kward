@@ -21,12 +21,14 @@ module Kward
       attr_accessor :viewport_row, :viewport_column, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :editor_mode, :emacs_pending, :readonly, :diff_view
       attr_reader :search_match_ranges
 
-      def initialize(path:, content:, new_file: false, editor_mode: "modern", readonly: false, diff_view: false, virtual: false, display_path: nil, language: nil)
+      def initialize(path:, content:, new_file: false, editor_mode: "modern", readonly: false, diff_view: false, virtual: false, display_path: nil, language: nil, workspace_only: false)
+        @workspace_only = workspace_only
+        virtual ||= workspace_only
         @path = virtual ? nil : path.to_s
         @display_path = display_path.to_s.empty? ? path.to_s : display_path.to_s
         @language = language&.to_sym
         @new_file = new_file
-        @readonly = readonly
+        @readonly = readonly || workspace_only
         @diff_view = diff_view
         @virtual = virtual == true
         @file_marker = EditorFileMarker.new(path: @path || @display_path, content: content, new_file: new_file || virtual?)
@@ -354,6 +356,10 @@ module Kward
       def secondary_cursor_offsets
         sync_selection_state
         @selections.secondary_cursor_offsets
+      end
+
+      def workspace_only?
+        @workspace_only
       end
 
       def readonly?

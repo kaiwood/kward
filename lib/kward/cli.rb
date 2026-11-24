@@ -323,7 +323,7 @@ module Kward
           print_command_help("edit")
           return
         end
-        raise ArgumentError, command_usage("edit") unless @argv.length == 2
+        raise ArgumentError, command_usage("edit") if @argv.length > 2
 
         edit_file_command(@argv[1])
         return
@@ -418,11 +418,18 @@ module Kward
       terminal&.write(TerminalSequences::ALTERNATE_SCREEN_ENTER)
       terminal&.flush
       setup_interactive_prompt
-      unless @prompt.respond_to?(:edit_file)
+      target = File.expand_path(path || ".")
+      directory = File.directory?(target)
+      action = directory ? :edit_workspace : :edit_file
+      unless @prompt.respond_to?(action)
         raise ArgumentError, "The integrated editor requires an interactive terminal."
       end
 
-      @prompt.edit_file(path, base_dir: Dir.pwd, allow_new: true)
+      if directory
+        @prompt.edit_workspace(target)
+      else
+        @prompt.edit_file(path, base_dir: Dir.pwd, allow_new: true)
+      end
     ensure
       begin
         @prompt.close if @prompt.respond_to?(:close) && prompt_interface?

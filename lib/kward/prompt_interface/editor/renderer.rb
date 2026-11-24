@@ -50,6 +50,8 @@ module Kward
       end
 
       def editor_source_layout(width, height)
+        return editor_workspace_layout(width, height) if @editor_state.workspace_only?
+
         content_width = [width - 4, 1].max
         visible_count = editor_visible_line_count(height: height, width: width)
         line_index, column = @editor_state.cursor_line_and_column
@@ -62,6 +64,15 @@ module Kward
         else
           editor_unwrapped_layout(width, content_width, visible_count, line_index, column, text_width)
         end
+      end
+
+      def editor_workspace_layout(width, height)
+        content_width = [width - 4, 1].max
+        rows = [editor_pane_top_border("No file open", width, suffix: editor_explorer_header_label(width))]
+        rows.concat(Array.new(editor_visible_line_count(height: height, width: width)) { box_content_row(" " * content_width, content_width) })
+        rows << footer_row(content_width, "Open a file from the Explorer · Ctrl+Q quit")
+        rows.concat(editor_bottom_rows(width))
+        [rows, 0, 1]
       end
 
       def editor_split_layout(width, height)

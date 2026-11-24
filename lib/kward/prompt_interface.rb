@@ -470,7 +470,7 @@ module Kward
     # Returns the active Vibe or Modern editor buffer for an agent prompt turn.
     def editor_prompt_context
       @mutex.synchronize do
-        next nil unless editor_active? && (@editor_state.vibe? || @editor_state.modern?)
+        next nil unless editor_active? && !@editor_state.workspace_only? && (@editor_state.vibe? || @editor_state.modern?)
 
         {
           path: @editor_state.path,
@@ -539,11 +539,20 @@ module Kward
     end
 
     def edit_file(path, base_dir: nil, allow_new: true)
+      run_editor_session do
+        open_editor(path, allow_new: allow_new, base_dir: base_dir || prompt_workspace_root, restrict_to_workspace: false)
+      end
+    end
+
+    def edit_workspace(root)
+      update_workspace_root(root)
+      run_editor_session { open_editor_workspace }
+    end
+
+    private def run_editor_session
       start(render: false)
       opened = @mutex.synchronize do
-        open_editor(path, allow_new: allow_new, base_dir: base_dir || prompt_workspace_root, restrict_to_workspace: false).tap do
-          render_prompt_locked
-        end
+        yield.tap { render_prompt_locked }
       end
       return false unless opened
 

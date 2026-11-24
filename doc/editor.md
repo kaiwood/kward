@@ -16,7 +16,9 @@ In the Land of Ruby where the agents lie.<br>
 
 ## Quick start
 
-Open a file directly from your shell:
+Run `kward edit` or `kward edit .` to browse the current directory, or pass a directory such as `kward edit ~/notes` to browse it instead. The Explorer starts focused with no file open. Click a file, or select it with the arrow keys and press Enter. Press `Ctrl+Q` to quit without opening a file.
+
+To open a file directly from your shell:
 
 ```bash
 cd ~/code/my-project
@@ -93,7 +95,7 @@ When the Explorer has focus in Vibe mode, `j`/`k` move down/up, `l` expands a fo
 
 With the Vibe Explorer focused, press `/` to search forward or `?` to search backward. Type a few characters to narrow the list, including files in collapsed folders. If a folder is selected when you start searching, only that folder and its subfolders are searched. Otherwise, the search covers the whole workspace. Fuzzy search matches characters in order, ignoring case and allowing gaps: `l/nt` matches `lib/first-note.txt`. `Enter` confirms the filter; `n` and `N` cycle through results in the search direction or the reverse direction. Press `Enter` again to open the selected file, or `Esc` to clear the filter and return to the tree.
 
-The Explorer remembers whether it was open, which folders were expanded, and where you left off in the tree for each workspace. On a narrow terminal, the file still opens first; click **[Explorer]** to return to the tree. This saves only sidebar preferences, not open buffers or unsaved edits.
+The Explorer remembers whether it was open, which folders were expanded, and where you left off in the tree for each workspace. On a narrow terminal, a directory launch shows the Explorer full-width. When you open a file directly, click **[Explorer]** to return to the tree. This saves only sidebar preferences, not open buffers or unsaved edits.
 
 ## Example workflow
 

@@ -10,7 +10,10 @@ module Kward
       private
 
       def editor_explorer_available?
-        @editor_state&.path && !@editor_state.readonly? && !@editor_save_callback &&
+        return false unless @editor_state
+        return false if !@editor_state.workspace_only? && (!@editor_state.path || @editor_state.readonly?)
+
+        !@editor_save_callback &&
           !@editor_prompt_active && !@editor_save_as_active && !editor_runner_output_visible? && !editor_runner_running?
       end
 
@@ -132,6 +135,8 @@ module Kward
       end
 
       def editor_explorer_relative_path(path)
+        return unless path
+
         relative = Pathname.new(path).relative_path_from(Pathname.new(prompt_workspace_root)).to_s
         relative unless relative == ".." || relative.start_with?("../")
       end
@@ -164,7 +169,7 @@ module Kward
             state = EditorState.new(path: workspace_path, content: content, editor_mode: @editor_state.editor_mode)
           end
         end
-        activate_editor_buffer(state)
+        activate_editor_buffer(state, retain_current: !@editor_state.workspace_only?)
       rescue SystemCallError, ArgumentError
         editor_explorer_error("Could not open file")
       end
@@ -185,7 +190,7 @@ module Kward
           end
         end
 
-        buffers = ([@editor_state] + retained_editor_buffers).sort_by(&:path).map do |state|
+        buffers = ([@editor_state] + retained_editor_buffers).reject(&:workspace_only?).sort_by(&:path).map do |state|
           path = editor_explorer_relative_path(state.path) || state.path
           icon = project_browser_icon(path: path.scrub)
           { key: [:buffer, state.path], label: "#{icon}#{path}#{' *' if state.dirty?}",

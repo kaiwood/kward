@@ -68,7 +68,7 @@ module Kward
           "Work" => [
             ["kward prompt \"PROMPT\"", "Run a one-shot prompt"],
             ["kward filter \"INSTRUCTION\"", "Filter standard input"],
-            ["kward edit <filename>", "Open a file in the integrated editor"],
+            ["kward edit [file|directory]", "Open a file or browse a directory in the integrated editor"],
             ["kward shell", "Start a standalone shell; use ? to ask the agent"],
             ["kward sysprompt [--raw]", "Inspect the effective system prompt"]
           ],
@@ -176,9 +176,9 @@ module Kward
             examples: ["kward skills status", "kward skills review", "kward skills trust"]
           },
           "edit" => {
-            usage: "kward edit <filename>",
-            description: "Open a file in the integrated editor.",
-            examples: ["kward edit lib/main.rb", "kward edit ~/notes/todo.md"]
+            usage: "kward edit [file|directory]",
+            description: "Open a file, or browse a directory in the editor Explorer. With no argument, browse the current directory.",
+            examples: ["kward edit", "kward edit ~/notes", "kward edit lib/main.rb"]
           },
           "shell" => {
             usage: "kward shell [-i] [shell-options] [-c command [name [args...]] | -s [args...] | file [args...]]",

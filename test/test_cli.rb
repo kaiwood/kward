@@ -1029,6 +1029,21 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_edit_command_opens_current_or_explicit_directory
+    Dir.mktmpdir do |dir|
+      [[[], Dir.pwd], [["."], Dir.pwd], [[dir], dir]].each do |arguments, root|
+        prompt = FakePrompt.new([])
+        opened = []
+        prompt.define_singleton_method(:edit_workspace) { |workspace| opened << workspace }
+        cli = Kward::CLI.new(argv: ["edit", *arguments], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+        cli.run
+
+        assert_equal [root], opened
+      end
+    end
+  end
+
   def test_edit_command_opens_file_in_integrated_editor
     Dir.mktmpdir do |dir|
       path = File.join(dir, "outside.txt")

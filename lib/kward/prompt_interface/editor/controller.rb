@@ -101,6 +101,21 @@ module Kward
         end
 
         @editor_state = EditorState.new(path: full_path, content: File.exist?(full_path) ? File.read(full_path) : "", new_file: !File.exist?(full_path), editor_mode: current_editor_mode)
+        start_file_editor
+      rescue StandardError => e
+        @file_editor_open_status = "Cannot edit #{path}: #{e.message}"
+        false
+      end
+
+      def open_editor_workspace
+        @editor_state = EditorState.new(path: nil, content: "", editor_mode: current_editor_mode, workspace_only: true)
+        restore_editor_explorer
+        toggle_editor_explorer unless @editor_explorer[:visible]
+        @editor_explorer[:focused] = true
+        start_file_editor
+      end
+
+      def start_file_editor
         restore_editor_explorer unless @editor_explorer
         @editor_agent_suspended = false
         @prompt_label = "Edit>"
@@ -114,9 +129,6 @@ module Kward
         set_editor_bar_cursor_locked if current_editor_bar_cursor?
         enable_editor_mouse_reporting
         true
-      rescue StandardError => e
-        @file_editor_open_status = "Cannot edit #{path}: #{e.message}"
-        false
       end
 
       def open_diff_viewer(path, content)
@@ -288,6 +300,7 @@ module Kward
           return mouse_result
         end
         return true if handle_vibe_pane_key(key)
+        return handle_editor_workspace_key(key) if @editor_state.workspace_only?
         return true if handle_editor_explorer_key(key)
         return handle_editor_save_as_key(key) if @editor_save_as_active
         return handle_readonly_editor_key(key) if @editor_state&.readonly?
@@ -505,7 +518,7 @@ module Kward
         return false unless event
 
         queue_pending_keys(event[:remaining]) unless event[:remaining].empty?
-        return true if handle_editor_explorer_mouse(event)
+        return true if handle_editor_explorer_mouse(event) || @editor_state.workspace_only?
 
         event[:column] -= editor_explorer_width
         case event[:code]
@@ -896,6 +909,21 @@ module Kward
             false
           end
         end
+      end
+
+      def handle_editor_workspace_key(key)
+        return close_editor if key == TerminalKeys::CTRL_Q
+
+        sequence = parse_csi_u_key(key)
+        if sequence && sequence[:event_type] != 3 && ctrl_modifier?(sequence[:modifier]) && ctrl_code(sequence[:code]) == 113
+          return close_editor
+        end
+
+        return true if handle_editor_explorer_key(key)
+        return true if handle_bracketed_paste(key) { |_content| }
+
+        handle_bundled_key(key) { |token| handle_editor_key(token) }
+        true
       end
 
       def handle_readonly_editor_key(key)

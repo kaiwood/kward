@@ -1,6 +1,45 @@
 require_relative "test_helper"
 
 class TestPromptInterfaceEditorExplorer < KwardTestCase
+  def test_workspace_launch_browses_only_the_requested_directory_without_opening_a_buffer
+    with_editor(open_file: false) do |prompt, root|
+      directory = File.join(root, "lib")
+      verify_editor = -> do
+        rows = frame(prompt)
+        assert_includes rows.first, "No file open"
+        assert_match(/Open Editors.*\n.*Workspace.*\n.*b\.txt/, rows.join("\n"))
+        refute_includes rows.join, "a.txt"
+        refute_includes rows.join, "•"
+
+        key(prompt, "\e[B")
+        key(prompt, "\r")
+        assert_includes frame(prompt).first, "Edit b.txt"
+        assert_equal "beta\n", editor(prompt).buffer
+        refute_includes frame(prompt)[1..].join, "No file open"
+        key(prompt, "\x11")
+        refute prompt.editing_file?
+        true
+      end
+      prompt.define_singleton_method(:run_editor) { verify_editor.call }
+      assert prompt.edit_workspace(directory)
+      assert_equal ["b.txt"], Dir.children(directory)
+    end
+  end
+
+  def test_workspace_launch_uses_full_width_explorer_on_narrow_terminals_and_can_quit
+    with_editor(width: 45, open_file: false) do |prompt, root|
+      verify_editor = -> do
+        assert_match(/\A╭ \[Explorer\] ─+╮\z/, frame(prompt).first)
+        assert_includes frame(prompt).join, "a.txt"
+        key(prompt, "\e[113;5u")
+        refute prompt.editing_file?
+        true
+      end
+      prompt.define_singleton_method(:run_editor) { verify_editor.call }
+      assert prompt.edit_workspace(root)
+    end
+  end
+
   def test_standalone_editor_shares_one_frame_with_the_explorer
     with_editor do |prompt, _root|
       toggle(prompt)
@@ -454,24 +493,24 @@ class TestPromptInterfaceEditorExplorer < KwardTestCase
     Kward::TerminalText.truncate(strip_ansi(selected), width / 3)
   end
 
-  def with_editor(width: 80, mode: "modern")
+  def with_editor(width: 80, mode: "modern", open_file: true)
     Dir.mktmpdir do |root|
       FileUtils.mkdir_p(File.join(root, "lib"))
       File.write(File.join(root, "a.txt"), "alpha\n")
       File.write(File.join(root, "lib/b.txt"), "beta\n")
       Dir.mktmpdir do |config|
         with_env("KWARD_CONFIG_PATH" => File.join(config, "config.json")) do
-          yield new_editor(root, width: width, mode: mode), root
+          yield new_editor(root, width: width, mode: mode, open_file: open_file), root
         end
       end
     end
   end
 
-  def new_editor(root, width: 80, mode: "modern")
+  def new_editor(root, width: 80, mode: "modern", open_file: true)
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: root, editor_mode: mode)
     prompt.define_singleton_method(:screen_width) { width }
     prompt.define_singleton_method(:screen_height) { 14 }
-    assert prompt.send(:open_editor, "a.txt")
+    assert prompt.send(:open_editor, "a.txt") if open_file
     prompt
   end
 
