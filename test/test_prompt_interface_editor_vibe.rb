@@ -30,6 +30,23 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     }, prompt.send(:handle_vibe_command_key, "\n"))
   end
 
+  def test_vibe_prompt_carries_character_line_and_block_selections_into_command_mode
+    cases = {
+      "vlj" => [[2, 1, 3, 2]],
+      "Vj" => [[2, 1, 3, 6]],
+      "#{Kward::TerminalKeys::CTRL_V}lj" => [[2, 1, 2, 2], [3, 1, 3, 2]]
+    }
+    cases.each do |keys, expected|
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+      assert prompt.send(:open_scratchpad, :text, content: "first\nsecond\nthird\nlast")
+      "j#{keys}:prompt edit this\r".each_char do |key|
+        result = prompt.send(:handle_editor_key, key)
+        assert_equal expected, result.fetch(:editor_prompt).fetch(:selections) if key == "\r"
+      end
+      assert_empty prompt.editor_prompt_context[:selections]
+    end
+  end
+
   def test_prompt_interface_vibe_mode_requires_an_editor_prompt_instruction
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
     editor = Kward::PromptInterface::EditorState.new(path: "notes.txt", content: "alpha", editor_mode: "vibe")

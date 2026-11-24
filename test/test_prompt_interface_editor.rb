@@ -214,6 +214,18 @@ class TestPromptInterfaceEditor < KwardTestCase
     assert_equal "", editor.buffer
   end
 
+  def test_modern_editor_prompt_lists_disjoint_selections_without_selecting_the_next_line
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    assert prompt.send(:open_scratchpad, :text, content: "first\nsecond\nthird")
+    editor = prompt.instance_variable_get(:@editor_state)
+    editor.set_selections([{ anchor: 6, cursor: 0 }, { anchor: 15, cursor: 13 }])
+    prompt.send(:handle_editor_key, Kward::TerminalKeys::CTRL_PERIOD)
+    "edit these\r".each_char { |key| prompt.send(:handle_editor_key, key) }
+
+    message = Kward::EditorPrompt.input("edit these", prompt.editor_prompt_context)
+    assert_includes message, "line 1, columns 1–6; line 3, columns 1–2"
+  end
+
   def test_prompt_interface_modern_escape_aborts_editor_prompt_line
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
     assert prompt.send(:open_scratchpad, :ruby)

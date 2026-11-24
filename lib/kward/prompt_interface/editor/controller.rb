@@ -387,13 +387,11 @@ module Kward
         end
       end
 
-      def editor_prompt_action(instruction)
-        {
-          editor_prompt: {
-            instruction: instruction.to_s.strip,
-            display_input: ":prompt #{instruction.to_s.strip}"
-          }
-        }
+      def editor_prompt_action(instruction, selections: nil)
+        instruction = instruction.to_s.strip
+        action = { instruction: instruction, display_input: ":prompt #{instruction}" }
+        action[:selections] = selections if selections
+        { editor_prompt: action }
       end
 
       def begin_editor_prompt

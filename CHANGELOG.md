@@ -6,6 +6,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Send selected line and column ranges to the editor agent in Vibe Visual mode and Modern mode.
+
 - Review agent edits in a read-only diff before keeping or discarding the draft.
 
 - Add a right-hand editor Outline for jumping to declarations in the live buffer, with optional Universal Ctags support for more languages.

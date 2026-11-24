@@ -28,6 +28,7 @@ module Kward
         end
 
         ensure_client!
+        context = context.merge(selections: action[:selections]) if action[:selections]
         session = EditorPromptSession.new(context)
         base_registry = agent ? agent.tool_registry : ToolRegistry.new(workspace: configured_workspace(root: context[:workspace_root]))
         registry = base_registry.for_editor_prompt(session)

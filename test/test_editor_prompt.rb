@@ -197,6 +197,18 @@ class TestEditorPrompt < KwardTestCase
     assert_equal [nil], prompt.statuses
   end
 
+  def test_vibe_visual_selection_is_forwarded_to_the_agent_after_exiting_visual_mode
+    prompt = EditorPromptTestPrompt.new(content: "first\nsecond\nthird", workspace_root: Dir.pwd, selections: [])
+    client = EditorPromptTestClient.new
+    cli = Kward::CLI.new(prompt: prompt, client: client)
+
+    cli.send(:run_editor_prompt_turn, { instruction: "edit this", selections: [[2, 1, 3, 2]] })
+
+    message = client.messages.first.last[:content]
+    assert_includes message, "lines 2–3 (column 1 through column 2)"
+    assert_includes message, "first\nsecond\nthird"
+  end
+
   def test_editor_prompt_uses_configured_model_and_reasoning
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")

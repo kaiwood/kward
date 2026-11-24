@@ -188,6 +188,14 @@ module Kward
         sync_vibe_state
       end
 
+      def vibe_command_selection_ranges
+        @vibe_state.command_selection_ranges
+      end
+
+      def vibe_command_selection_ranges=(ranges)
+        @vibe_state.command_selection_ranges = ranges
+      end
+
       def vibe_last_change
         @vibe_state.last_change
       end
@@ -794,6 +802,15 @@ module Kward
           range_start = line_start + [start_column, line_length].min
           range_end = line_start + [end_column + 1, line_length].min
           [range_start, range_end]
+        end
+      end
+
+      def prompt_selection_locations(ranges = selection_ranges)
+        ranges.map do |first, limit|
+          start_line, start_column = cursor_line_and_column_for(first)
+          # The range end is exclusive; a newline belongs to the line it ends.
+          end_line, end_column = cursor_line_and_column_for([first, limit - 1].max)
+          [start_line + 1, start_column + 1, end_line + 1, end_column + 1]
         end
       end
 
