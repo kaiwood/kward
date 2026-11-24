@@ -485,6 +485,73 @@ class TestPromptInterfaceEditor < KwardTestCase
     refute prompt.send(:editor_runner_selection_active?)
   end
 
+  def test_vibe_save_and_quit_waits_for_conflict_resolution
+    %w[wq x].each do |command|
+      Dir.mktmpdir do |root|
+        path = File.join(root, "notes.txt")
+        File.write(path, "original")
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: root, editor_mode: "vibe")
+        assert prompt.send(:open_editor, path)
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.replace_buffer("mine")
+        File.write(path, "theirs")
+
+        prompt.send(:execute_vibe_command, command)
+        assert prompt.editing_file?
+        assert_equal "theirs", File.read(path)
+        assert_includes editor.status, "O overwrite"
+        prompt.send(:handle_editor_key, "\e")
+        assert_equal "mine", editor.buffer
+        assert prompt.editing_file?
+
+        prompt.send(:execute_vibe_command, command)
+        File.write(path, "newer")
+        prompt.send(:handle_editor_key, "o")
+        assert prompt.editing_file?
+        assert_equal "newer", File.read(path)
+        prompt.send(:handle_editor_key, "o")
+        assert_equal "mine", File.read(path)
+        refute prompt.editing_file?
+      end
+    end
+  end
+
+  def test_vibe_save_and_quit_stays_open_when_the_write_fails
+    %w[wq x].each do |command|
+      Dir.mktmpdir do |root|
+        path = File.join(root, "notes.txt")
+        File.write(path, "original")
+        File.link(path, File.join(root, "linked.txt"))
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: root, editor_mode: "vibe")
+        assert prompt.send(:open_editor, path)
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.replace_buffer("mine")
+
+        prompt.send(:execute_vibe_command, command)
+        assert prompt.editing_file?
+        assert_includes editor.status, "Save failed:"
+        assert_equal "mine", editor.buffer
+        assert_equal "original", File.read(path)
+      end
+    end
+  end
+
+  def test_vibe_wq_prompts_for_scratchpad_filename_before_quitting
+    Dir.mktmpdir do |root|
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: root, editor_mode: "vibe")
+      assert prompt.send(:open_scratchpad, :text, content: "hello")
+      editor = prompt.instance_variable_get(:@editor_state)
+
+      prompt.send(:execute_vibe_command, "wq")
+      assert prompt.editing_file?
+      assert_equal "Save as: ", editor.status
+      "notes.txt\r".each_char { |char| prompt.send(:handle_editor_key, char) }
+
+      assert_equal "hello", File.read(File.join(root, "notes.txt"))
+      refute prompt.editing_file?
+    end
+  end
+
   def test_editor_save_conflict_compares_and_reloads_without_losing_undo
     Dir.mktmpdir do |root|
       path = File.join(root, "notes.txt")

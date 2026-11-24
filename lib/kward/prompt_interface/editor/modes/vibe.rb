@@ -352,12 +352,11 @@ module Kward
         when "q!"
           close_editor(force: true)
         when "wq"
-          save_editor && close_editor
+          save_editor(close_after: true)
         when /\Awq\s+(.+)\z/
-          save_editor(Regexp.last_match(1)) && close_editor
+          save_editor(Regexp.last_match(1), close_after: true)
         when "x"
-          save_editor if @editor_state&.dirty?
-          close_editor if @editor_state
+          @editor_state.dirty? ? save_editor(close_after: true) : close_editor
         when /\A(?:(%|\d+,\d+))?s\/([^\/]*)\/([^\/]*)\/(g?)\z/
           vibe_substitute_command(command_range || Regexp.last_match(1), Regexp.last_match(2), Regexp.last_match(3), global: Regexp.last_match(4) == "g")
         when /\A\d+\z/

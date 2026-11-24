@@ -38,6 +38,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Keep Vibe open when `:wq` or `:x` needs confirmation or cannot save.
+
 - Reduce editor undo and redo memory on large files by storing small edits instead of whole-buffer copies.
 
 - Align editor wrapping, cursor movement, and mouse selection for wide Unicode text and multi-character graphemes.

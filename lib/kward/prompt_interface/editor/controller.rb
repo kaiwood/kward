@@ -284,8 +284,7 @@ module Kward
         @editor_runner_output_visible = false
         clear_editor_runner_selection
         @editor_text_width = nil
-        @editor_save_as_active = false
-        @editor_save_as_buffer = ""
+        reset_editor_save_as
         @editor_save_callback = nil
         @editor_state = nil
         @editor_agent_suspended = false
@@ -1353,7 +1352,7 @@ module Kward
         true
       end
 
-      def save_editor(path = nil, prompt_for_path: true)
+      def save_editor(path = nil, close_after: false)
         return false unless @editor_state
         if @editor_state.readonly?
           @editor_state.status = "Read-only diff"
@@ -1372,37 +1371,31 @@ module Kward
         end
 
         if path.to_s.strip.empty? && @editor_state.path.to_s.empty?
-          if prompt_for_path
-            begin_editor_save_as
-            return true
-          end
-
-          @editor_state.status = "Use :w filename"
-          return false
+          return begin_editor_save_as(close_after: close_after)
         end
 
         return false if !path.to_s.strip.empty? && !bind_editor_save_path(path)
 
         expected = @editor_state.new_file ? nil : @editor_state.original_content
-        write_editor_file(expected)
+        write_editor_file(expected, close_after: close_after)
       rescue StandardError => e
         @editor_state.status = "Save failed: #{e.message}" if @editor_state
         false
       end
 
-      def write_editor_file(expected)
+      def write_editor_file(expected, close_after:)
         path = @editor_state.path
         FileUtils.mkdir_p(File.dirname(path))
         EditorFileSave.write(path, @editor_state.buffer, expected: expected)
         @editor_save_conflict = nil
         @editor_state.refresh_after_save(@editor_state.buffer)
-        true
+        close_after ? close_editor : true
       rescue EditorFileSave::Conflict
-        begin_editor_save_conflict
+        begin_editor_save_conflict(close_after: close_after)
       end
 
-      def begin_editor_save_conflict
-        @editor_save_conflict = { disk: EditorFileSave.read(@editor_state.path) }
+      def begin_editor_save_conflict(close_after:)
+        @editor_save_conflict = { disk: EditorFileSave.read(@editor_state.path), close_after: close_after }
         @editor_state.clear_search_highlights
         @editor_state.status = "Disk changed · C compare · R reload · O overwrite · Esc cancel"
         true
@@ -1420,7 +1413,7 @@ module Kward
           open_editor_comparison(disk, @editor_state.buffer, from: "Disk", to: "Buffer", status: "Disk vs. buffer · Esc back")
         when "r"
           disk = EditorFileSave.read(@editor_state.path)
-          return begin_editor_save_conflict unless disk == @editor_save_conflict[:disk]
+          return begin_editor_save_conflict(close_after: @editor_save_conflict[:close_after]) unless disk == @editor_save_conflict[:disk]
           if disk.nil?
             @editor_state.status = "File missing · C compare · O recreate · Esc cancel"
             return true
@@ -1432,7 +1425,7 @@ module Kward
           @editor_save_conflict = nil
           ensure_editor_cursor_visible
         when "o"
-          write_editor_file(@editor_save_conflict[:disk])
+          write_editor_file(@editor_save_conflict[:disk], close_after: @editor_save_conflict[:close_after])
         when "\e", TerminalKeys::CTRL_C
           @editor_save_conflict = nil
           @editor_state.status = "Save canceled"
@@ -1476,8 +1469,9 @@ module Kward
         true
       end
 
-      def begin_editor_save_as
+      def begin_editor_save_as(close_after:)
         @editor_save_as_active = true
+        @editor_save_as_close_after = close_after
         @editor_save_as_buffer = ""
         @editor_state.status = "Save as: "
         true
@@ -1543,21 +1537,26 @@ module Kward
 
       def finish_editor_save_as
         path = @editor_save_as_buffer.to_s.strip
-        @editor_save_as_active = false
-        @editor_save_as_buffer = ""
+        close_after = @editor_save_as_close_after
+        reset_editor_save_as
         if path.empty?
           @editor_state.status = "Save canceled"
           return true
         end
 
-        save_editor(path, prompt_for_path: false)
+        save_editor(path, close_after: close_after)
       end
 
       def cancel_editor_save_as
-        @editor_save_as_active = false
-        @editor_save_as_buffer = ""
+        reset_editor_save_as
         @editor_state.status = "Save canceled"
         true
+      end
+
+      def reset_editor_save_as
+        @editor_save_as_active = false
+        @editor_save_as_close_after = false
+        @editor_save_as_buffer = ""
       end
 
       def update_editor_save_as_status
