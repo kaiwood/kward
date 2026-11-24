@@ -36,6 +36,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Reuse wrapped runner output so scrolling and selecting in the output pane stay responsive.
+
 - Keep scrolling and rendering responsive in large files with editor soft wrap enabled.
 
 - Avoid repeated multiline syntax scans when rendering Ruby, Markdown, and ERB files in the editor.

@@ -413,6 +413,28 @@ class TestPromptInterfaceEditor < KwardTestCase
     assert_equal "puts 'output'\n", editor.buffer
   end
 
+  def test_editor_runner_reuses_output_layout_until_output_width_or_color_changes
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    state = Kward::PromptInterface::EditorRunnerState.new(language: :ruby, source: "")
+    prompt.instance_variable_set(:@editor_runner_state, state)
+    prompt.instance_variable_set(:@color_enabled, true)
+    assert_equal ["(no output)"], prompt.send(:editor_runner_output_lines, 12)
+
+    output = "\e[31malpha beta\e[0m\ngamma"
+    state.complete(Kward::ScratchpadRunner::Result.new(output: output))
+    wide = prompt.send(:editor_runner_output_lines, 12)
+    assert_equal ["alpha beta", "gamma"], wide.map { |line| strip_ansi(line) }
+    assert_includes wide.first, "\e[31m"
+    assert_same wide, prompt.send(:editor_runner_output_lines, 12)
+
+    narrow = prompt.send(:editor_runner_output_lines, 5)
+    assert_operator narrow.length, :>, wide.length
+    assert_same narrow, prompt.send(:editor_runner_output_lines, 5)
+
+    prompt.instance_variable_set(:@color_enabled, false)
+    assert_equal ["alpha beta", "gamma"], prompt.send(:editor_runner_output_lines, 12)
+  end
+
   def test_prompt_interface_runner_output_supports_virtual_mouse_selection
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "modern")

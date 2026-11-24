@@ -142,7 +142,17 @@ module Kward
       end
 
       def editor_runner_output_lines(width)
-        text = ANSI.sanitize_transcript(@editor_runner_state.output_text)
+        output = @editor_runner_state.output_text
+        key = [output, width, @color_enabled]
+        return @editor_runner_wrapped_lines if key == @editor_runner_wrap_key
+
+        @editor_runner_wrapped_lines = wrap_editor_runner_output(output, width).freeze
+        @editor_runner_wrap_key = key
+        @editor_runner_wrapped_lines
+      end
+
+      def wrap_editor_runner_output(output, width)
+        text = ANSI.sanitize_transcript(output)
         text = ANSI.strip(text) unless @color_enabled
         text = text.chomp
         return ["(no output)"] if text.empty?
