@@ -143,7 +143,7 @@ module Kward
         @editor_state.vibe_command = ""
         @editor_state.vibe_pending = ""
         @editor_state.vibe_command_range = nil
-        @editor_state.vibe_command_selection_ranges = nil
+        @editor_state.vibe_command_selection = nil
         @editor_state.clear_selection
         vibe_return_to_normal
       end
@@ -289,7 +289,7 @@ module Kward
       def vibe_begin_command
         @editor_state.vibe_pending = ""
         @editor_state.vibe_command_range = nil
-        @editor_state.vibe_command_selection_ranges = nil
+        @editor_state.vibe_command_selection = nil
         @editor_state.vibe_mode = "command"
         @editor_state.vibe_command = ""
         @editor_state.status = ":"
@@ -301,8 +301,8 @@ module Kward
         when "\e", TerminalKeys::CTRL_C, :escape
           @editor_state.vibe_command = ""
           @editor_state.vibe_command_range = nil
-          @editor_state.clear_selection if @editor_state.vibe_command_selection_ranges
-          @editor_state.vibe_command_selection_ranges = nil
+          @editor_state.clear_selection if @editor_state.vibe_command_selection
+          @editor_state.vibe_command_selection = nil
           vibe_return_to_normal
         when "\b", "\x7F"
           @editor_state.vibe_command = @editor_state.vibe_command[0...-1].to_s
@@ -324,13 +324,13 @@ module Kward
         command = command.to_s.strip
         return execute_vibe_workspace_command(command) if @editor_state.workspace_only?
 
-        visual_ranges = @editor_state.vibe_command_selection_ranges
-        visual_ranges ||= @editor_state.selection_ranges if vibe_visual_mode?
+        visual_selection = @editor_state.vibe_command_selection
+        visual_selection ||= vibe_prompt_selection if vibe_visual_mode?
         command_range = @editor_state.vibe_command_range
         command_range ||= vibe_visual_line_bounds if vibe_visual_mode?
         command_range, command = vibe_extract_command_range(command, command_range)
         @editor_state.vibe_command_range = nil
-        @editor_state.vibe_command_selection_ranges = nil
+        @editor_state.vibe_command_selection = nil
         @editor_state.vibe_mode = "normal"
         @editor_state.vibe_command = ""
         action = nil
@@ -352,11 +352,11 @@ module Kward
           end
         when /\Aprompt\s+(.+)\z/
           instruction = Regexp.last_match(1)
-          selections = @editor_state.prompt_selections(visual_ranges) if visual_ranges
-          @editor_state.clear_selection if visual_ranges
-          action = editor_prompt_action(instruction, selections: selections)
+          selections = @editor_state.prompt_selections(visual_selection[:ranges]) if visual_selection
+          @editor_state.clear_selection if visual_selection
+          action = editor_prompt_action(instruction, selections: selections, selection_mode: visual_selection&.fetch(:mode))
         when "prompt"
-          @editor_state.clear_selection if visual_ranges
+          @editor_state.clear_selection if visual_selection
           @editor_state.status = "Prompt instruction required"
         when "q"
           vibe_quit_editor
@@ -1067,9 +1067,13 @@ module Kward
         true
       end
 
+      def vibe_prompt_selection
+        { mode: @editor_state.vibe_mode, ranges: @editor_state.selection_ranges }
+      end
+
       def vibe_begin_visual_command
         @editor_state.vibe_command_range = vibe_visual_line_bounds
-        @editor_state.vibe_command_selection_ranges = @editor_state.selection_ranges
+        @editor_state.vibe_command_selection = vibe_prompt_selection
         @editor_state.vibe_mode = "command"
         @editor_state.vibe_command = "'<,'>"
         @editor_state.status = ":'<,'>"

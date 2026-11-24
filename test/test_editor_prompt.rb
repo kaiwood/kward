@@ -92,6 +92,55 @@ class TestEditorPrompt < KwardTestCase
     end
   end
 
+  def test_standalone_vibe_removes_blank_lines_only_inside_the_selection
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "notes.txt")
+      content = "before\n\nselected a\n\nselected b\n\nafter\n"
+      File.write(path, content)
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: dir, editor_mode: "vibe")
+      keys = "2jV2j:prompt remove the blank lines\r".chars + ["\e[107u"] + ":wq\r".chars
+      prompt.define_singleton_method(:read_key) do |**|
+        next nil if @editor_agent_suspended
+
+        keys.shift || raise("Editor did not close after :wq")
+      end
+      response = assistant_tool_call("edit_editor_buffer", edits: [{ target: "selection:1", content: "selected a\nselected b\n" }])
+      client = FakeClient.new([response, { "role" => "assistant", "content" => "Draft ready" }])
+
+      Kward::CLI.new(argv: ["edit", path], prompt: prompt, client: client).run
+
+      assert_empty keys
+      assert_equal "before\n\nselected a\nselected b\n\nafter\n", File.read(path)
+    end
+  end
+
+  def test_editor_tools_cannot_edit_outside_disjoint_selections_or_reuse_a_draft
+    session = Kward::EditorPromptSession.new(content: "éA-gap-B", cursor_offset: 0, selections: [
+      { start_offset: 1, end_offset: 2 }, { start_offset: 7, end_offset: 8 }
+    ])
+    registry = Kward::ToolRegistry.new.for_editor_prompt(session)
+    conversation = Kward::Conversation.new(system_message: nil)
+
+    assert_includes registry.dispatch(tool_call("replace_editor_buffer", content: "erase"), conversation), "rejected"
+    assert_includes registry.dispatch(tool_call("edit_editor_buffer", edits: [
+      { target: "selection:1", content: "X" }, { target: "cursor", content: "elsewhere" }
+    ]), conversation), "rejected"
+    assert_equal "éA-gap-B", session.content
+    assert_includes registry.dispatch(tool_call("edit_editor_buffer", edits: [
+      { target: "selection:2", content: "" }, { target: "selection:1", content: "X" }
+    ]), conversation), "draft updated"
+    assert_includes registry.dispatch(tool_call("edit_editor_buffer", edits: [{ target: "selection:2", content: "Y" }]), conversation), "rejected"
+    assert_equal "éX-gap-", session.content
+  end
+
+  def test_unselected_editor_can_insert_at_the_exact_cursor
+    session = Kward::EditorPromptSession.new(content: "éa", cursor_offset: 1)
+
+    session.edit([{ target: "cursor", content: "X" }])
+
+    assert_equal "éXa", session.content
+  end
+
   def test_large_side_by_side_draft_reads_wrap_setting_once
     reads = 0
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, diff_view: "side_by_side",
@@ -108,10 +157,23 @@ class TestEditorPrompt < KwardTestCase
   def test_editor_agent_can_be_cancelled_with_encoded_ctrl_c
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
     assert prompt.send(:open_scratchpad, :text, content: "unsaved")
-    assert prompt.suspend_editor_for_agent
-    prompt.begin_busy_input("You>")
+    started = Queue.new
+    client = FakeClient.new([])
+    client.define_singleton_method(:chat) do |*_args, **_opts|
+      started << true
+      sleep 2
+      raise "Provider should have been cancelled"
+    end
+    prompt.define_singleton_method(:read_key) do |**|
+      "\e[99;5u" if started.pop(true)
+    rescue ThreadError
+      nil
+    end
+    cli = Kward::CLI.new(prompt: prompt, client: client)
 
-    assert_equal Kward::PromptInterface::CANCEL_INPUT, prompt.send(:handle_key, "\e[99;5u")
+    cli.send(:run_editor_prompt_turn, { instruction: "edit this" })
+
+    assert_equal "Agent request cancelled", prompt.send(:editor_status_text)
     assert_equal "unsaved", prompt.editor_prompt_context[:content]
   end
 
@@ -200,6 +262,18 @@ class TestEditorPrompt < KwardTestCase
 
     refute prompt.commit_editor_prompt(session)
     assert_equal "old user", editor.buffer
+  end
+
+  def test_matching_text_from_another_buffer_cannot_accept_a_draft
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+    assert prompt.send(:open_scratchpad, :text, content: "same text")
+    session = Kward::EditorPromptSession.new(prompt.editor_prompt_context)
+    session.replace("draft")
+    assert prompt.send(:open_scratchpad, :text, content: "same text")
+    assert prompt.suspend_editor_for_agent
+
+    refute prompt.commit_editor_prompt(session)
+    assert_equal "same text", prompt.editor_prompt_context[:content]
   end
 
   def test_cli_runs_editor_prompt_in_an_isolated_agent_and_commits_the_draft

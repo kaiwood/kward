@@ -10,7 +10,7 @@ module Kward
         @editor_prompt_session = editor_prompt_session
         super(
           "replace_editor_buffer",
-          "Replace the complete contents of the active in-memory editor buffer. This does not save the file.",
+          "Replace the entire in-memory buffer only for an explicit whole-buffer request without an active selection. This does not save the file.",
           properties: {
             content: { type: "string", description: "Complete replacement contents for the editor buffer." }
           },
@@ -20,10 +20,12 @@ module Kward
 
       def call(args, _conversation, cancellation: nil)
         cancellation&.raise_if_cancelled!
-        content = argument(args, :content, "")
+        content = argument(args, :content)
         @editor_prompt_session.replace(content)
-        lines = content.to_s.lines.length
+        lines = content.each_line.count
         "Editor buffer replaced: #{lines} lines, #{content.to_s.bytesize} bytes. The file has not been saved."
+      rescue EditorPromptSession::InvalidEdit => e
+        "Editor edit rejected: #{e.message}"
       end
     end
   end

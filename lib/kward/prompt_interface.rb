@@ -473,15 +473,22 @@ module Kward
     # Returns the active Vibe or Modern editor buffer for an agent prompt turn.
     def editor_prompt_context
       @mutex.synchronize do
-        next nil unless editor_active? && !@editor_state.workspace_only? && (@editor_state.vibe? || @editor_state.modern?)
+        next nil unless editor_active? && !@editor_state.readonly? && (@editor_state.vibe? || @editor_state.modern?)
 
+        cursor = @editor_state.cursor_line_and_column
+        line = cursor.first
+        line_start = @editor_state.line_start_offset(line)
         {
           path: @editor_state.path,
           display_path: @editor_state.display_path,
           workspace_root: @workspace_root,
           language: @editor_state.language,
-          content: @editor_state.buffer.dup,
-          cursor: @editor_state.cursor_line_and_column,
+          content: @editor_state.buffer.dup.freeze,
+          buffer_identity: @editor_state,
+          buffer_revision: @editor_state.buffer,
+          cursor: cursor,
+          cursor_offset: @editor_state.cursor,
+          cursor_line_range: [line_start, line_start + @editor_state.lines[line].length],
           selections: @editor_state.prompt_selections
         }
       end
@@ -503,7 +510,11 @@ module Kward
     def commit_editor_prompt(session)
       @mutex.synchronize do
         return false unless editor_active? && @editor_agent_suspended
-        return false unless @editor_state.buffer == session.initial_content
+        unless @editor_state.equal?(session.context[:buffer_identity]) &&
+            @editor_state.buffer.equal?(session.context[:buffer_revision]) && @editor_state.buffer == session.initial_content
+          @editor_state.status = "Agent draft discarded · buffer changed"
+          return false
+        end
 
         unless session.changed?
           @editor_state.status = "Agent made no buffer changes"

@@ -34,6 +34,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Editor prompts propose targeted selection and cursor edits instead of rewriting the whole buffer for local changes.
+
 - Compress deep indentation and shorten long Explorer names in the middle so file endings stay visible.
 
 - Use one rounded frame with a single divider between the Explorer and editor, both in Kward tabs and in standalone editing.

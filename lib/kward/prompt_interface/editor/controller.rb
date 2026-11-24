@@ -388,10 +388,15 @@ module Kward
         end
       end
 
-      def editor_prompt_action(instruction, selections: nil)
+      def editor_prompt_action(instruction, selections: nil, selection_mode: nil)
         instruction = instruction.to_s.strip
         action = { instruction: instruction, display_input: ":prompt #{instruction}" }
-        action[:selections] = selections if selections
+        if selections
+          action[:selections] = selections
+          action[:selection_mode] = selection_mode
+          action[:buffer_identity] = @editor_state
+          action[:buffer_revision] = @editor_state.buffer
+        end
         { editor_prompt: action }
       end
 

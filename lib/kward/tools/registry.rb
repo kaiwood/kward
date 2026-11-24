@@ -26,6 +26,7 @@ require_relative "workspace_targets"
 require_relative "write_file"
 require_relative "open_editor"
 require_relative "replace_editor_buffer"
+require_relative "edit_editor_buffer"
 require_relative "search/code"
 require_relative "search/web"
 require_relative "search/web_fetch"
@@ -91,6 +92,7 @@ module Kward
       read_skill
       ask_user_question
       replace_editor_buffer
+      edit_editor_buffer
       open_editor
       prepare_shell_command
       typesafe_evaluate
@@ -604,7 +606,7 @@ module Kward
 
     def build_schema_tools
       tools = @tools.values_at(*CORE_TOOL_NAMES, Tools::GenerateImage::NAME)
-      tools << @tools["replace_editor_buffer"] if @tools["replace_editor_buffer"]
+      tools.concat(@tools.values_at("replace_editor_buffer", "edit_editor_buffer").compact)
       tools << @tools["open_editor"] if @tools["open_editor"]
       tools << @tools["prepare_shell_command"] if @tools["prepare_shell_command"]
       tools << @tools["git_commit"] if @tools["git_commit"]
@@ -646,7 +648,10 @@ module Kward
         Tools::ContextBudgetStats.new(context_budget_meter: @context_budget_meter),
         Tools::RetrieveToolOutput.new
       ]
-      tools << Tools::ReplaceEditorBuffer.new(editor_prompt_session: @editor_prompt_session) if @editor_prompt_session
+      if @editor_prompt_session
+        tools << Tools::ReplaceEditorBuffer.new(editor_prompt_session: @editor_prompt_session)
+        tools << Tools::EditEditorBuffer.new(editor_prompt_session: @editor_prompt_session)
+      end
       tools << Tools::OpenEditor.new(workspace: @workspace, prompt: @prompt) if editor_available?
       tools << Tools::PrepareShellCommand.new(shell_prompt_session: @shell_prompt_session) if @shell_prompt_session
       tools
@@ -666,7 +671,7 @@ module Kward
 
     def editor_prompt_tool_names
       readonly_tools = CORE_TOOL_NAMES - %w[write_file edit_file run_shell_command]
-      readonly_tools + ["replace_editor_buffer"]
+      readonly_tools + %w[replace_editor_buffer edit_editor_buffer]
     end
 
     def shell_prompt_tool_names

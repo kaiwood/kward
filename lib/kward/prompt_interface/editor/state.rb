@@ -188,12 +188,12 @@ module Kward
         sync_vibe_state
       end
 
-      def vibe_command_selection_ranges
-        @vibe_state.command_selection_ranges
+      def vibe_command_selection
+        @vibe_state.command_selection
       end
 
-      def vibe_command_selection_ranges=(ranges)
-        @vibe_state.command_selection_ranges = ranges
+      def vibe_command_selection=(selection)
+        @vibe_state.command_selection = selection
       end
 
       def vibe_last_change
@@ -813,6 +813,7 @@ module Kward
           {
             start_line: start_line + 1, start_column: start_column + 1,
             end_line: end_line + 1, end_column: end_column + 1,
+            start_offset: first, end_offset: limit,
             text: @buffer[first...limit].to_s
           }
         end

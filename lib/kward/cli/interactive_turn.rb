@@ -22,13 +22,19 @@ module Kward
           return []
         end
 
+        if action[:buffer_identity] && (!action[:buffer_identity].equal?(context[:buffer_identity]) ||
+            !action[:buffer_revision].equal?(context[:buffer_revision]))
+          @prompt.resume_editor_for_agent(status: "Editor prompt discarded · buffer changed")
+          return []
+        end
+
         unless @prompt.suspend_editor_for_agent
           runtime_output("The editor is busy.")
           return []
         end
 
         ensure_client!
-        context = context.merge(selections: action[:selections]) if action[:selections]
+        context = context.merge(selections: action[:selections], selection_mode: action[:selection_mode]) if action[:selections]
         session = EditorPromptSession.new(context)
         base_registry = agent ? agent.tool_registry : ToolRegistry.new(workspace: configured_workspace(root: context[:workspace_root]))
         registry = base_registry.for_editor_prompt(session)
@@ -56,6 +62,7 @@ module Kward
         reasoning = ConfigFiles.editor_agent_reasoning_effort(config) || (configured_provider ? nil : active_conversation&.reasoning_effort || current_reasoning_effort)
         conversation = Conversation.new(
           system_message: EditorPrompt.system_message,
+          refresh_system_message: false,
           workspace_root: context[:workspace_root] || active_conversation&.workspace_root,
           provider: provider,
           model: model,
