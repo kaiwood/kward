@@ -1,0 +1,88 @@
+#!/usr/bin/env ruby
+
+require "benchmark"
+require "objspace"
+require "stringio"
+
+$LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
+require "kward/prompt_interface"
+
+WIDTH = 120
+HEIGHT = 40
+
+
+def measure(label, iterations:, before: nil)
+  timings = []
+  allocations = 0
+  iterations.times do
+    before&.call
+    allocated = GC.stat(:total_allocated_objects)
+    timings << Benchmark.realtime { yield } * 1_000
+    allocations += GC.stat(:total_allocated_objects) - allocated
+  end
+  timings.sort!
+  median = timings[timings.length / 2]
+  p95 = timings[(timings.length * 0.95).ceil - 1]
+  puts format("%-28s %8.3f ms median %8.3f ms p95 %10.0f alloc/op", label, median, p95, allocations.fdiv(iterations))
+end
+
+
+def retained_strings
+  GC.start
+  ObjectSpace.memsize_of_all(String)
+end
+
+
+def memory_sample(label, editor, baseline)
+  bytes = retained_strings - baseline
+  puts format("%-28s %+10.1f KiB of live Strings · %d undo / %d redo entries",
+              label, bytes / 1_024.0, editor.undo_stack.length, editor.redo_stack.length)
+end
+
+line_count = Integer(ARGV.fetch(0, "10000"), exception: false)
+iterations = Integer(ARGV.fetch(1, "40"), exception: false)
+abort "Usage: #{$PROGRAM_NAME} [lines >= 100] [iterations > 0]" unless ARGV.length <= 2 && line_count && line_count >= 100 && iterations&.positive?
+
+fixture_line = "message = 'sample text' # #{'long enough to wrap ' * 6}\n"
+source = fixture_line * line_count
+prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+prompt.define_singleton_method(:screen_size) { [WIDTH, HEIGHT] }
+prompt.instance_variable_set(:@color_enabled, true)
+prompt.send(:open_scratchpad, :ruby, content: source)
+editor = prompt.instance_variable_get(:@editor_state)
+editor.set_cursor_line_and_column(line_count - 60, 0)
+layout = -> { prompt.send(:editor_layout, WIDTH, HEIGHT) }
+layout.call
+
+puts "Editor benchmark · Ruby #{RUBY_VERSION} (#{RUBY_PLATFORM})"
+puts "#{line_count} lines, #{source.bytesize} bytes, #{WIDTH}×#{HEIGHT}, color and soft wrap on, #{iterations} samples"
+puts
+
+wheel_down = "\e[<65;1;4M"
+wheel_up = "\e[<64;1;4M"
+down = true
+measure("Warm wheel + layout", iterations: iterations) do
+  prompt.send(:handle_editor_key, down ? wheel_down : wheel_up)
+  layout.call
+  down = !down
+end
+
+edit = lambda do
+  editor.set_cursor_line_and_column(line_count - 2, 0)
+  prompt.send(:handle_editor_key, "x")
+end
+measure("First layout after edit", iterations: iterations, before: edit, &layout)
+
+editor.buffer = source
+editor.undo_stack = []
+editor.redo_stack = []
+editor.set_cursor_line_and_column(line_count - 2, 0)
+layout.call
+baseline = retained_strings
+80.times { prompt.send(:handle_editor_key, "x") }
+memory_sample("After 80 typed characters", editor, baseline)
+40.times { abort "Undo did not create a benchmark sample" unless editor.undo }
+40.times { abort "Redo did not create a benchmark sample" unless editor.redo }
+80.times { abort "Undo did not restore the original buffer" unless editor.undo }
+abort "Undo changed the fixture" unless editor.buffer == source
+memory_sample("After undoing all edits", editor, baseline)

@@ -47,6 +47,15 @@ ruby -Itest test/test_cli.rb
 bundle exec rake test
 ```
 
+For terminal editor performance changes, run the synthetic benchmark before and after the change with the same Ruby version and buffer size:
+
+```bash
+bundle exec ruby script/benchmark_editor            # 10,000 lines, 40 samples
+bundle exec ruby script/benchmark_editor 30000 60    # larger buffer
+```
+
+It measures warm wheel handling plus layout, the first layout after typing near the end of a file, and live Ruby string memory after typing and undo. These are local measurements, not CI thresholds, process RSS, or end-to-end terminal latency.
+
 For documentation changes, also run:
 
 ```bash
