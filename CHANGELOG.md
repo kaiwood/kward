@@ -7,77 +7,45 @@ All notable changes to Kward will be documented in this file.
 ### Added
 
 - Send selected line and column ranges to the editor agent in Vibe Visual mode and Modern mode.
-
 - Review agent edits in a read-only diff before keeping or discarding the draft.
-
 - Add a right-hand editor Outline for jumping to declarations in the live buffer, with optional Universal Ctags support for more languages.
-
 - Color Nerd Font file icons by type in `/files` and the editor Explorer, and add a Python icon.
-
 - Press `o` to toggle the selected folder in the Vibe Explorer.
-
 - Press `:` in the Vibe Explorer to focus the open file and start an Ex command.
-
 - Run `kward edit` with no argument or with a directory to start in the Explorer without opening a file.
-
 - Show the configured `/files` icons in the editor Explorer, including open buffers and search results.
-
 - Add `/` and `?` live fuzzy path filters with folder scoping and directional match navigation to the Vibe Explorer.
-
 - Add Vim-style tree navigation, `H`/`M`/`L` viewport jumps, and viewport scrolling to the Explorer in Vibe mode.
-
 - Support Vim-style `Ctrl+W` pane navigation between the editor and Explorer in Vibe mode.
-
 - Add a clickable Explorer to the integrated and standalone editors for browsing workspace files and switching between open buffers without losing unsaved changes.
-
 - Remember the editor Explorer’s visibility and tree position across launches, separately for each workspace.
 
 ### Changed
 
 - Editor prompts propose targeted selection and cursor edits instead of rewriting the whole buffer for local changes.
-
 - Compress deep indentation and shorten long Explorer names in the middle so file endings stay visible.
-
 - Use one rounded frame with a single divider between the Explorer and editor, both in Kward tabs and in standalone editing.
 
 ### Fixed
 
 - Avoid re-reading editor configuration for every line of a side-by-side draft, and recognize encoded `Ctrl+C` while an editor prompt is running.
-
 - Hide Markdown code fences and their language labels in the editor agent’s status-line replies.
-
 - Include the exact selected text in editor prompts so the agent does not have to count lines in the full buffer.
-
 - Keep standalone `kward edit` open when submitting an editor prompt.
-
 - Skip unnamed buffers when checking open files for Save As and Vibe `:e`.
-
 - Keep the original buffer path when Save As is canceled or fails, and ask before replacing an existing destination.
-
 - Keep Vibe open when `:wq` or `:x` needs confirmation or cannot save.
-
 - Reduce editor undo and redo memory on large files by storing small edits instead of whole-buffer copies.
-
 - Align editor wrapping, cursor movement, and mouse selection for wide Unicode text and multi-character graphemes.
-
 - Save editor files atomically and offer compare, reload, or overwrite when the disk version changes.
-
 - Reuse Explorer rows across redraws to reduce redraw work for large expanded workspace trees.
-
 - Reuse wrapped runner output so scrolling and selecting in the output pane stay responsive.
-
 - Keep scrolling and rendering responsive in large files with editor soft wrap enabled.
-
 - Avoid repeated multiline syntax scans when rendering Ruby, Markdown, and ERB files in the editor.
-
 - Reduce editor scroll lag on high-frequency mouse wheels by processing queued wheel events together instead of redrawing for each event.
-
 - Keep `kward shell` and `/shell` questions separate from coding chat: no automatic loading of `AGENTS.md`, skills, custom prompts, or chat memory.
-
 - Let Vibe users quit with `:q` after opening a directory without a file.
-
 - Let the Up and Down arrows select Explorer search results while typing a filter in Vibe mode.
-
 - Prevent Ctrl+W from closing a tab while its editor is open.
 
 ## [0.86.0] - 2026-11-22
@@ -85,60 +53,37 @@ All notable changes to Kward will be documented in this file.
 ### Changed
 
 - Enable automatic color for commands such as macOS `ls` in interactive `kward shell`, without overriding `TERM=dumb` or changing script environments.
-
 - Execute interactive `kward shell` startup files as native shell scripts. The native `source` builtin works like `.`, while hosted `/shell` configuration and its top-level `source` command remain declarative.
-
 - Require `kward prompt <text>` for one-shot model prompts and add `kward filter <instruction>` for explicit stdin filtering; unknown CLI arguments now fail instead of being sent to the model.
 - Initialize the model client before launching interactive chat so the configured model catalog and picker are available at startup.
-
 - Merge opt-in shell history across terminals and browse matching commands with Up/Down after typing a prefix.
-
 - Cycle through ambiguous standalone shell completions with Tab and Shift+Tab, and accept a match without running the command.
-
 - Display and edit pasted multiline drafts on separate terminal rows before submitting them.
-
 - Show the command and stream its output live when the standalone `kward shell` agent runs it for you.
 
 ### Added
 
 - Press `Ctrl+N` in the chat composer to start a new conversation in the current tab, just like `/new`.
-
 - Press `Ctrl+Shift+T` to open a new tab immediately to the right of the current tab when using the Ctrl tab shortcuts in a terminal that reports the chord.
-
 - Support rbenv’s Bash initialization in interactive `kward shell`, with function-local variables and indexed arrays, `rbenv shell`, and programmable Tab completion.
-
 - Pause standalone shell history and shell-agent context capture with `history pause`, then restore recording with `history resume`.
-
 - Show local history suggestions in standalone shell drafts; press Right Arrow to accept a suggestion.
-
 - Added `kward shell` to run native kwsh directly in your terminal without starting the agent or composer at launch. Use `?` to ask the same shell agent as `/shell` about recent output, run an explicit command, or prefill an editable command draft. Interactive sessions execute `kwshrc` startup scripts. The standalone prompt has Tab completion, arrow-key history and editing, bracketed paste, and native job control.
-
 - Customize interactive `kward shell` with Zsh-style `PROMPT` escapes for colors, the current directory, username, host, and exit status. Unset `PROMPT` to return to `PS1`.
-
 - Move and cut by word in `kward shell` with Option/Alt shortcuts and Ctrl+W. Ctrl+K cuts to the end of the line, and Ctrl+Y restores text cut by these shortcuts or Ctrl+U.
-
 - Search standalone shell history with Ctrl+R/Ctrl+S. The default editor also supports screen redraw, transpose, undo, inserting the previous command’s last word, and cycling through older cuts.
-
 - Generate images by asking in a Codex chat. Kward previews the result and can save it to Downloads or a project directory chosen with Tab completion. RPC clients can fetch, save, and discard previews.
-
 - Added Claude Fable 5.2, Mythos 5.2, Opus 5.5, Sonnet 5.5, and Haiku 5.5 to the Anthropic model picker.
-- Added GPT-6.2 Astra, GPT-6.2 Sol, and GPT-6.1 Terra to the Codex model picker, with model-specific reasoning controls and context-window metadata.
 - Added native POSIX.1-2024 `ulimit` queries and settings for file/core size, data, descriptors, stack, CPU time, and address space, with soft/hard selection and owned-process isolation from the Kward host and other sessions.
-
 - Added standalone native vi line editing with history search, motions/operators, repeat/undo, pathname expansion, and private external-vi editing. Terminal modes and command stdin are preserved; RPC reports history, line editing, and mail notifications as unsupported.
-
 - Added native PS4 parameter expansion, standalone PS1 history numbering, terminal `ignoreeof`, compatible no-op `nolog`, and MAIL/MAILPATH/MAILCHECK notifications.
-
 - Added standalone native command history and `fc` listing, substitution, and private editor workflows, with opt-in `HISTFILE` persistence and `HISTSIZE` retention. Hosted history remains separate.
-
 - Standalone kwsh now supports inherited descriptors 3–9 for redirection, duplication, closing, native scripts, child commands, and executable-text fallback, without exposing hosted private descriptors.
-
 - Added bounded multi-character locale collation across native case patterns, parameter trimming, and globs, plus requirement-linked POSIX and installed-locale regression coverage.
 - Added native shared-stream aliases, core builtin flag combinations, command hashing, `type`, `times`, `CDPATH`, and standalone interactive `kwsh -i` with guarded `ENV` startup and parameter-expanded prompts.
 - Added POSIX arithmetic-expansion substitutions, `case ;&` fall-through, and source-aware `LINENO`; new shells reset inherited `IFS`, and `command -V` follows function/builtin execution precedence.
 - Added native kwsh background lists, `$!`, jobs/wait/kill, stopped-job foreground/background control, signal/EXIT traps, persistent exec redirections, and standalone process replacement, with tab-owned cleanup for hosted shells.
 - Added read-time native aliases, incremental script execution, named-user and assignment-context tildes, and installed-locale character counts, bracket matching, pathname expansion, and sorting.
-
 - Expanded native kwsh with subshells, nested command/process substitution, here-documents, descriptors 0–9, bounded extended arithmetic and arithmetic loops, indexed/associative arrays, `[[ … ]]`, brace expansion, opt-in globstar, native dot-sourcing and state utilities, read delimiters, shell options, and a standalone `kwsh` executable. Full POSIX/Bash conformance remains unfinished; documented limits remain explicit.
 - Added native kwsh parameter operators, `case` pattern matching, `read -r`, and custom/empty `IFS`, with lazy nested expansion, quote-preserving splitting, and line-reading workflows. This is the first stage toward broader POSIX scripting and Bash-compatible extensions, not full compatibility.
 - Added native kwsh integer arithmetic expansion (`$((5 + 2))`), with basic operators, grouping, integer-valued variables, bounded evaluation, and shell-assistant guidance for the supported syntax. A kwsh-specific extension also accepts spaces or tabs between the final closing parentheses (`$((5 + 2) )`).
