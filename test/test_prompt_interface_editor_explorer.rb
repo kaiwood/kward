@@ -356,6 +356,24 @@ class TestPromptInterfaceEditorExplorer < KwardTestCase
     end
   end
 
+  def test_deep_explorer_rows_make_room_for_names_without_changing_click_targets
+    with_editor(width: 96) do |prompt, root|
+      folders = %w[one two three four five six]
+      directory = File.join(root, *folders)
+      FileUtils.mkdir_p(directory)
+      File.write(File.join(directory, "helper.rb"), "helper\n")
+      filename = "standalone_terminal_integration_test.rb"
+      File.write(File.join(directory, filename), "selected\n")
+
+      toggle(prompt)
+      folders.each { |folder| click_row(prompt, /▸ #{folder} /) }
+      assert_match(/… +helper\.rb/, frame(prompt).join("\n"))
+      click_row(prompt, /… +standa\w*….*test\.rb/)
+      assert_equal File.join(directory, filename), editor(prompt).path
+      assert_equal "selected\n", editor(prompt).buffer
+    end
+  end
+
   def test_vibe_explorer_scrolls_horizontally_without_splitting_wide_names
     with_editor(mode: "vibe") do |prompt, root|
       filename = "界abcdefghijklmnopqrstuvwxyz-0123456789.txt"
@@ -364,6 +382,7 @@ class TestPromptInterfaceEditorExplorer < KwardTestCase
       key(prompt, "G")
       initial = selected_explorer_row(prompt)
       assert_includes initial, "界abcdef"
+      assert_match(/….*6789\.txt/, initial)
 
       5.times { %w[z l].each { |character| key(prompt, character) } }
       assert_match(/\A│  abcdef/, selected_explorer_row(prompt))

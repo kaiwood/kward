@@ -27,6 +27,25 @@ module Kward
       truncated
     end
 
+    def truncate_middle(text, max_width)
+      limit = max_width.to_i
+      return "" unless limit.positive?
+      return text if width(text) <= limit
+
+      tail_budget = limit / 2
+      tail_space = tail_budget
+      tail = []
+      text.grapheme_clusters.reverse_each do |grapheme|
+        cells = width(grapheme)
+        break if cells > tail_space
+
+        tail << grapheme
+        tail_space -= cells
+      end
+      head_space = limit - 1 - (tail_budget - tail_space)
+      "#{truncate(text, head_space)}…#{tail.reverse.join}"
+    end
+
     def drop_cells(text, columns)
       return text if columns <= 0
       return text[columns..].to_s if text.ascii_only?

@@ -22,6 +22,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Compress deep indentation and shorten long Explorer names in the middle so file endings stay visible.
+
 - Use one rounded frame with a single divider between the Explorer and editor, both in Kward tabs and in standalone editing.
 
 ### Fixed

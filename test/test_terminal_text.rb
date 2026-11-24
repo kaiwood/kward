@@ -12,6 +12,14 @@ class TestTerminalText < KwardTestCase
     assert_equal "e\u0301", Kward::TerminalText.truncate("e\u0301x", 1)
   end
 
+  def test_truncate_middle_preserves_complete_graphemes_on_both_sides
+    text = "界e\u0301abcdef👩‍💻z"
+    assert_equal "界e\u0301…👩‍💻z", Kward::TerminalText.truncate_middle(text, 7)
+    assert_equal "…", Kward::TerminalText.truncate_middle(text, 1)
+    assert_equal "", Kward::TerminalText.truncate_middle(text, 0)
+    assert_equal text, Kward::TerminalText.truncate_middle(text, 20)
+  end
+
   def test_wrap_reports_cell_aware_cursor_position
     layout = Kward::TerminalText.wrap("界界a", width: 4, cursor: 3)
 
