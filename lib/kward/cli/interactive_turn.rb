@@ -172,10 +172,26 @@ module Kward
       end
 
       def editor_prompt_answer_status(answer)
-        text = answer.to_s.gsub(/\s+/, " ").strip
-        text = text[0, 120].to_s
-        text += "…" if answer.to_s.gsub(/\s+/, " ").strip.length > text.length
+        text = editor_answer_without_fences(answer.to_s).gsub(/\s+/, " ").strip
+        text = "#{text[0, 120]}…" if text.length > 120
         "Agent: #{text}"
+      end
+
+      def editor_answer_without_fences(answer)
+        fence = nil
+        answer.lines.filter_map do |line|
+          marker, info = line.match(/\A {0,3}(`{3,}|~{3,})([^\r\n]*)/)&.captures
+          if fence
+            if marker&.start_with?(fence) && info.strip.empty?
+              fence = nil
+              next
+            end
+          elsif marker && !(marker.start_with?("`") && info.include?("`"))
+            fence = marker
+            next
+          end
+          line
+        end.join
       end
 
       def drain_interactive_events(event_queue, markdown_chunks, stream_state, agent = nil, force: false)

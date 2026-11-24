@@ -198,13 +198,15 @@ class TestEditorPrompt < KwardTestCase
   end
 
   def test_vibe_visual_line_question_sends_the_selected_text_and_absolute_line
-    content = "header\ntwo lines above\n\n  chosen line\nfollowing line\n"
+    content = "header\ntwo lines above\n\n  - chosen line\nfollowing line\n"
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe", editor_line_numbers: "relative")
     assert prompt.send(:open_scratchpad, :text, content: content)
+    prompt.define_singleton_method(:read_key) { |**| nil }
     "3jV:prompt What text is selected?".each_char { |key| prompt.send(:handle_editor_key, key) }
     action = prompt.send(:handle_editor_key, "\r").fetch(:editor_prompt)
     requests = []
-    client = FakeClient.new([{ "role" => "assistant", "content" => "chosen line" }])
+    answer = "The selected text is:\n\n```text\n- chosen line\n```"
+    client = FakeClient.new([{ "role" => "assistant", "content" => answer }])
     client.define_singleton_method(:chat) do |messages, **options|
       requests << messages.last[:content]
       super(messages, **options)
@@ -214,10 +216,11 @@ class TestEditorPrompt < KwardTestCase
     cli.send(:run_editor_prompt_turn, action)
 
     selection, buffer = requests.fetch(0).split("Current buffer:", 2)
-    assert_includes selection, '- line 4, columns 1–14: "  chosen line\n"'
+    assert_includes selection, '- line 4, columns 1–16: "  - chosen line\n"'
     refute_includes selection, "two lines above"
     assert_includes buffer, content
     assert_equal content, prompt.editor_prompt_context[:content]
+    assert_equal "Agent: The selected text is: - chosen line", prompt.send(:editor_status_text)
   end
 
   def test_editor_prompt_uses_configured_model_and_reasoning

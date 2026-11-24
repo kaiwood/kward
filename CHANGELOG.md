@@ -40,6 +40,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Hide Markdown code fences and their language labels in the editor agent’s status-line replies.
+
 - Include the exact selected text in editor prompts so the agent does not have to count lines in the full buffer.
 
 - Keep standalone `kward edit` open when submitting an editor prompt.
