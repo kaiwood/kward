@@ -805,12 +805,16 @@ module Kward
         end
       end
 
-      def prompt_selection_locations(ranges = selection_ranges)
+      def prompt_selections(ranges = selection_ranges)
         ranges.map do |first, limit|
           start_line, start_column = cursor_line_and_column_for(first)
           # The range end is exclusive; a newline belongs to the line it ends.
           end_line, end_column = cursor_line_and_column_for([first, limit - 1].max)
-          [start_line + 1, start_column + 1, end_line + 1, end_column + 1]
+          {
+            start_line: start_line + 1, start_column: start_column + 1,
+            end_line: end_line + 1, end_column: end_column + 1,
+            text: @buffer[first...limit].to_s
+          }
         end
       end
 

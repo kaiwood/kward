@@ -223,7 +223,8 @@ class TestPromptInterfaceEditor < KwardTestCase
     "edit these\r".each_char { |key| prompt.send(:handle_editor_key, key) }
 
     message = Kward::EditorPrompt.input("edit these", prompt.editor_prompt_context)
-    assert_includes message, "line 1, columns 1–6; line 3, columns 1–2"
+    assert_includes message, '- line 1, columns 1–6: "first\n"'
+    assert_includes message, '- line 3, columns 1–2: "th"'
   end
 
   def test_prompt_interface_modern_escape_aborts_editor_prompt_line

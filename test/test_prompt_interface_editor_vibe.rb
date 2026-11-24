@@ -32,17 +32,17 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
 
   def test_vibe_prompt_carries_character_line_and_block_selections_into_command_mode
     cases = {
-      "vlj" => [[2, 1, 3, 2]],
-      "Vj" => [[2, 1, 3, 6]],
-      "#{Kward::TerminalKeys::CTRL_V}lj" => [[2, 1, 2, 2], [3, 1, 3, 2]]
+      "vlj" => [[2, 1, 3, 2, "second\nth"]],
+      "Vj" => [[2, 1, 3, 6, "second\nthird\n"]],
+      "#{Kward::TerminalKeys::CTRL_V}lj" => [[2, 1, 2, 2, "se"], [3, 1, 3, 2, "th"]]
     }
     cases.each do |keys, expected|
       prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
       assert prompt.send(:open_scratchpad, :text, content: "first\nsecond\nthird\nlast")
-      "j#{keys}:prompt edit this\r".each_char do |key|
-        result = prompt.send(:handle_editor_key, key)
-        assert_equal expected, result.fetch(:editor_prompt).fetch(:selections) if key == "\r"
-      end
+      "j#{keys}:prompt edit this".each_char { |key| prompt.send(:handle_editor_key, key) }
+      result = prompt.send(:handle_editor_key, "\r")
+      selections = result.fetch(:editor_prompt).fetch(:selections)
+      assert_equal expected, selections.map { |selection| selection.values_at(:start_line, :start_column, :end_line, :end_column, :text) }
       assert_empty prompt.editor_prompt_context[:selections]
     end
   end

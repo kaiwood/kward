@@ -40,6 +40,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Include the exact selected text in editor prompts so the agent does not have to count lines in the full buffer.
+
 - Keep standalone `kward edit` open when submitting an editor prompt.
 
 - Skip unnamed buffers when checking open files for Save As and Vibe `:e`.

@@ -352,7 +352,7 @@ module Kward
           end
         when /\Aprompt\s+(.+)\z/
           instruction = Regexp.last_match(1)
-          selections = @editor_state.prompt_selection_locations(visual_ranges) if visual_ranges
+          selections = @editor_state.prompt_selections(visual_ranges) if visual_ranges
           @editor_state.clear_selection if visual_ranges
           action = editor_prompt_action(instruction, selections: selections)
         when "prompt"

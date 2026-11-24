@@ -482,7 +482,7 @@ module Kward
           language: @editor_state.language,
           content: @editor_state.buffer.dup,
           cursor: @editor_state.cursor_line_and_column,
-          selections: @editor_state.prompt_selection_locations
+          selections: @editor_state.prompt_selections
         }
       end
     end

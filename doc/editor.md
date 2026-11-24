@@ -141,7 +141,7 @@ The editor is intentionally compact, but it covers the basics you need for quick
 - Mouse-wheel scrolling in the terminal editor. Kward processes bursts of wheel events together to reduce redraw lag; your mouse or terminal may still send momentum events after you stop moving the wheel.
 - Soft-wrap, enabled by default so long lines wrap within the editor width instead of scrolling sideways. The editor keeps Unicode graphemes together when wrapping and moving the cursor left or right. Disable it with `editor.soft_wrap: false`.
 - Vibe `:prompt <instruction>` and Modern `Ctrl+.` prompt lines send the complete current buffer and document metadata to a dedicated, transient editor agent. The agent can propose a replacement through an explicit editor tool. The buffer changes only when you keep the draft; it is never saved automatically.
-- When you prompt with a selection, the agent receives its line and column ranges, including disjoint selections in Modern mode and block selections in Vibe. It uses those ranges as the target unless you ask otherwise.
+- When you prompt with a selection, the agent receives the exact selected text and its absolute line and column ranges, including disjoint selections in Modern mode and block selections in Vibe. It uses those ranges as the target unless you ask otherwise.
 - Editor prompts work in standalone `kward edit` as well as in the integrated editor.
 - Editor prompts and their tool activity are not added to the normal chat transcript or session history.
 - The editor remains visible and locked for editing while the agent runs. Its status line displays progress and a spinner; `Ctrl+C` cancels the request.

@@ -197,16 +197,27 @@ class TestEditorPrompt < KwardTestCase
     assert_equal [nil], prompt.statuses
   end
 
-  def test_vibe_visual_selection_is_forwarded_to_the_agent_after_exiting_visual_mode
-    prompt = EditorPromptTestPrompt.new(content: "first\nsecond\nthird", workspace_root: Dir.pwd, selections: [])
-    client = EditorPromptTestClient.new
+  def test_vibe_visual_line_question_sends_the_selected_text_and_absolute_line
+    content = "header\ntwo lines above\n\n  chosen line\nfollowing line\n"
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe", editor_line_numbers: "relative")
+    assert prompt.send(:open_scratchpad, :text, content: content)
+    "3jV:prompt What text is selected?".each_char { |key| prompt.send(:handle_editor_key, key) }
+    action = prompt.send(:handle_editor_key, "\r").fetch(:editor_prompt)
+    requests = []
+    client = FakeClient.new([{ "role" => "assistant", "content" => "chosen line" }])
+    client.define_singleton_method(:chat) do |messages, **options|
+      requests << messages.last[:content]
+      super(messages, **options)
+    end
     cli = Kward::CLI.new(prompt: prompt, client: client)
 
-    cli.send(:run_editor_prompt_turn, { instruction: "edit this", selections: [[2, 1, 3, 2]] })
+    cli.send(:run_editor_prompt_turn, action)
 
-    message = client.messages.first.last[:content]
-    assert_includes message, "lines 2–3 (column 1 through column 2)"
-    assert_includes message, "first\nsecond\nthird"
+    selection, buffer = requests.fetch(0).split("Current buffer:", 2)
+    assert_includes selection, '- line 4, columns 1–14: "  chosen line\n"'
+    refute_includes selection, "two lines above"
+    assert_includes buffer, content
+    assert_equal content, prompt.editor_prompt_context[:content]
   end
 
   def test_editor_prompt_uses_configured_model_and_reasoning
