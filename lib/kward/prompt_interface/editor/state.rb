@@ -2,7 +2,6 @@ require_relative "editor_mode"
 require_relative "../../text_boundary"
 require_relative "../../terminal/text"
 require_relative "buffer"
-require_relative "file_marker"
 require_relative "indent_navigation"
 require_relative "kill_ring"
 require_relative "undo_history"
@@ -17,9 +16,9 @@ module Kward
   class PromptInterface
     # Mutable state for the built-in composer file editor.
     class EditorState
-      attr_reader :path, :display_path, :language, :original_content, :original_digest, :original_mtime, :original_size
+      attr_reader :path, :display_path, :language, :original_content
       attr_reader :buffer, :undo_stack, :redo_stack, :kill_buffer, :kill_ring, :last_yank_range, :last_yank_index
-      attr_accessor :viewport_row, :viewport_column, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :editor_mode, :emacs_pending, :readonly, :diff_view
+      attr_accessor :viewport_row, :viewport_column, :status, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :editor_mode, :emacs_pending, :readonly, :diff_view
       attr_reader :search_match_ranges
 
       def initialize(path:, content:, new_file: false, editor_mode: "modern", readonly: false, diff_view: false, virtual: false, display_path: nil, language: nil, workspace_only: false)
@@ -32,18 +31,13 @@ module Kward
         @readonly = readonly || workspace_only
         @diff_view = diff_view
         @virtual = virtual == true
-        @file_marker = EditorFileMarker.new(path: @path || @display_path, content: content, new_file: new_file || virtual?)
-        @original_content = @file_marker.content
-        @original_digest = @file_marker.digest
-        @original_mtime = @file_marker.mtime
-        @original_size = @file_marker.size
+        @original_content = content.to_s
         @text_buffer = EditorBuffer.new(@original_content)
         @buffer = @text_buffer.text
         @cursor = 0
         @viewport_row = 0
         @viewport_column = 0
         @status = nil
-        @overwrite_confirmed = false
         @quit_confirmed = false
         @search = EditorSearch.new
         @search_active = @search.active?
@@ -74,10 +68,6 @@ module Kward
         @language = other.language
         @virtual = other.virtual?
         @original_content = other.original_content.dup
-        @file_marker = EditorFileMarker.new(path: @path || @display_path, content: @original_content, new_file: other.new_file || @virtual)
-        @original_digest = other.original_digest.dup
-        @original_mtime = other.original_mtime
-        @original_size = other.original_size
         @text_buffer = EditorBuffer.new(other.buffer)
         @buffer = @text_buffer.text
         @status = other.status.dup
@@ -382,7 +372,6 @@ module Kward
         @display_path = @path
         @virtual = false
         @new_file = !File.exist?(@path)
-        @file_marker = EditorFileMarker.new(path: @path, content: @original_content, new_file: true)
       end
 
       def diff_view?
@@ -1044,20 +1033,9 @@ module Kward
         @new_file = false
         @virtual = false
         @display_path = @path.to_s
-        @file_marker.refresh(content)
-        @original_content = @file_marker.content
-        @original_digest = @file_marker.digest
-        @original_mtime = @file_marker.mtime
-        @original_size = @file_marker.size
-        @overwrite_confirmed = false
+        @original_content = content.to_s
         @quit_confirmed = false
         @status = "Saved #{@path}"
-      end
-
-      def file_changed_on_disk?
-        return false if virtual?
-
-        @file_marker.changed_on_disk?(new_file: new_file)
       end
 
       private
@@ -1371,7 +1349,6 @@ module Kward
       end
 
       def changed!(clear_selections: true)
-        @overwrite_confirmed = false
         @quit_confirmed = false
         if clear_selections
           @selections.clear
